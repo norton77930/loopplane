@@ -28,3 +28,7 @@ artifacts/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local legacy OpenSpec reference - do not commit raw internal specs
+openspec/
+sensitive-scan.txt
