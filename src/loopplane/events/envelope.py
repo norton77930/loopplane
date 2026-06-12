@@ -191,13 +191,16 @@ class DiagnosticEvent(_Envelope):
     payload: DiagnosticPayload
 
 
+TerminationReason = Literal[
+    "natural-completion",
+    "turn-budget-exhausted",
+    "cancelled",
+    "unrecoverable-error",
+]
+
+
 class RunTerminatedPayload(_EventModel):
-    reason: Literal[
-        "natural-completion",
-        "turn-budget-exhausted",
-        "cancelled",
-        "unrecoverable-error",
-    ]
+    reason: TerminationReason
     turns_taken: int
 
 

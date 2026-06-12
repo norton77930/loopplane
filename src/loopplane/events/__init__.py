@@ -2,6 +2,7 @@
 (contracts/runtime-events.md).
 """
 
+from loopplane.events.emitter import EventEmitter, EventSink
 from loopplane.events.envelope import (
     SCHEMA_VERSION,
     ApprovalRequestedEvent,
@@ -26,6 +27,7 @@ from loopplane.events.envelope import (
     RunTerminatedEvent,
     RunTerminatedPayload,
     RuntimeEvent,
+    TerminationReason,
     ToolCallCompletedEvent,
     ToolCallCompletedPayload,
     ToolCallStartedEvent,
@@ -50,7 +52,9 @@ __all__ = [
     "AssistantReasoningIncrementPayload",
     "DiagnosticEvent",
     "DiagnosticPayload",
+    "EventEmitter",
     "EventSequencer",
+    "EventSink",
     "Question",
     "QuestionAnsweredEvent",
     "QuestionAnsweredPayload",
@@ -63,6 +67,7 @@ __all__ = [
     "RunTerminatedEvent",
     "RunTerminatedPayload",
     "RuntimeEvent",
+    "TerminationReason",
     "ToolCallCompletedEvent",
     "ToolCallCompletedPayload",
     "ToolCallStartedEvent",

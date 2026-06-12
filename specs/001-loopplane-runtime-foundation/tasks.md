@@ -83,32 +83,32 @@ the exact event sequence and final history.
 
 ### Tests for User Story 1 (write first; confirm they fail)
 
-- [ ] T012 [P] [US1] Integration test: plain-text run golden event sequence and recorded
+- [X] T012 [P] [US1] Integration test: plain-text run golden event sequence and recorded
       history in `tests/integration/test_us1_plain_run.py` (acceptance 1.1; FR-001, FR-002)
-- [ ] T013 [P] [US1] Integration test: tool-using run event order and coherent history with
+- [X] T013 [P] [US1] Integration test: tool-using run event order and coherent history with
       an echo-style tool in `tests/integration/test_us1_tool_run.py` (acceptance 1.2;
       FR-005, FR-006)
-- [ ] T014 [P] [US1] Integration tests: cancellation pre-turn and mid-stream, turn-budget
+- [X] T014 [P] [US1] Integration tests: cancellation pre-turn and mid-stream, turn-budget
       exhaustion, unknown tool, no orphaned input on empty turns in
       `tests/integration/test_us1_termination.py` (acceptance 1.3–1.5; FR-003, FR-004,
       FR-007)
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Implement the skeletal Tool Gateway — registry, name resolution, execute,
+- [X] T015 [US1] Implement the skeletal Tool Gateway — registry, name resolution, execute,
       allow-all policy seam, `tool-call-*` event emission — in `src/loopplane/gateway/`
       (plan D1; FR-020, FR-021)
-- [ ] T016 [US1] Implement the Agent Loop turn cycle in `src/loopplane/loop/`: drive the
+- [X] T016 [US1] Implement the Agent Loop turn cycle in `src/loopplane/loop/`: drive the
       model boundary, partition tool calls by declared concurrency safety, execute through
       the Gateway, emit events, maintain history with immutable snapshots, end with exactly
       one terminal event (FR-001–FR-007, FR-031)
-- [ ] T017 [US1] Implement Runtime Controller session lifecycle (create, drive, terminate;
+- [X] T017 [US1] Implement Runtime Controller session lifecycle (create, drive, terminate;
       in-memory state) in `src/loopplane/controller/controller.py`
       (contracts/run-lifecycle.md; FR-010)
-- [ ] T018 [US1] Implement the minimal Dispatcher — round-trip over in-process channels,
+- [X] T018 [US1] Implement the minimal Dispatcher — round-trip over in-process channels,
       `submit-input` and `cancel` handling — in `src/loopplane/controller/dispatcher.py`
       (FR-011, FR-003)
-- [ ] T019 [US1] Unit tests for partitioning, snapshot immutability, and terminal reasons in
+- [X] T019 [US1] Unit tests for partitioning, snapshot immutability, and terminal reasons in
       `tests/unit/test_loop_core.py`
 
 **Checkpoint**: US1 demonstrable end-to-end with scripted model + echo tool; goldens stable.
