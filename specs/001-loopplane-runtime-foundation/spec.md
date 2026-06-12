@@ -14,6 +14,17 @@ for a future scheduler/validator/loop-engineering layer. Architecture intent is 
 public-safe, from a private local reference baseline (see
 [reference-analysis.md](./reference-analysis.md))."
 
+## Feature Overview
+
+LoopPlane's first phase delivers an embeddable Agent Harness Runtime: the governed core that
+drives a model-and-tools conversation loop and makes every step observable, controllable, and
+durable. The harness owns thirteen bounded components — Agent Loop, Runtime Controller,
+Dispatcher, Tool Gateway, the Internal and MCP tool adapters, Skill Execution Profile, Runtime
+Event Bus, Memory, Checkpoint, Artifact Storage, Observability, and the Human Approval
+boundary — and exposes a sanctioned extension surface where future loop-engineering layers
+(scheduler, validator, evaluator, auto-iteration) will attach. No end-user host ships in this
+phase: the deliverable is the runtime that every future host and automation layer builds on.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Drive a complete agent run through the harness (Priority: P1)
@@ -200,6 +211,9 @@ sentinel content.
   into a summary marker without separating a tool call from its result; if the model still
   rejects the prompt for length, the runtime retries once after compaction and then surfaces
   the failure.
+- History is compacted while skills have already been advertised or invoked: the runtime
+  re-establishes the augmentations the model still needs after compaction, and re-established
+  skills are neither treated as newly available nor double-counted against the prompt budget.
 - A consumer reattaches to an existing session: durable history — including the user's past
   prompts — replays as events so the visible conversation can be fully reconstructed.
 - An event consumer receives an event type it does not recognize: it skips the event and
@@ -291,6 +305,10 @@ sentinel content.
   the harness end-to-end — at minimum file reading, file writing/editing, content search,
   command execution, and asking the user a question — each available only through the
   Gateway.
+- **FR-034**: File-modifying baseline tools MUST guard against stale writes: editing or
+  overwriting an existing file requires that the file was read in the current session and has
+  not changed since that read; otherwise the call fails with a validation-class error result.
+  Creating a new file is exempt.
 
 #### MCP Tool Adapter
 
@@ -318,7 +336,10 @@ sentinel content.
 - **FR-052**: Skills from multiple sources MUST merge deterministically, with the more
   specific source winning on name conflicts.
 - **FR-053**: The runtime MUST advertise available skills to the model incrementally — only
-  skills not yet advertised in the session — within a bounded prompt budget.
+  skills not yet advertised in the session — within a bounded prompt budget. Advertisement
+  and injection state MUST survive history compaction: content the model still needs (such
+  as advertised or invoked skills) is re-established after compaction without being treated
+  as newly available and without double-counting against the budget.
 - **FR-054**: Skill content MUST support substitution of a closed list of runtime-provided
   variables (such as invocation arguments and session identifiers); variables outside the
   list pass through literally.
@@ -329,8 +350,9 @@ sentinel content.
 #### Runtime Event Bus
 
 - **FR-060**: The runtime MUST define a closed, versioned vocabulary of normalized runtime
-  events covering the full session lifecycle: user input, assistant output increments, turn
-  completion, tool call lifecycle, approval and question round-trips, history replay, and
+  events covering the full session lifecycle: user input (live and replayed), assistant
+  output and reasoning increments, turn completion carrying token-usage metadata, tool call
+  lifecycle, approval and question round-trips, history replay, non-fatal diagnostics, and
   termination.
 - **FR-061**: The Agent Loop MUST emit only normalized runtime events and MUST NOT produce
   frontend- or transport-specific formats.
@@ -430,10 +452,38 @@ sentinel content.
   able to attach using only the public extension surface, proving that future layers need no
   access to Agent Loop internals.
 
+### Non-Functional Requirements
+
+- **NFR-001 (Determinism)**: Given identical scripted model behavior and tool outcomes, a run
+  MUST produce the same normalized event sequence every time; the ordering rules of FR-002,
+  FR-005, and FR-015 are the basis of replay and golden-sequence testing.
+- **NFR-002 (Zero-overhead gating)**: Optional subsystems (observability, memory, skills,
+  external tools) MUST default to off, and when disabled MUST cause zero behavior change and
+  negligible overhead (operationalized by FR-100 and SC-007).
+- **NFR-003 (Crash consistency)**: Interrupting the process at any point MUST NOT lose
+  completed steps or corrupt a session beyond what FR-082/FR-083 repair and surface as
+  warnings.
+- **NFR-004 (Privacy)**: Exported telemetry MUST remain metadata-only (FR-103), and every
+  committed project document MUST remain public-safe (SC-006).
+- **NFR-005 (Portability)**: The runtime core MUST NOT depend on any host, transport, or UI,
+  and MUST run on mainstream desktop and server platforms, including Windows-style
+  filesystem paths.
+- **NFR-006 (Lossless serialization)**: Runtime events and checkpoint records MUST round-trip
+  losslessly across a process boundary (FR-064).
+- **NFR-007 (Bounded resources)**: Prompt budgets (FR-053), output-size management (FR-026),
+  and artifact budgets (FR-092) MUST keep per-session context and storage consumption
+  bounded.
+- **NFR-008 (Scale target)**: This phase targets a single process driving one session at a
+  time per consumer, with many resumable sessions on disk; multi-tenant and
+  concurrent-observer scale is out of scope.
+
 ### Key Entities
 
 - **Session**: One governed conversation run — identity, accumulated history, lifecycle
   state, and links to its records and artifacts.
+- **Run Context**: The per-run execution scope handed to tools and policies — session
+  identity, working scope, cancellation signal, turn budget, and session-scoped approval
+  memory.
 - **Runtime Event**: The normalized, versioned unit of observable runtime behavior; the only
   vocabulary the Agent Loop speaks to the outside world.
 - **Checkpoint Record**: One append-only durable entry in a session's history (user input,
@@ -454,6 +504,28 @@ sentinel content.
   outside the conversation, and the frozen durable note that a history item now carries a
   preview plus reference in its place.
 - **Trace Step**: A metadata-only timed record of one run step, nested run → turn → call.
+
+## Runtime Boundaries
+
+Component ownership for this phase (constitution Principle IV). Cross-component interaction
+happens only through declared interfaces or normalized runtime events — never through
+reach-through internal access.
+
+| Component | Owns | Must not |
+|---|---|---|
+| Agent Loop | The reasoning ↔ tool-execution cycle, turn sequencing, history compaction, and emission of normalized runtime events | Persist anything directly; format events for any frontend; execute tools itself |
+| Runtime Controller | Session lifecycle: create, attach, drive, detach, resume, terminate | Depend on any transport, host, or frontend |
+| Dispatcher | The session round-trip over abstract send/receive channels; the pending approval/question registry; history replay; increment batching | Reorder events; expose Agent Loop internals to consumers |
+| Tool Gateway | Tool registry, resolution, input validation, policy decision, execution, timeout, error normalization, and output-size management | Allow any tool to execute via another path; leak raw adapter errors |
+| Internal Tool Adapter | The internal tool contract and the baseline tool set | Bypass Gateway governance |
+| MCP Tool Adapter | External server configuration, connection lifecycle, discovery, and schema translation | Register unqualified tool names; let one server's failure disable others |
+| Skill Execution Profile | Skill loading, merging, advertisement, variable substitution, and invocation constraints | Execute outside Gateway and approval enforcement |
+| Runtime Event Bus | The closed, versioned event vocabulary and its delivery to consumers | Carry frontend- or transport-specific formats |
+| Memory | Durable entries, relevance selection, and assembly-time injection | Mutate durable history |
+| Checkpoint | Append-only session records, resume, repair, and session listing | Accept writes that bypass the recording boundary |
+| Artifact Storage | Oversized-result persistence, stable references, and the replacement budget | Change frozen replacement decisions across resume |
+| Observability | Metadata-only traces and metrics derived from runtime events | Observe or export conversation content; change behavior when enabled |
+| Human Approval | Policy decisions, ask escalation, decision scopes, and persistent rules | Hold a run forever (reviewer disconnect resolves pending requests as denied) |
 
 ## Success Criteria *(mandatory)*
 
@@ -482,6 +554,19 @@ sentinel content.
 - **SC-009**: A future-layer stub consumer attaches and produces a per-run summary using
   only the public extension surface, with zero references to Agent Loop internals.
 
+## In Scope *(this phase)*
+
+- The thirteen runtime components listed under Runtime Boundaries, embeddable as a library
+  behind a single programmatic entry point.
+- A baseline internal tool set (file reading, file writing/editing, content search, command
+  execution, asking the user a question) sufficient to demonstrate the harness end-to-end.
+- External tool integration through configured MCP servers, governed identically to internal
+  tools.
+- A scripted model substitute as a first-class test fixture, plus a minimal real-model
+  boundary validated separately.
+- A passive demonstration consumer proving the future-layer extension surface (FR-122).
+- Public-safe specification, plan, contract, and task documentation for all of the above.
+
 ## Out of Scope *(this phase)*
 
 - CLI, web/API, and desktop hosts, and any user-facing frontend.
@@ -503,6 +588,9 @@ sentinel content.
 - Model access sits behind a normalized streaming boundary; automated tests run against a
   scripted model substitute, and at least one real model integration is validated
   separately.
+- Besides streamed output, the model boundary exposes per-turn token usage and a
+  context-capacity figure; compaction (FR-008) and usage metrics (FR-102) consume these
+  rather than measuring independently.
 - Local durable storage is sufficient for checkpoints and artifacts in this phase; no
   external database is required. The runtime owns a default storage location that a host can
   override (ambiguity A10).

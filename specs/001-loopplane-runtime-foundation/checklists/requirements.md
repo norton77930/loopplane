@@ -34,12 +34,18 @@
 ## Notes
 
 - Validated 2026-06-13 after initial authoring; all items pass.
+- Re-validated 2026-06-13 after the reference audit pass, which added a Feature Overview,
+  Runtime Boundaries, In Scope, and Non-Functional Requirements sections plus FR-034 (file
+  stale-write guard), refined FR-053/FR-060, and the Run Context entity. All items still
+  pass: the additions are technology-agnostic and testable, and existing requirement
+  numbering is unchanged.
 - "MCP" appears as a named protocol concept because the MCP Tool Adapter is an explicitly
   scoped component of this feature; no SDK, language, or framework is referenced.
 - Zero [NEEDS CLARIFICATION] markers were needed: the feature description enumerated the
   component scope explicitly, and the ten open design questions that remain are recorded
-  with working defaults in [reference-analysis.md](../reference-analysis.md) §5 (Ambiguity
-  List) and cross-referenced from the spec's Assumptions section.
+  with working defaults in [reference-analysis.md](../reference-analysis.md) §6 (Ambiguity
+  List), cross-referenced from the spec's Assumptions section, and resolved in
+  [research.md](../research.md).
 - Traceability from each functional requirement back to the private reference baseline is
-  recorded in [reference-analysis.md](../reference-analysis.md) §3 (Requirement Extraction
+  recorded in [reference-analysis.md](../reference-analysis.md) §4 (Requirement Extraction
   Table), satisfying constitution Principle I.
