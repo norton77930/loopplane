@@ -50,22 +50,22 @@ story (US1–US5) → Polish. Each user story is independently implementable and
 **Purpose**: The event vocabulary, shared shapes, and the model boundary every story builds
 on (plan D3).
 
-- [ ] T005 [P] Write contract tests for runtime events in
+- [X] T005 [P] Write contract tests for runtime events in
       `tests/contract/test_runtime_events.py`: envelope fields, closed vocabulary,
       lossless serde round-trip, unknown-type skip, monotonic sequence
       (contracts/runtime-events.md; FR-060, FR-063, FR-064) — confirm they fail
-- [ ] T006 [P] Write contract tests for the model boundary and scripted substitute in
+- [X] T006 [P] Write contract tests for the model boundary and scripted substitute in
       `tests/contract/test_model_boundary.py`: scripted turns yield normalized increments,
       usage on turn end, context-capacity query, distinct overflow signal
       (contracts/model-boundary.md) — confirm they fail
-- [ ] T007 Implement the event envelope + vocabulary + serialization in
+- [X] T007 Implement the event envelope + vocabulary + serialization in
       `src/loopplane/events/` (contracts/runtime-events.md)
-- [ ] T008 [P] Implement the Normalized Error shape in `src/loopplane/errors.py`
+- [X] T008 [P] Implement the Normalized Error shape in `src/loopplane/errors.py`
       (data-model.md; FR-025)
-- [ ] T009 [P] Implement the Run Context in `src/loopplane/context.py` (data-model.md)
-- [ ] T010 [P] Implement content block models (text, image, tool-call, tool-result,
+- [X] T009 [P] Implement the Run Context in `src/loopplane/context.py` (data-model.md)
+- [X] T010 [P] Implement content block models (text, image, tool-call, tool-result,
       summary-marker) in `src/loopplane/model/content.py` (data-model.md)
-- [ ] T011 Implement the model boundary protocol and the scripted substitute in
+- [X] T011 Implement the model boundary protocol and the scripted substitute in
       `src/loopplane/model/` (contracts/model-boundary.md; research R7)
 
 **Checkpoint**: T005/T006 pass — the vocabulary and the test instrument exist; user-story
