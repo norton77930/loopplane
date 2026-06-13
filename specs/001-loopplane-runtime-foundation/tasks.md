@@ -125,38 +125,39 @@ policies; assert gateway decisions, approval round-trips, normalized results.
 
 ### Tests for User Story 2 (write first; confirm they fail)
 
-- [ ] T020 [P] [US2] Contract tests for the Gateway pipeline in
+- [X] T020 [P] [US2] Contract tests for the Gateway pipeline in
       `tests/contract/test_tool_gateway.py`: undeclared-parameter rejection, unknown tool,
       timeout, one normalized error shape, no execution path outside the Gateway
       (contracts/tool-gateway.md; FR-022, FR-024, FR-025, SC-002)
-- [ ] T021 [P] [US2] Contract tests for approval in `tests/contract/test_approval.py`:
+- [X] T021 [P] [US2] Contract tests for approval in `tests/contract/test_approval.py`:
       deny-with-reason continues the run, ask round-trip, session-scoped memory, rule
       precedence, reviewer-disconnect denies all pending, question round-trip with
       exactly-one resolution (contracts/approval.md; FR-110–FR-116)
-- [ ] T022 [P] [US2] Integration tests for US2 acceptance 2.1–2.6 in
-      `tests/integration/test_us2_governance.py`
+- [X] T022 [P] [US2] Integration tests for US2 acceptance 2.1–2.6 in
+      `tests/integration/test_us2_governance.py` (2.3/2.4 live in
+      `tests/integration/test_us2_mcp.py`, which owns the MCP fixture)
 
 ### Implementation for User Story 2
 
-- [ ] T023 [US2] Add the validation stage — JSON Schema with undeclared-property rejection —
+- [X] T023 [US2] Add the validation stage — JSON Schema with undeclared-property rejection —
       to `src/loopplane/gateway/` (FR-022; research R3)
-- [ ] T024 [US2] Implement the Human Approval component in `src/loopplane/approval/`:
+- [X] T024 [US2] Implement the Human Approval component in `src/loopplane/approval/`:
       decision sources and order, scopes, persistent rules with precedence, denial-as-data
       (contracts/approval.md; FR-110–FR-114)
-- [ ] T025 [US2] Implement the pending-interaction registry and the question round-trip in
+- [X] T025 [US2] Implement the pending-interaction registry and the question round-trip in
       `src/loopplane/controller/dispatcher.py` + `src/loopplane/approval/` (FR-012,
       FR-013, FR-115, FR-116)
-- [ ] T026 [US2] Add per-call timeout, error normalization, and `diagnostic` emission to the
+- [X] T026 [US2] Add per-call timeout, error normalization, and `diagnostic` emission to the
       Gateway (FR-024, FR-025)
-- [ ] T027 [US2] Implement the Internal Tool Adapter and baseline tools — file read, file
+- [X] T027 [US2] Implement the Internal Tool Adapter and baseline tools — file read, file
       write/edit with the stale-write guard, content search, command execution, ask-user —
       in `src/loopplane/tools/` (FR-030–FR-034)
-- [ ] T028 [US2] Add output-size management to the Gateway (bounded reduction now; artifact
+- [X] T028 [US2] Add output-size management to the Gateway (bounded reduction now; artifact
       handoff activates in US3) in `src/loopplane/gateway/` (FR-026)
-- [ ] T029 [US2] Implement the MCP Tool Adapter — layered config, connection lifecycle,
+- [X] T029 [US2] Implement the MCP Tool Adapter — layered config, connection lifecycle,
       source-qualified names, per-server failure isolation, schema translation with
       fallback — in `src/loopplane/adapters/mcp/` (FR-040–FR-045; research R4)
-- [ ] T030 [US2] Unit tests for rule precedence and the stale-write guard in
+- [X] T030 [US2] Unit tests for rule precedence and the stale-write guard in
       `tests/unit/test_rules_and_tools.py`; integration test with a local test MCP server
       fixture in `tests/integration/test_us2_mcp.py` (FR-043, FR-045)
 

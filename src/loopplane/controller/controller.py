@@ -16,6 +16,7 @@ from typing import Literal
 
 import anyio
 
+from loopplane.approval.interactions import InteractionBroker
 from loopplane.context import RunContext
 from loopplane.events.emitter import EventEmitter, EventSink
 from loopplane.events.sequencer import EventSequencer
@@ -40,6 +41,7 @@ class _Session:
     history: SessionHistory
     emitter: EventEmitter
     loop: AgentLoop
+    broker: InteractionBroker
     approval_memory: dict[str, Literal["allow", "deny"]]
     cancellation: anyio.Event
     driving: bool = False
@@ -83,6 +85,7 @@ class RuntimeController:
                 emitter=emitter,
                 history=history,
             ),
+            broker=InteractionBroker(emitter=emitter),
             approval_memory={},
             cancellation=anyio.Event(),
         )
@@ -107,6 +110,7 @@ class RuntimeController:
             cancellation=session.cancellation,
             turn_budget=session.turn_budget,
             session_approval_memory=session.approval_memory,
+            interactions=session.broker,
         )
         try:
             await session.loop.run(input_blocks, context)
@@ -141,6 +145,33 @@ class RuntimeController:
         message: str,
     ) -> None:
         await self._require(session_id).emitter.diagnostic(severity, category, message)
+
+    def attach_reviewer(self, session_id: str) -> None:
+        self._require(session_id).broker.attach_reviewer()
+
+    def on_reviewer_disconnect(self, session_id: str) -> None:
+        """Disconnect semantics (FR-013, FR-115): every pending approval
+        denies, every pending question cancels.
+        """
+        self._require(session_id).broker.on_disconnect()
+
+    def resolve_approval(
+        self,
+        session_id: str,
+        request_id: str,
+        *,
+        decision: Literal["allow", "deny"],
+        scope: Literal["once", "session"],
+        reason: str | None = None,
+    ) -> bool:
+        return self._require(session_id).broker.resolve_approval(
+            request_id, decision=decision, scope=scope, reason=reason
+        )
+
+    def answer_question(
+        self, session_id: str, request_id: str, answers: Sequence[str]
+    ) -> bool:
+        return self._require(session_id).broker.answer_question(request_id, answers)
 
     def _require(self, session_id: str) -> _Session:
         session = self._sessions.get(session_id)

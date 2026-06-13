@@ -13,12 +13,21 @@ from typing import Literal
 
 from loopplane.errors import NormalizedError
 from loopplane.events.envelope import (
+    ApprovalRequestedEvent,
+    ApprovalRequestedPayload,
+    ApprovalResolvedEvent,
+    ApprovalResolvedPayload,
     AssistantOutputIncrementEvent,
     AssistantOutputIncrementPayload,
     AssistantReasoningIncrementEvent,
     AssistantReasoningIncrementPayload,
     DiagnosticEvent,
     DiagnosticPayload,
+    Question,
+    QuestionAnsweredEvent,
+    QuestionAnsweredPayload,
+    QuestionAskedEvent,
+    QuestionAskedPayload,
     RunTerminatedEvent,
     RunTerminatedPayload,
     RuntimeEvent,
@@ -137,6 +146,71 @@ class EventEmitter:
                     artifact_reference=artifact_reference,
                     error=error,
                     duration_seconds=duration_seconds,
+                ),
+            )
+        )
+
+    async def approval_requested(
+        self, *, request_id: str, call_id: str, tool_name: str, input_summary: str
+    ) -> None:
+        await self._sink(
+            ApprovalRequestedEvent(
+                session_id=self._session_id,
+                sequence=self._sequence(),
+                occurred_at=self._now(),
+                payload=ApprovalRequestedPayload(
+                    request_id=request_id,
+                    call_id=call_id,
+                    tool_name=tool_name,
+                    input_summary=input_summary,
+                ),
+            )
+        )
+
+    async def approval_resolved(
+        self,
+        *,
+        request_id: str,
+        decision: Literal["allow", "deny"],
+        scope: Literal["once", "session"],
+        resolution_source: Literal["reviewer", "rule", "session-memory", "disconnect"],
+    ) -> None:
+        await self._sink(
+            ApprovalResolvedEvent(
+                session_id=self._session_id,
+                sequence=self._sequence(),
+                occurred_at=self._now(),
+                payload=ApprovalResolvedPayload(
+                    request_id=request_id,
+                    decision=decision,
+                    scope=scope,
+                    resolution_source=resolution_source,
+                ),
+            )
+        )
+
+    async def question_asked(
+        self, request_id: str, questions: Sequence[Question]
+    ) -> None:
+        await self._sink(
+            QuestionAskedEvent(
+                session_id=self._session_id,
+                sequence=self._sequence(),
+                occurred_at=self._now(),
+                payload=QuestionAskedPayload(
+                    request_id=request_id, questions=list(questions)
+                ),
+            )
+        )
+
+    async def question_answered(self, request_id: str, answers: Sequence[str]) -> None:
+        await self._sink(
+            QuestionAnsweredEvent(
+                session_id=self._session_id,
+                sequence=self._sequence(),
+                occurred_at=self._now(),
+                payload=QuestionAnsweredPayload(
+                    request_id=request_id, answers=list(answers)
                 ),
             )
         )

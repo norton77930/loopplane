@@ -10,7 +10,7 @@ import pytest
 from loopplane.context import RunContext
 from loopplane.controller.controller import RuntimeController
 from loopplane.events import RuntimeEvent
-from loopplane.gateway import ToolGateway
+from loopplane.gateway import PolicyDecider, ToolGateway, ToolHandler
 from loopplane.model import (
     OutputBlock,
     ScriptedModel,
@@ -71,10 +71,20 @@ def harness(tmp_path: Path) -> HarnessFactory:
         *,
         turn_budget: int | None = None,
         context_capacity: int = 100_000,
+        decide: PolicyDecider | None = None,
+        call_timeout_seconds: float | None = None,
+        extra_tools: Sequence[tuple[ToolDescriptor, ToolHandler]] = (),
     ) -> tuple[RuntimeController, str]:
         model = ScriptedModel(script=script, context_capacity=context_capacity)
-        gateway = ToolGateway()
+        if call_timeout_seconds is not None:
+            gateway = ToolGateway(
+                decide=decide, call_timeout_seconds=call_timeout_seconds
+            )
+        else:
+            gateway = ToolGateway(decide=decide)
         gateway.register(ECHO_DESCRIPTOR, echo_handler)
+        for descriptor, handler in extra_tools:
+            gateway.register(descriptor, handler)
         controller = RuntimeController(model=model, gateway=gateway, event_sink=sink)
         session_id = controller.create_session(
             working_scope=tmp_path, turn_budget=turn_budget

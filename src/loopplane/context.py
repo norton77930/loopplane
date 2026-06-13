@@ -6,9 +6,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import anyio
+
+if TYPE_CHECKING:
+    from loopplane.approval.interactions import InteractionBroker
 
 
 @dataclass
@@ -21,3 +24,4 @@ class RunContext:
         default_factory=dict
     )
     feature_toggles: dict[str, bool] = field(default_factory=dict)
+    interactions: InteractionBroker | None = None

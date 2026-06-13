@@ -1,16 +1,16 @@
-"""The minimal Dispatcher: drives the session round-trip over abstract
-send/receive channels — `submit-input` and `cancel` handling (FR-011,
-FR-003).
+"""The Dispatcher: drives the session round-trip over abstract send/receive
+channels (FR-011) — submit-input, cancel, approval decisions, and question
+answers (FR-003, FR-012).
 
 The outbound side is the Controller's event sink; the inbound side is any
 async iterable of consumer requests, so the same driver serves any future
-host without modification. Approval decisions and question answers join the
-inbound vocabulary in a later phase.
+host without modification.
 """
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterable, Sequence
+from typing import Literal
 
 import anyio
 from pydantic import BaseModel, ConfigDict
@@ -29,7 +29,23 @@ class Cancel(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
-ConsumerRequest = SubmitInput | Cancel
+class ApprovalDecision(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    request_id: str
+    decision: Literal["allow", "deny"]
+    scope: Literal["once", "session"] = "once"
+    reason: str | None = None
+
+
+class QuestionAnswer(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    request_id: str
+    answers: tuple[str, ...]
+
+
+ConsumerRequest = SubmitInput | Cancel | ApprovalDecision | QuestionAnswer
 
 
 class Dispatcher:
@@ -46,28 +62,64 @@ class Dispatcher:
         self._driving = False
 
     async def run(self) -> None:
-        """Drive the round-trip until the inbound channel closes; cancel any
-        in-flight run on close and never hang (FR-013 minimal form).
+        """Drive the round-trip until the inbound channel closes. On close
+        (FR-013): cancel in-flight work, deny every pending approval, cancel
+        pending questions, and never hang.
         """
+        self._controller.attach_reviewer(self._session_id)
         async with anyio.create_task_group() as task_group:
             try:
                 async for request in self._inbound:
-                    if isinstance(request, SubmitInput):
-                        if self._driving:
-                            await self._controller.emit_diagnostic(
-                                self._session_id,
-                                "warning",
-                                "dispatcher",
-                                "input rejected: a turn is already active",
-                            )
-                            continue
-                        self._driving = True
-                        task_group.start_soon(self._drive_one, list(request.blocks))
-                    else:
-                        self._controller.cancel(self._session_id)
+                    await self._handle(request, task_group)
             finally:
                 if self._driving:
                     self._controller.cancel(self._session_id)
+                self._controller.on_reviewer_disconnect(self._session_id)
+
+    async def _handle(
+        self, request: ConsumerRequest, task_group: anyio.abc.TaskGroup
+    ) -> None:
+        if isinstance(request, SubmitInput):
+            if self._driving:
+                await self._controller.emit_diagnostic(
+                    self._session_id,
+                    "warning",
+                    "dispatcher",
+                    "input rejected: a turn is already active",
+                )
+                return
+            self._driving = True
+            task_group.start_soon(self._drive_one, list(request.blocks))
+        elif isinstance(request, Cancel):
+            self._controller.cancel(self._session_id)
+        elif isinstance(request, ApprovalDecision):
+            applied = self._controller.resolve_approval(
+                self._session_id,
+                request.request_id,
+                decision=request.decision,
+                scope=request.scope,
+                reason=request.reason,
+            )
+            if not applied:
+                await self._controller.emit_diagnostic(
+                    self._session_id,
+                    "warning",
+                    "dispatcher",
+                    f"approval decision ignored: unknown or already-resolved "
+                    f"request {request.request_id}",
+                )
+        else:
+            applied = self._controller.answer_question(
+                self._session_id, request.request_id, list(request.answers)
+            )
+            if not applied:
+                await self._controller.emit_diagnostic(
+                    self._session_id,
+                    "warning",
+                    "dispatcher",
+                    f"question answer ignored: unknown or already-resolved "
+                    f"request {request.request_id}",
+                )
 
     async def _drive_one(self, blocks: Sequence[ContentBlock]) -> None:
         try:
