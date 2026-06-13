@@ -9,6 +9,7 @@ and starts no Loop Run (contracts/injection-boundary.md).
 """
 
 from loopplane.recall.budget import BudgetResult, RetrievalBudget, apply_budget
+from loopplane.recall.conversation import conversation_recall
 from loopplane.recall.entry import (
     QueryFn,
     RecalledEntry,
@@ -31,5 +32,6 @@ __all__ = [
     "apply_budget",
     "assemble_recall",
     "build_recall_input",
+    "conversation_recall",
     "default_query",
 ]
