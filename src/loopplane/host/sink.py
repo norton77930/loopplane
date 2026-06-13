@@ -30,6 +30,7 @@ class RunSink:
         self.terminal_reason: str | None = None
         self.turns_taken: int = 0
         self.consumer_failures: list[str] = []
+        self._observability: EventSink | None = None
 
     def bind(
         self, target: EventSink, *, approval_relay: ApprovalRelay | None = None
@@ -44,6 +45,11 @@ class RunSink:
         self._target = None
         self._relay = None
 
+    def set_observability(self, sink: EventSink) -> None:
+        """Attach the metadata-only telemetry overlay as an isolated side-branch
+        (set once at assembly when observability is enabled)."""
+        self._observability = sink
+
     async def __call__(self, event: RuntimeEvent) -> None:
         # Capture the outcome regardless of whether the consumer is healthy.
         if event.type == "run-terminated":
@@ -56,6 +62,15 @@ class RunSink:
                 await target(event)
             except Exception as exc:  # FR-007: isolate a misbehaving consumer.
                 self.consumer_failures.append(type(exc).__name__)
+
+        # Telemetry is a side-branch: a failing overlay must never affect the run
+        # (the host consumer above and terminal capture already happened).
+        observability = self._observability
+        if observability is not None:
+            try:
+                await observability(event)
+            except Exception:
+                pass
 
         # The relay resolves the pending approval; the broker is still awaiting,
         # so the resolution applied here lets the run proceed (FR-014). The relay

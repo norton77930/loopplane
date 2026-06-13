@@ -57,6 +57,20 @@ def _coerce_blocks(prompt: Prompt) -> list[ContentBlock]:
     return list(prompt)
 
 
+def _build_outcome(
+    controller: RuntimeController, session_id: str, sink: RunSink
+) -> RunOutcome:
+    """Snapshot the run's outcome while the sink is still bound, so a retained
+    handle can never later read another run's fields."""
+    return RunOutcome(
+        session_id=session_id,
+        termination_reason=sink.terminal_reason or "unknown",
+        turns_taken=sink.turns_taken,
+        history=controller.history_snapshot(session_id),
+        consumer_failures=tuple(sink.consumer_failures),
+    )
+
+
 class LoopPlaneHost:
     """Assemble once, run many times. One configured host drives independent
     sequential runs/sessions with no cross-run state leakage (FR-006)."""
@@ -94,19 +108,11 @@ class LoopPlaneHost:
         self._bind(sink, controller, session_id, on_event, on_approval)
         try:
             await controller.drive(session_id, _coerce_blocks(prompt))
-            reason = sink.terminal_reason or "unknown"
-            turns = sink.turns_taken
-            failures = tuple(sink.consumer_failures)
+            outcome = _build_outcome(controller, session_id, sink)
         finally:
             sink.unbind()
             self._active = False
-        return RunOutcome(
-            session_id=session_id,
-            termination_reason=reason,
-            turns_taken=turns,
-            history=controller.history_snapshot(session_id),
-            consumer_failures=failures,
-        )
+        return outcome
 
     @asynccontextmanager
     async def session(
@@ -208,13 +214,18 @@ class Session:
         self._controller = controller
         self._session_id = session_id
         self._sink = sink
+        self._outcome: RunOutcome | None = None
 
     @property
     def session_id(self) -> str:
         return self._session_id
 
-    async def submit(self, prompt: Prompt) -> None:
+    async def submit(self, prompt: Prompt) -> RunOutcome:
         await self._controller.drive(self._session_id, _coerce_blocks(prompt))
+        self._outcome = _build_outcome(
+            self._controller, self._session_id, self._sink
+        )
+        return self._outcome
 
     def cancel(self) -> None:
         self._controller.cancel(self._session_id)
@@ -242,13 +253,9 @@ class Session:
         return self._controller.answer_question(self._session_id, request_id, answers)
 
     def outcome(self) -> RunOutcome:
-        return RunOutcome(
-            session_id=self._session_id,
-            termination_reason=self._sink.terminal_reason or "unknown",
-            turns_taken=self._sink.turns_taken,
-            history=self._controller.history_snapshot(self._session_id),
-            consumer_failures=tuple(self._sink.consumer_failures),
-        )
+        if self._outcome is None:
+            raise RuntimeError("no run has completed in this session yet")
+        return self._outcome
 
 
 def build_host(

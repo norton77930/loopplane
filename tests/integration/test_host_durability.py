@@ -14,6 +14,7 @@ from loopplane.host import LoopPlaneHost, RuntimeConfig, StorageConfig
 
 from .conftest import (
     BIG_TOOL,
+    ECHO_DESCRIPTOR,
     ECHO_TOOL,
     EventCollector,
     big_tool_model,
@@ -124,3 +125,13 @@ def test_example_uses_the_single_assembly_path() -> None:
     source = Path(host_quickstart.__file__).read_text(encoding="utf-8")
     assert "LoopPlaneHost" in source
     assert "RuntimeController" not in source
+
+
+def test_example_echo_tool_matches_the_test_fixture() -> None:
+    # The example intentionally defines its own self-contained echo tool (so it
+    # stays copy-pasteable); this guards it against silently drifting from the
+    # test fixture's contract (review #8).
+    from host_quickstart import _ECHO
+
+    assert _ECHO.name == ECHO_DESCRIPTOR.name
+    assert _ECHO.input_schema == ECHO_DESCRIPTOR.input_schema

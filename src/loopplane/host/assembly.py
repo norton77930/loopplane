@@ -18,7 +18,7 @@ from loopplane.approval import HumanApproval, PermissionRule
 from loopplane.artifacts import ArtifactStore, make_artifact_handoff
 from loopplane.checkpoint import CheckpointStore
 from loopplane.controller.controller import RuntimeController
-from loopplane.events.emitter import EventSink
+from loopplane.events import RuntimeEvent
 from loopplane.gateway import PolicyDecider, ToolGateway
 from loopplane.host.config import (
     RuntimeConfig,
@@ -31,6 +31,12 @@ from loopplane.memory import MemoryStore
 from loopplane.observability import maybe_attach
 from loopplane.skills import SkillToolAdapter, load_skills, skill_profiles
 from loopplane.skills.loader import LoadedSkill
+
+
+async def _noop_sink(event: RuntimeEvent) -> None:
+    """A do-nothing inner sink for the observability overlay: the overlay records
+    telemetry and forwards here, while real delivery happens through RunSink."""
+    return None
 
 
 @dataclass
@@ -100,7 +106,10 @@ def assemble(config: RuntimeConfig) -> AssembledRuntime:
         gateway.register_adapter(skill_adapter)
 
     sink = RunSink()
-    event_sink: EventSink = maybe_attach(sink) if config.observability else sink
+    if config.observability:
+        # The overlay observes events as an isolated side-branch inside RunSink's
+        # guard, so a telemetry fault can never crash a run.
+        sink.set_observability(maybe_attach(_noop_sink))
 
     controller_kwargs: dict[str, Any] = {}
     if checkpoint_store is not None:
@@ -117,7 +126,7 @@ def assemble(config: RuntimeConfig) -> AssembledRuntime:
     controller = RuntimeController(
         model=config.model,
         gateway=gateway,
-        event_sink=event_sink,
+        event_sink=sink,
         **controller_kwargs,
     )
     return AssembledRuntime(

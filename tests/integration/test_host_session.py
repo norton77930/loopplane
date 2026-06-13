@@ -216,3 +216,51 @@ async def test_cancel_resolves_a_pending_approval_without_hanging(
             outcome = session.outcome()
 
     assert outcome.termination_reason == "cancelled"
+
+
+async def test_observability_fault_does_not_crash_the_run(tmp_path: Path) -> None:
+    host = LoopPlaneHost(RuntimeConfig(model=text_model("hi")), working_scope=tmp_path)
+
+    async def failing_overlay(event: object) -> None:
+        raise RuntimeError("exporter down")
+
+    # Attach a raising telemetry overlay directly (as assembly does when
+    # observability is enabled); a fault in it must not affect the run.
+    host._assembled.sink.set_observability(failing_overlay)
+    sink = EventCollector()
+
+    outcome = await host.run("hello", sink)
+
+    assert outcome.termination_reason == "natural-completion"
+    assert sink.types[-1] == "run-terminated"  # host still got the full stream
+
+
+async def test_session_outcome_is_a_stable_snapshot(tmp_path: Path) -> None:
+    model = ScriptedModel(
+        script=[
+            ScriptedTurn(increments=[TextIncrement(text=f"c{i}") for i in range(20)]),
+            ScriptedTurn(increments=[TextIncrement(text="later")]),
+        ],
+        context_capacity=100_000,
+    )
+    host = LoopPlaneHost(RuntimeConfig(model=model), working_scope=tmp_path)
+
+    class Canceller(EventCollector):
+        session: object | None = None
+
+        async def __call__(self, event: object) -> None:
+            await super().__call__(event)  # type: ignore[arg-type]
+            if event.type == "assistant-output-increment" and self.session is not None:  # type: ignore[attr-defined]
+                self.session.cancel()  # type: ignore[attr-defined]
+
+    sink = Canceller()
+    async with host.session(sink) as session:
+        sink.session = session
+        await session.submit("go")
+        captured = session.outcome()
+    assert captured.termination_reason == "cancelled"
+
+    # A later natural run on the same host rebinds the shared sink; the retained
+    # session's snapshot must not change.
+    await host.run("again", EventCollector())
+    assert session.outcome().termination_reason == "cancelled"
