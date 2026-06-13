@@ -83,9 +83,9 @@ next-due from the Clock — deterministically, with no real sleeping.
 fired exactly three times at the due ticks, next-due advanced by the period each fire, and two identical
 clock scripts produce identical firing sequences.
 
-- [ ] T015 [P] [US2] Write integration tests in `tests/integration/test_scheduler_us2.py` (MUST FAIL first): period P + advance 3P ⇒ 3 fires through `run_loop` at the due ticks; each fire advances next-due by one period and increments fire_count; two schedulers on identical virtual-clock scripts ⇒ identical firing sequences (determinism); `start_immediately` fires at t0 then every period (US2 scenarios 1–4; SC-003, SC-008).
-- [ ] T016 [US2] Implement in `scheduler.py`: `register_interval` and `poll()` interval handling — compute due ticks from `clock.now()` vs `next_due`, fire via `run_loop`, advance `next_due` per period, and update Trigger State (depends on T012) (FR-030–FR-033).
-- [ ] T017 [US2] Run `pytest tests/integration/test_scheduler_us2.py` → green (SC-003, SC-008).
+- [X] T015 [P] [US2] Write integration tests in `tests/integration/test_scheduler_us2.py` (MUST FAIL first): period P + advance 3P ⇒ 3 fires through `run_loop` at the due ticks; each fire advances next-due by one period and increments fire_count; two schedulers on identical virtual-clock scripts ⇒ identical firing sequences (determinism); `start_immediately` fires at t0 then every period (US2 scenarios 1–4; SC-003, SC-008).
+- [X] T016 [US2] Implement in `scheduler.py`: `register_interval` and `poll()` interval handling — compute due ticks from `clock.now()` vs `next_due`, fire via `run_loop`, advance `next_due` per period, and update Trigger State (depends on T012) (FR-030–FR-033).
+- [X] T017 [US2] Run `pytest tests/integration/test_scheduler_us2.py` → green (SC-003, SC-008).
 
 **Checkpoint**: The interval contract is now executable and deterministic.
 
@@ -100,9 +100,9 @@ in edge or level mode; a raising predicate is a non-fatal diagnostic.
 tick; poll across ticks and assert the loop fires only on the satisfied ticks per the mode, and a raising
 predicate yields a diagnostic with no spurious run.
 
-- [ ] T018 [P] [US3] Write integration tests in `tests/integration/test_scheduler_us3.py` (MUST FAIL first): false predicate ⇒ no run; rising edge ⇒ exactly one run; edge mode fires once across a true plateau while level mode fires each poll; a raising predicate ⇒ `condition_error` Scheduler Event, no run, scheduler continues (US3 scenarios 1–4; SC-004).
-- [ ] T019 [US3] Implement in `scheduler.py`: `register_condition` and `poll()` condition handling — evaluate the (sync/awaitable) predicate guarded, fire via `run_loop` on edge (false→true) or level (every satisfied poll), and emit `condition_error` on a raising predicate (depends on T012) (FR-040–FR-043).
-- [ ] T020 [US3] Run `pytest tests/integration/test_scheduler_us3.py` → green (SC-004).
+- [X] T018 [P] [US3] Write integration tests in `tests/integration/test_scheduler_us3.py` (MUST FAIL first): false predicate ⇒ no run; rising edge ⇒ exactly one run; edge mode fires once across a true plateau while level mode fires each poll; a raising predicate ⇒ `condition_error` Scheduler Event, no run, scheduler continues (US3 scenarios 1–4; SC-004).
+- [X] T019 [US3] Implement in `scheduler.py`: `register_condition` and `poll()` condition handling — evaluate the (sync/awaitable) predicate guarded, fire via `run_loop` on edge (false→true) or level (every satisfied poll), and emit `condition_error` on a raising predicate (depends on T012) (FR-040–FR-043).
+- [X] T020 [US3] Run `pytest tests/integration/test_scheduler_us3.py` → green (SC-004).
 
 **Checkpoint**: The condition contract is now executable, with edge/level modes and fail-safe predicates.
 
@@ -117,10 +117,10 @@ Scheduler Event stream.
 **Independent Test**: Advance a virtual clock past several due ticks in one jump and assert the run count
 matches the policy and Trigger State counters reflect it; reconstruct Trigger State from events alone.
 
-- [ ] T021 [P] [US4] Write integration tests in `tests/integration/test_scheduler_us4.py` (MUST FAIL first): a clock jump past K ticks ⇒ skip → 1 run (next-due past the jump), catch-up-once → 1 make-up run, coalesce → 1 collapsed run; `missed_ticks` records K-1 in each; Trigger State reconstructs from the Scheduler Event stream alone (US4 scenarios 1–4; SC-005, SC-006).
-- [ ] T022 [US4] Implement the missed-run policy in `scheduler.py`: on a multi-tick advance, apply skip / catch_up_once / coalesce (≤1 run each), update `next_due` and `missed_ticks`, and emit `run_skipped` / `run_caught_up` / `run_coalesced` (depends on T016) (FR-060–FR-062).
-- [ ] T023 [US4] Ensure the Scheduler Event stream carries enough for `reconstruct_states` to rebuild fire_count, missed_ticks, next_due, and last-fired; reconcile any gap (depends on T022, T007) (FR-052).
-- [ ] T024 [US4] Run `pytest tests/integration/test_scheduler_us4.py` → green (SC-005, SC-006).
+- [X] T021 [P] [US4] Write integration tests in `tests/integration/test_scheduler_us4.py` (MUST FAIL first): a clock jump past K ticks ⇒ skip → 1 run (next-due past the jump), catch-up-once → 1 make-up run, coalesce → 1 collapsed run; `missed_ticks` records K-1 in each; Trigger State reconstructs from the Scheduler Event stream alone (US4 scenarios 1–4; SC-005, SC-006).
+- [X] T022 [US4] Implement the missed-run policy in `scheduler.py`: on a multi-tick advance, apply skip / catch_up_once / coalesce (≤1 run each), update `next_due` and `missed_ticks`, and emit `run_skipped` / `run_caught_up` / `run_coalesced` (depends on T016) (FR-060–FR-062).
+- [X] T023 [US4] Ensure the Scheduler Event stream carries enough for `reconstruct_states` to rebuild fire_count, missed_ticks, next_due, and last-fired; reconcile any gap (depends on T022, T007) (FR-052).
+- [X] T024 [US4] Run `pytest tests/integration/test_scheduler_us4.py` → green (SC-005, SC-006).
 
 **Checkpoint**: Recurring-schedule correctness under clock jumps, with reconstructable state.
 
@@ -135,11 +135,11 @@ starts (one in flight at a time); fire same-tick triggers in deterministic regis
 drain mid-schedule and assert the in-flight run completes and no new run starts; assert two due triggers
 never run concurrently.
 
-- [ ] T025 [P] [US5] Write integration tests in `tests/integration/test_scheduler_us5.py` (MUST FAIL first): a paused trigger fires nothing across due ticks and resumes after `resume`; two same-tick due triggers fire in registration order and never run concurrently (one-in-flight, asserted via a re-entrancy probe); `drain()` lets the in-flight run finish and starts no new run; a stopped Scheduler fires nothing and leaves next-due unchanged (US5 scenarios 1–4; SC-007).
-- [ ] T026 [US5] Implement lifecycle in `scheduler.py`: a `running` flag (`stop`), per-trigger `enabled` (`pause`/`resume`), `drain()` (finish in-flight, start nothing, stop), registration-order same-tick firing, and the single-in-flight serialization guard (depends on T012) (FR-070–FR-073).
-- [ ] T027 [P] [US5] Create `examples/scheduler_quickstart.py`: a runnable interval-over-`VirtualClock` example that prints the firing sequence and outcomes (public-safe, no real sleeping).
-- [ ] T028 [P] [US5] Write `docs/scheduling.md`: a public-safe guide (register → poll → triggers → missed-run → lifecycle) that points at the Phase-3 `run_loop` boundary.
-- [ ] T029 [US5] Run `pytest tests/integration/test_scheduler_us5.py` → green (SC-007).
+- [X] T025 [P] [US5] Write integration tests in `tests/integration/test_scheduler_us5.py` (MUST FAIL first): a paused trigger fires nothing across due ticks and resumes after `resume`; two same-tick due triggers fire in registration order and never run concurrently (one-in-flight, asserted via a re-entrancy probe); `drain()` lets the in-flight run finish and starts no new run; a stopped Scheduler fires nothing and leaves next-due unchanged (US5 scenarios 1–4; SC-007).
+- [X] T026 [US5] Implement lifecycle in `scheduler.py`: a `running` flag (`stop`), per-trigger `enabled` (`pause`/`resume`), `drain()` (finish in-flight, start nothing, stop), registration-order same-tick firing, and the single-in-flight serialization guard (depends on T012) (FR-070–FR-073).
+- [X] T027 [P] [US5] Create `examples/scheduler_quickstart.py`: a runnable interval-over-`VirtualClock` example that prints the firing sequence and outcomes (public-safe, no real sleeping).
+- [X] T028 [P] [US5] Write `docs/scheduling.md`: a public-safe guide (register → poll → triggers → missed-run → lifecycle) that points at the Phase-3 `run_loop` boundary.
+- [X] T029 [US5] Run `pytest tests/integration/test_scheduler_us5.py` → green (SC-007).
 
 **Checkpoint**: Lifecycle and serialization edges close the phase scope.
 
