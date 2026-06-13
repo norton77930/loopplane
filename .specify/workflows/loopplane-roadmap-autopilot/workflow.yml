@@ -1,0 +1,216 @@
+schema_version: "1.0"
+workflow:
+  id: "loopplane-roadmap-autopilot"
+  name: "LoopPlane Roadmap Autopilot"
+  version: "1.0.0"
+  author: "LoopPlane"
+  description: >
+    Human-readable descriptor for autonomous /loop execution of the LoopPlane roadmap.
+    This file is documentation, not an engine-executed Spec Kit workflow. The authoritative
+    control document is docs/loopplane-agent-board.md; the per-run operating instruction is
+    .claude/loop.md. This descriptor records the roadmap units (000-014), the Spec Kit step
+    order, validation gates, commit/push policy, hard stop conditions, the Dynamic Workflow
+    policy, and the handoff rules between units.
+
+control_documents:
+  board: "docs/loopplane-agent-board.md"          # authoritative control board
+  loop_instruction: ".claude/loop.md"             # per-run autopilot instruction
+  constitution: ".specify/memory/constitution.md" # governing principles
+  active_feature_pointer: ".specify/feature.json" # names the active feature directory
+
+# Ordered roadmap. Autopilot works the lowest-numbered unit that is NOT yet Verified and whose
+# depends_on units are all Verified. Status is inferred from repository state, never invented.
+roadmap_units:
+  - id: "000-project-bootstrap"
+    feature_directory: null            # bootstrap; no specs/ directory
+    status: "Implemented"
+    depends_on: []
+    purpose: "Repo setup, Spec Kit init, constitution, README, .gitignore, agent board."
+  - id: "001-loopplane-runtime-foundation"
+    feature_directory: "specs/001-loopplane-runtime-foundation"
+    status: "Verified"                 # merged PR #1; T054 manual real-model validation documented, not CI-run
+    depends_on: ["000-project-bootstrap"]
+    purpose: "Agent Harness Runtime foundation: loop, controller, dispatcher, tool gateway, adapters, events, memory, checkpoint, artifacts, observability, approval boundary."
+  - id: "002-loopplane-host-interface"
+    feature_directory: "specs/002-loopplane-host-interface"
+    status: "Verified"                 # merged PR #2
+    depends_on: ["001-loopplane-runtime-foundation"]
+    purpose: "Expose the runtime to host applications: host interface, reference runner, programmatic config, host-to-runtime wiring, smoke path, public-safe examples."
+  - id: "003-loopplane-loop-engineering-layer"
+    feature_directory: "specs/003-loopplane-loop-engineering-layer"
+    status: "Spec complete"            # spec.md + checklist present; no plan/tasks/code; dir untracked
+    depends_on: ["001-loopplane-runtime-foundation", "002-loopplane-host-interface"]
+    purpose: "Outer loop-engineering layer: loop definition, loop controller, manual/interval/condition triggers, validator, evaluator, retry/repair, in-memory loop state, loop events, host integration."
+  - id: "004-loopplane-scheduler-trigger-engine"
+    feature_directory: "specs/004-loopplane-scheduler-trigger-engine"
+    status: "Not started"
+    depends_on: ["003-loopplane-loop-engineering-layer"]
+    purpose: "Local scheduler and condition-watch behavior for the trigger contracts (interval/condition/manual registry, trigger state, missed-run policy). No distributed queue yet unless approved."
+  - id: "005-loopplane-validator-evaluator-packs"
+    feature_directory: "specs/005-loopplane-validator-evaluator-packs"
+    status: "Not started"
+    depends_on: ["003-loopplane-loop-engineering-layer"]
+    purpose: "Reusable rule/schema/artifact validators and scoring evaluators, threshold gates, quality labels, examples."
+  - id: "006-loopplane-human-review-workflows"
+    feature_directory: "specs/006-loopplane-human-review-workflows"
+    status: "Not started"
+    depends_on: ["003-loopplane-loop-engineering-layer"]
+    purpose: "Human review workflows over approval boundaries: review request, user question event, approval memory, review decision, pause/resume, human gate loop. No UI unless separately specified."
+  - id: "007-loopplane-memory-recall-knowledge"
+    feature_directory: "specs/007-loopplane-memory-recall-knowledge"
+    status: "Not started"
+    depends_on: ["001-loopplane-runtime-foundation", "003-loopplane-loop-engineering-layer"]
+    purpose: "Recall and knowledge indexing as loop-aware context: conversation/artifact recall, knowledge index contract, memory injection policy, retrieval budget."
+  - id: "008-loopplane-tool-gateway-advanced"
+    feature_directory: "specs/008-loopplane-tool-gateway-advanced"
+    status: "Not started"
+    depends_on: ["001-loopplane-runtime-foundation"]
+    purpose: "Expand the tool ecosystem: MCP discovery, remote tool registry, plugin bundle, tool package metadata, capability manifest, versioning, diagnostics."
+  - id: "009-loopplane-sandbox-policy-governance"
+    feature_directory: "specs/009-loopplane-sandbox-policy-governance"
+    status: "Not started"
+    depends_on: ["001-loopplane-runtime-foundation"]
+    purpose: "Execution safety and governance: sandbox execution, path/permission/budget/quota policy, cost governance, safe failure behavior."
+  - id: "010-loopplane-observability-debug-console"
+    feature_directory: "specs/010-loopplane-observability-debug-console"
+    status: "Not started"
+    depends_on: ["001-loopplane-runtime-foundation", "003-loopplane-loop-engineering-layer"]
+    purpose: "Inspectable runs and loops: trace viewer data contract, event replay, debug timeline, run/loop diagnostics, metadata-only. No full frontend unless separately specified."
+  - id: "011-loopplane-web-api-host"
+    feature_directory: "specs/011-loopplane-web-api-host"
+    status: "Not started"
+    depends_on: ["002-loopplane-host-interface"]
+    purpose: "Web/API host: FastAPI or equivalent, REST endpoints, SSE/WebSocket streaming, auth boundary, session APIs, host-level integration tests."
+  - id: "012-loopplane-desktop-or-studio-host"
+    feature_directory: "specs/012-loopplane-desktop-or-studio-host"
+    status: "Not started"
+    depends_on: ["002-loopplane-host-interface"]
+    purpose: "Local desktop/studio host: local app host, sidecar process, local session manager, developer console, optional UI shell. No private legacy UI copy."
+  - id: "013-loopplane-multi-agent-orchestration"
+    feature_directory: "specs/013-loopplane-multi-agent-orchestration"
+    status: "Not started"
+    depends_on: ["003-loopplane-loop-engineering-layer"]
+    purpose: "Subagents, coordinator, delegation: agent registry, subagent execution, coordinator, delegation policy, child run references, aggregated events/artifacts."
+  - id: "014-loopplane-release-packaging-docs"
+    feature_directory: "specs/014-loopplane-release-packaging-docs"
+    status: "Not started"
+    # Release gate: do not start until ALL prior units (000-013) are Verified.
+    depends_on:
+      - "000-project-bootstrap"
+      - "001-loopplane-runtime-foundation"
+      - "002-loopplane-host-interface"
+      - "003-loopplane-loop-engineering-layer"
+      - "004-loopplane-scheduler-trigger-engine"
+      - "005-loopplane-validator-evaluator-packs"
+      - "006-loopplane-human-review-workflows"
+      - "007-loopplane-memory-recall-knowledge"
+      - "008-loopplane-tool-gateway-advanced"
+      - "009-loopplane-sandbox-policy-governance"
+      - "010-loopplane-observability-debug-console"
+      - "011-loopplane-web-api-host"
+      - "012-loopplane-desktop-or-studio-host"
+      - "013-loopplane-multi-agent-orchestration"
+    purpose: "Public release quality: packaging, examples, docs, quickstart, API reference, changelog, public-safe cleanup, CI readiness."
+
+# Spec Kit step order applied per unit. Autopilot executes the next incomplete step from repo state.
+spec_kit_step_order:
+  - id: "specify"
+    command: "/speckit.specify"        # local skill: speckit-specify
+    produces: "spec.md (+ checklists/)"
+    allowed_changes: "active feature spec/checklist only; no implementation code"
+  - id: "clarify"
+    command: "/speckit.clarify"        # optional, when the spec is ambiguous
+    produces: "clarified spec.md"
+    allowed_changes: "active feature spec/checklist only; no implementation code"
+  - id: "checklist"
+    command: "/speckit.checklist"      # optional quality checklist
+    produces: "checklists/*.md"
+    allowed_changes: "active feature spec/checklist only; no implementation code"
+  - id: "plan"
+    command: "/speckit.plan"           # local skill: speckit-plan
+    produces: "plan.md (+ research.md, data-model.md, contracts/ if applicable)"
+    allowed_changes: "active feature plan/research/data-model/contracts only; no implementation code"
+  - id: "tasks"
+    command: "/speckit.tasks"          # local skill: speckit-tasks
+    produces: "tasks.md (dependency-ordered)"
+    allowed_changes: "active feature tasks only; no implementation code"
+  - id: "analyze"
+    command: "/speckit.analyze"        # local skill: speckit-analyze
+    produces: "cross-artifact consistency report + minimal fixes"
+    allowed_changes: "minimal consistency fixes to Spec Kit artifacts only; no implementation code"
+  - id: "implement"
+    command: "/speckit.implement"      # local skill: speckit-implement
+    produces: "source, tests, docs/examples allowed by tasks.md"
+    allowed_changes: "source/tests/docs as required by tasks.md; must run tests; stop after a major milestone on a hard stop"
+  - id: "final-review"
+    command: "(manual)"
+    produces: "verified unit + updated board"
+    allowed_changes: "validate tests/public-safety/git diff/scope; update board status"
+
+validation_gates:
+  before_every_commit:
+    - 'git status'
+    - 'git diff --stat'
+    - 'git diff --check'
+    - 'git diff --name-only | Select-String "^openspec/"          # MUST be empty'
+    - 'git diff --name-only | Select-String "^[A-Za-z]:\\|sk-|ghp_|api_key|secret|password|token"   # MUST be empty'
+    - 'pytest                                                      # green before any commit touching source/tests'
+  local_only_supplementary:
+    # sensitive-scan.txt is gitignored and never committed; it holds the literal internal patterns.
+    - 'if (Test-Path sensitive-scan.txt) { git diff | Select-String -Pattern (Get-Content sensitive-scan.txt) }'
+  source_change_rule:
+    no_source_during: ["specify", "clarify", "checklist", "plan", "tasks", "analyze"]
+    source_allowed_during: ["implement"]
+    constraint: "Only Python source changes required by tasks.md; nothing speculative."
+
+commit_policy:
+  granularity: "One commit per stable Spec Kit step."
+  push: "Push after each safe commit."
+  messages:
+    specify: "docs: define LoopPlane <feature> spec"
+    clarify_checklist: "docs: validate LoopPlane <feature> requirements"
+    plan: "docs: plan LoopPlane <feature>"
+    tasks: "docs: define LoopPlane <feature> tasks"
+    analyze: "docs: align LoopPlane <feature> artifacts"
+    implement: "feat: implement LoopPlane <feature>"
+    tests: "test: cover LoopPlane <feature> flows"
+    board: "docs: update LoopPlane agent board"
+
+hard_stop_conditions:
+  - "A change touches openspec/."
+  - "A task bypasses a previous-phase public contract."
+  - "A task introduces an out-of-scope product layer."
+  - "Tests fail and the fix is not obvious after one focused repair attempt."
+  - "Implementation requires changing 001 or 002 public contracts."
+  - "A public-safety scan finds private paths, internal names, IPs, keys, tokens, or secrets."
+  - "A destructive git operation is needed."
+  - "The active feature cannot be determined."
+  - "The next step would combine specify + plan + tasks + implement without approval (unless autopilot is explicitly enabled)."
+  - "The agent would need to rewrite the roadmap itself."
+  - "Push fails due to authentication or remote conflict."
+  - "Merge conflicts occur."
+
+dynamic_workflow_policy:
+  role: "Accelerator only — NOT the roadmap controller (/loop 1m is the driver)."
+  allowed_for:
+    - "speckit.analyze"
+    - "speckit.implement"
+    - "repo-wide audits"
+    - "cross-artifact consistency checks"
+    - "test coverage sweeps"
+    - "public-safety scans"
+    - "large independent implementation task groups"
+  forbidden_for:
+    - "branch creation"
+    - "git merge"
+    - "feature transition"
+    - "destructive operations"
+    - "specify / plan / tasks (unless explicitly requested)"
+  integration_rule: "During implement, a workflow may split independent task groups, but final integration and the test run happen in the main session; reconcile conflicts before commit."
+
+handoff_rules:
+  select_next_unit: "Work the lowest-numbered roadmap unit whose status is not Verified and whose depends_on units are all Verified."
+  within_unit: "Advance one Spec Kit step at a time using board §6; under autopilot, chain steps until a human gate or a hard stop condition."
+  unit_complete: "A unit is done when all tasks are complete, tests pass, the public-safety scan passes, and final review sets the board status to Verified."
+  advance: "Only after the current unit is Verified, continue to the next unit. Update docs/loopplane-agent-board.md status before advancing."
+  branch: "Do not perform destructive git or auto-create/merge branches during handoff. If a dedicated feature branch is required, stop and confirm with the user."
