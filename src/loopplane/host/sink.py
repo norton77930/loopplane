@@ -58,6 +58,11 @@ class RunSink:
                 self.consumer_failures.append(type(exc).__name__)
 
         # The relay resolves the pending approval; the broker is still awaiting,
-        # so the resolution applied here lets the run proceed (FR-014).
+        # so the resolution applied here lets the run proceed (FR-014). The relay
+        # self-guards (denying on a handler error), but isolate it here too so a
+        # relay bug can never crash the run.
         if event.type == "approval-requested" and self._relay is not None:
-            await self._relay(event.payload)
+            try:
+                await self._relay(event.payload)
+            except Exception as exc:
+                self.consumer_failures.append(type(exc).__name__)

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from loopplane.checkpoint.store import SessionSummary
 from loopplane.controller.controller import RuntimeController
 from loopplane.events.emitter import EventSink
 from loopplane.events.envelope import ApprovalRequestedPayload
@@ -67,6 +68,7 @@ class LoopPlaneHost:
         self._assembled: AssembledRuntime = assemble(config)
         self._config = config
         self._working_scope = working_scope or Path.cwd()
+        self._active = False
 
     @property
     def skill_problems(self) -> tuple[str, ...]:
@@ -83,6 +85,7 @@ class LoopPlaneHost:
         """Start a run and return its outcome (FR-003). ``on_event`` receives
         every normalized event in order (FR-004)."""
 
+        self._enter_run()
         controller = self._assembled.controller
         sink = self._assembled.sink
         session_id = controller.create_session(
@@ -96,6 +99,7 @@ class LoopPlaneHost:
             failures = tuple(sink.consumer_failures)
         finally:
             sink.unbind()
+            self._active = False
         return RunOutcome(
             session_id=session_id,
             termination_reason=reason,
@@ -115,6 +119,7 @@ class LoopPlaneHost:
         """Open an interactive round-trip: submit input, answer approvals and
         questions, and cancel — over the Phase-1 controller (US3)."""
 
+        self._enter_run()
         controller = self._assembled.controller
         sink = self._assembled.sink
         session_id = controller.create_session(
@@ -126,9 +131,10 @@ class LoopPlaneHost:
             yield Session(controller, session_id, sink)
         finally:
             sink.unbind()
+            self._active = False
 
-    def list_sessions(self) -> list[object]:
-        return list(self._assembled.controller.list_sessions())
+    def list_sessions(self) -> list[SessionSummary]:
+        return self._assembled.controller.list_sessions()
 
     async def resume(self, session_id: str) -> None:
         await self._assembled.controller.resume(session_id)
@@ -148,6 +154,13 @@ class LoopPlaneHost:
             return None
         return store.retrieve(session_id, reference)
 
+    def _enter_run(self) -> None:
+        if self._active:
+            raise RuntimeError(
+                "a run is already active on this host; runs are sequential"
+            )
+        self._active = True
+
     def _bind(
         self,
         sink: RunSink,
@@ -162,7 +175,19 @@ class LoopPlaneHost:
         controller.attach_reviewer(session_id)
 
         async def relay(payload: ApprovalRequestedPayload) -> None:
-            decision = await on_approval(payload)
+            # A failing approval handler must neither crash nor hang the run:
+            # deny the call and let the run continue (FR-014 / FR-007 posture).
+            try:
+                decision = await on_approval(payload)
+            except Exception:
+                controller.resolve_approval(
+                    session_id,
+                    payload.request_id,
+                    decision="deny",
+                    scope="once",
+                    reason="approval handler raised",
+                )
+                return
             controller.resolve_approval(
                 session_id,
                 payload.request_id,
@@ -193,6 +218,9 @@ class Session:
 
     def cancel(self) -> None:
         self._controller.cancel(self._session_id)
+        # Resolve anything the loop is parked on (a pending approval/question)
+        # so a cancelled interactive run can never hang on a reviewer (FR-115).
+        self._controller.on_reviewer_disconnect(self._session_id)
 
     def answer_approval(
         self,

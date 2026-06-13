@@ -10,6 +10,7 @@ host-supplied model object or the host environment, never here (FR-013).
 from __future__ import annotations
 
 import importlib.util
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -168,6 +169,17 @@ def _otel_available() -> bool:
     return importlib.util.find_spec("opentelemetry") is not None
 
 
+def _observability_active() -> bool:
+    """Whether the metadata-only overlay would actually attach — the same gate
+    ``loopplane.observability.maybe_attach`` uses (the exporter endpoint env var
+    plus the ``otel`` extra). Validating against this avoids accepting an
+    ``observability=True`` that would silently produce no telemetry."""
+
+    if not os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"):
+        return False
+    return _otel_available()
+
+
 def collect_tool_names(config: RuntimeConfig) -> list[str]:
     """Every tool name a config will register, before the gateway is built."""
 
@@ -206,10 +218,11 @@ def validate_config(config: RuntimeConfig) -> None:
                 f"approval policy references unregistered tools: {sorted(unknown)}"
             )
 
-    if config.observability and not _otel_available():
+    if config.observability and not _observability_active():
         raise ConfigError(
-            "observability is enabled but the optional 'otel' capability is "
-            "not installed"
+            "observability is enabled but the telemetry overlay would not "
+            "activate: install the 'otel' extra and set "
+            "OTEL_EXPORTER_OTLP_ENDPOINT"
         )
 
 

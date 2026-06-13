@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import anyio
 import pytest
 
 from loopplane.events.envelope import ApprovalRequestedPayload
@@ -17,7 +18,13 @@ from loopplane.host import (
 )
 from loopplane.model import ScriptedModel, ScriptedTurn, TextIncrement
 
-from .conftest import ECHO_TOOL, EventCollector, text_model, tool_then_text_model
+from .conftest import (
+    ECHO_TOOL,
+    EventCollector,
+    multi_text_model,
+    text_model,
+    tool_then_text_model,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -138,3 +145,74 @@ async def test_consumer_failure_is_isolated(tmp_path: Path) -> None:
 
     assert outcome.termination_reason == "natural-completion"
     assert outcome.consumer_failures  # isolated and recorded, run not corrupted
+
+
+async def test_failing_approval_handler_denies_without_crashing(tmp_path: Path) -> None:
+    host = LoopPlaneHost(
+        RuntimeConfig(
+            model=tool_then_text_model(),
+            tools=(ECHO_TOOL,),
+            approval=ApprovalPolicy(ask=frozenset({"echo"})),
+        ),
+        working_scope=tmp_path,
+    )
+
+    async def boom(payload: ApprovalRequestedPayload) -> ApprovalDecision:
+        raise RuntimeError("handler bug")
+
+    sink = EventCollector()
+    outcome = await host.run("echo please", sink, on_approval=boom)
+
+    completed = next(e for e in sink.events if e.type == "tool-call-completed")
+    assert completed.payload.outcome == "failure"  # denied, not executed
+    assert outcome.termination_reason == "natural-completion"  # run survived
+
+
+async def test_concurrent_runs_on_one_host_are_rejected(tmp_path: Path) -> None:
+    host = LoopPlaneHost(
+        RuntimeConfig(model=multi_text_model("a", "b")), working_scope=tmp_path
+    )
+    started = anyio.Event()
+    release = anyio.Event()
+
+    async def slow_sink(event: object) -> None:
+        if event.type == "user-input":  # type: ignore[attr-defined]
+            started.set()
+            await release.wait()
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(host.run, "one", slow_sink)
+        await started.wait()
+        with pytest.raises(RuntimeError):
+            await host.run("two", EventCollector())
+        release.set()
+
+
+async def test_cancel_resolves_a_pending_approval_without_hanging(
+    tmp_path: Path,
+) -> None:
+    host = LoopPlaneHost(
+        RuntimeConfig(
+            model=tool_then_text_model(),
+            tools=(ECHO_TOOL,),
+            approval=ApprovalPolicy(ask=frozenset({"echo"})),
+        ),
+        working_scope=tmp_path,
+    )
+
+    class CancelOnApproval(EventCollector):
+        session: object | None = None
+
+        async def __call__(self, event: object) -> None:
+            await super().__call__(event)  # type: ignore[arg-type]
+            if event.type == "approval-requested" and self.session is not None:  # type: ignore[attr-defined]
+                self.session.cancel()  # type: ignore[attr-defined]
+
+    sink = CancelOnApproval()
+    with anyio.fail_after(5):
+        async with host.session(sink) as session:
+            sink.session = session
+            await session.submit("echo please")
+            outcome = session.outcome()
+
+    assert outcome.termination_reason == "cancelled"
