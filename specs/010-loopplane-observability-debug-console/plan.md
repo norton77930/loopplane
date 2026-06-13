@@ -110,6 +110,7 @@ specs/010-loopplane-observability-debug-console/
 ```text
 src/loopplane/inspect/
 ├── __init__.py        # public exports
+├── base.py            # SequencedEvent protocol + count_by_type helper (FR-003)
 ├── diagnostics.py     # LoopDiagnostics + loop_diagnostics; RunDiagnostics + run_diagnostics (FR-010-FR-021)
 ├── trace.py           # TraceSpan + Trace + build_trace (FR-030-FR-032)
 ├── timeline.py        # TimelineEntry + Timeline + build_timeline (FR-040-FR-041)
@@ -146,7 +147,7 @@ deferred to [`/speckit.tasks`](./tasks.md).
 
 | Phase | Delivers | Validation gate | Rollback |
 |---|---|---|---|
-| IA — Foundational + loop diagnostics (US1) | `diagnostics.py` (`LoopDiagnostics`, `loop_diagnostics`) + package skeleton + `__init__` + scripted helpers — **blocks all stories** | `test_inspect_core.py` + `test_inspect_us1.py` green (SC-001/002/008) | Revert package; nothing depends on it |
+| IA — Foundational + loop diagnostics (US1) | `base.py` (`SequencedEvent`, `count_by_type`), `diagnostics.py` (`LoopDiagnostics`, `loop_diagnostics`) + package skeleton + `__init__` + scripted helpers — **blocks all stories** | `test_inspect_core.py` + `test_inspect_us1.py` green (SC-001/002/008) | Revert package; nothing depends on it |
 | IB — Run diagnostics (US2) | `diagnostics.py` (`RunDiagnostics`, `run_diagnostics`) | `test_inspect_us2.py` green; metadata-only, unknown-type skipped (SC-003/004) | Revert IB |
 | IC — Trace data model (US3) | `trace.py` (`TraceSpan`, `Trace`, `build_trace`) | `test_inspect_us3.py` green; nested, metadata-only (SC-003) | Revert IC |
 | ID — Debug timeline (US4) | `timeline.py` (`TimelineEntry`, `Timeline`, `build_timeline`) | `test_inspect_us4.py` green; sequence-ordered + span pairing (SC-007) | Revert ID |
