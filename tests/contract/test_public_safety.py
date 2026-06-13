@@ -134,3 +134,41 @@ def test_phase2_host_files_are_public_safe() -> None:
                     violations.append(f"{relative}:{lineno}: {label}")
 
     assert not violations, "Phase-2 public-safety scan found:\n" + "\n".join(violations)
+
+
+# Phase-3 loop-engineering files are covered explicitly so they are scanned even
+# before they are committed (T042; SC-010, NFR-004).
+PHASE3_TARGETS = [
+    REPO_ROOT / "src" / "loopplane" / "engineering",
+    REPO_ROOT / "examples" / "loop_quickstart.py",
+    REPO_ROOT / "docs" / "loop-engineering.md",
+    REPO_ROOT / "specs" / "003-loopplane-loop-engineering-layer",
+]
+
+
+def test_phase3_engineering_files_are_public_safe() -> None:
+    compiled = {
+        label: re.compile(pattern) for label, pattern in BUILTIN_PATTERNS.items()
+    }
+
+    targets: list[Path] = []
+    for target in PHASE3_TARGETS:
+        if target.is_dir():
+            targets.extend(sorted(target.rglob("*.py")))
+            targets.extend(sorted(target.rglob("*.md")))
+        elif target.is_file():
+            targets.append(target)
+    assert targets, "expected Phase-3 loop-engineering files to scan"
+
+    violations: list[str] = []
+    for path in targets:
+        text = _read_text(path)
+        if text is None:
+            continue
+        relative = path.relative_to(REPO_ROOT)
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for label, regex in compiled.items():
+                if regex.search(line):
+                    violations.append(f"{relative}:{lineno}: {label}")
+
+    assert not violations, "Phase-3 public-safety scan found:\n" + "\n".join(violations)

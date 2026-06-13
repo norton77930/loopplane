@@ -171,11 +171,11 @@ supplied decision and never hangs.
 
 **Purpose**: Boundary/public-safety enforcement and final validation across all stories.
 
-- [ ] T041 [P] Write `tests/contract/test_engineering_boundary.py`: an import-boundary audit asserting `loopplane.engineering` imports only the allowed `loopplane.host` surface (+ permitted value types) and no Phase-1 internal; a host-only run-path assertion (SC-002); a `reconstruct_state` event-sufficiency check (SC-006); an observation-parity check (observed vs unobserved decisions/outcome identical, SC-009); and an unknown-future-Loop-Event tolerance check (a consumer skips an unrecognized event type without error, FR-075) (NFR-003).
-- [ ] T042 Extend `tests/contract/test_public_safety.py` to include all committed Phase-3 files (`src/loopplane/engineering/`, `examples/loop_quickstart.py`, `docs/loop-engineering.md`, `specs/003-*`) so the scan finds zero private references (SC-010, NFR-004).
-- [ ] T043 [P] Execute the [quickstart.md](./quickstart.md) scenarios end-to-end as a smoke check and reconcile any drift between the guide and the implementation.
-- [ ] T044 Final validation: full `pytest` green, `git diff --check` clean, public-safety scan clean (board §10).
-- [ ] T045 Update `docs/loopplane-agent-board.md`: advance unit 003 status (Implemented → Verified) and its Next Action per board §13 maintenance rules.
+- [X] T041 [P] Write `tests/contract/test_engineering_boundary.py`: an import-boundary audit asserting `loopplane.engineering` imports only the allowed `loopplane.host` surface (+ permitted value types) and no Phase-1 internal; a host-only run-path assertion (SC-002); a `reconstruct_state` event-sufficiency check (SC-006); an observation-parity check (observed vs unobserved decisions/outcome identical, SC-009); and an unknown-future-Loop-Event tolerance check (a consumer skips an unrecognized event type without error, FR-075) (NFR-003).
+- [X] T042 Extend `tests/contract/test_public_safety.py` to include all committed Phase-3 files (`src/loopplane/engineering/`, `examples/loop_quickstart.py`, `docs/loop-engineering.md`, `specs/003-*`) so the scan finds zero private references (SC-010, NFR-004).
+- [X] T043 [P] Execute the [quickstart.md](./quickstart.md) scenarios end-to-end as a smoke check and reconcile any drift between the guide and the implementation.
+- [X] T044 Final validation: full `pytest` green, `git diff --check` clean, public-safety scan clean (board §10).
+- [X] T045 Update `docs/loopplane-agent-board.md`: advance unit 003 status (Implemented → Verified) and its Next Action per board §13 maintenance rules.
 
 ---
 
