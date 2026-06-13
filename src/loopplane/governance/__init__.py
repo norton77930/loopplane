@@ -11,6 +11,7 @@ policy/approval contracts and is distinct from the Phase-1 Human Approval bounda
 """
 
 from loopplane.governance.base import SimpleDecision, allow, as_decider, deny
+from loopplane.governance.path import path_policy
 from loopplane.governance.permission import permission_policy
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     "allow",
     "as_decider",
     "deny",
+    "path_policy",
     "permission_policy",
 ]
