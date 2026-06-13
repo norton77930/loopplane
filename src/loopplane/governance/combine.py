@@ -39,3 +39,37 @@ def all_of(*policies: PolicyDecider) -> PolicyDecider:
         return allow()
 
     return decider
+
+
+def safe_failure(
+    policy: PolicyDecider, *, reason: str = "policy error"
+) -> PolicyDecider:
+    """Wrap a decider so any raised exception maps to deny — never a silent allow
+    (FR-071, NFR-005)."""
+
+    async def decider(
+        call: ToolCallRequest,
+        descriptor: ToolDescriptor,
+        context: RunContext,
+        emitter: EventEmitter,
+    ) -> PolicyVerdict:
+        try:
+            return await policy(call, descriptor, context, emitter)
+        except Exception:  # noqa: BLE001 - fail safe: any raise becomes deny
+            return deny(reason)
+
+    return decider
+
+
+def default_deny(reason: str = "denied by default") -> PolicyDecider:
+    """A terminal decider that always denies (FR-071)."""
+
+    async def decider(
+        call: ToolCallRequest,
+        descriptor: ToolDescriptor,
+        context: RunContext,
+        emitter: EventEmitter,
+    ) -> PolicyVerdict:
+        return deny(reason)
+
+    return decider

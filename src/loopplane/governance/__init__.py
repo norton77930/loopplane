@@ -13,9 +13,10 @@ policy/approval contracts and is distinct from the Phase-1 Human Approval bounda
 from loopplane.governance.base import SimpleDecision, allow, as_decider, deny
 from loopplane.governance.budget import CostModel, budget_policy, quota_policy
 from loopplane.governance.capability import capability_policy
-from loopplane.governance.combine import all_of
+from loopplane.governance.combine import all_of, default_deny, safe_failure
 from loopplane.governance.path import path_policy
 from loopplane.governance.permission import permission_policy
+from loopplane.governance.sandbox import sandbox_profile
 
 __all__ = [
     "CostModel",
@@ -25,8 +26,11 @@ __all__ = [
     "as_decider",
     "budget_policy",
     "capability_policy",
+    "default_deny",
     "deny",
     "path_policy",
     "permission_policy",
     "quota_policy",
+    "safe_failure",
+    "sandbox_profile",
 ]
