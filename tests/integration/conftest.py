@@ -92,3 +92,96 @@ def harness(tmp_path: Path) -> HarnessFactory:
         return controller, session_id
 
     return make
+
+
+# --- Host integration helpers (feature 002-loopplane-host-interface) ---
+
+from loopplane.host import RuntimeConfig, ToolSpec  # noqa: E402
+from loopplane.model import (  # noqa: E402
+    ScriptedTurn,
+    TextIncrement,
+    ToolCallRequest,
+)
+
+__all__ = [
+    "BIG_TOOL",
+    "ECHO_DESCRIPTOR",
+    "ECHO_TOOL",
+    "EventCollector",
+    "RuntimeConfig",
+    "big_tool_model",
+    "echo_handler",
+    "multi_text_model",
+    "text_model",
+    "tool_then_text_model",
+]
+
+ECHO_TOOL = ToolSpec(descriptor=ECHO_DESCRIPTOR, handler=echo_handler)
+
+BIG_DESCRIPTOR = ToolDescriptor(
+    name="big",
+    description="Emit a large blob to exercise artifact offload.",
+    input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+)
+
+
+async def big_handler(
+    call_input: dict[str, object], context: RunContext
+) -> list[OutputBlock]:
+    return [TextBlock(text="X" * 200_000)]
+
+
+BIG_TOOL = ToolSpec(descriptor=BIG_DESCRIPTOR, handler=big_handler)
+
+
+def text_model(text: str = "hello") -> ScriptedModel:
+    """One plain-text turn ending the run."""
+
+    return ScriptedModel(
+        script=[ScriptedTurn(increments=[TextIncrement(text=text)])],
+        context_capacity=100_000,
+    )
+
+
+def multi_text_model(*texts: str) -> ScriptedModel:
+    """One text turn per argument — enough script for several sequential runs."""
+
+    return ScriptedModel(
+        script=[ScriptedTurn(increments=[TextIncrement(text=t)]) for t in texts],
+        context_capacity=100_000,
+    )
+
+
+def tool_then_text_model(tool_name: str = "echo") -> ScriptedModel:
+    """A tool-calling turn followed by a closing text turn."""
+
+    return ScriptedModel(
+        script=[
+            ScriptedTurn(
+                increments=[
+                    TextIncrement(text="let me use a tool"),
+                    ToolCallRequest(
+                        call_id="c1", tool_name=tool_name, input={"text": "hello"}
+                    ),
+                ],
+                stop_reason="tool-use",
+            ),
+            ScriptedTurn(increments=[TextIncrement(text="done")]),
+        ],
+        context_capacity=100_000,
+    )
+
+
+def big_tool_model() -> ScriptedModel:
+    """Calls the oversized 'big' tool, then closes with text."""
+
+    return ScriptedModel(
+        script=[
+            ScriptedTurn(
+                increments=[ToolCallRequest(call_id="c1", tool_name="big", input={})],
+                stop_reason="tool-use",
+            ),
+            ScriptedTurn(increments=[TextIncrement(text="stored")]),
+        ],
+        context_capacity=100_000,
+    )

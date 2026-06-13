@@ -23,6 +23,7 @@ venv/
 /logs/
 /tmp/
 /artifacts/
+/.pytmp/
 
 # IDE
 .vscode/
