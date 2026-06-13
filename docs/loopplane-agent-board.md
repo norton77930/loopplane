@@ -89,7 +89,7 @@ git history) — not invented.
 | **007-loopplane-memory-recall-knowledge** | `specs/007-loopplane-memory-recall-knowledge` | **Verified** | Recall and knowledge indexing as loop-aware context sources: conversation recall, artifact recall, knowledge index contract, memory injection policy, retrieval budget, loop-aware memory usage. | 001, 003 | None — implemented & verified on `main` (`loopplane.recall`). |
 | **008-loopplane-tool-gateway-advanced** | `specs/008-loopplane-tool-gateway-advanced` | **Verified** | Expand the tool ecosystem beyond the foundation: MCP tool discovery, remote tool registry, plugin bundle, tool package metadata, tool capability manifest, tool versioning, tool diagnostics. | 001 | None — implemented & verified on `main` (`loopplane.toolkit`). |
 | **009-loopplane-sandbox-policy-governance** | `specs/009-loopplane-sandbox-policy-governance` | **Verified** | Stronger execution safety and governance: sandbox execution, path policy, permission policy, budget policy, quota policy, cost governance, safe failure behavior. | 001 | None — implemented & verified on `main` (`loopplane.governance`). |
-| **010-loopplane-observability-debug-console** | _(not created)_ | **Not started** | Make runs and loops inspectable: trace viewer data contract, event replay, debug timeline, run diagnostics, loop diagnostics, metadata-only observability. No full frontend unless separately specified. | 001, 003 | `/speckit.specify`. |
+| **010-loopplane-observability-debug-console** | `specs/010-loopplane-observability-debug-console` | **Verified** | Make runs and loops inspectable: trace viewer data contract, event replay, debug timeline, run diagnostics, loop diagnostics, metadata-only observability. No full frontend unless separately specified. | 001, 003 | None — implemented & verified on `main` (`loopplane.inspect`). |
 | **011-loopplane-web-api-host** | _(not created)_ | **Not started** | Expose LoopPlane through a web/API host: FastAPI or equivalent host, REST endpoints, SSE or WebSocket streaming, auth boundary, session APIs, host-level integration tests. | 002 | `/speckit.specify`. |
 | **012-loopplane-desktop-or-studio-host** | _(not created)_ | **Not started** | Local desktop or studio host: local app host, sidecar process, local session manager, developer console, optional UI shell. No private legacy UI copy. | 002 | `/speckit.specify`. |
 | **013-loopplane-multi-agent-orchestration** | _(not created)_ | **Not started** | Subagents, coordinator, and delegation: agent registry, subagent execution, coordinator, delegation policy, child run references, aggregated events, aggregated artifacts. | 003 | `/speckit.specify`. |
@@ -171,7 +171,17 @@ git history) — not invented.
   public Phase-1 policy contracts (reusing `resolve_rules`) and distinct from the Human Approval boundary.
   A `/speckit.analyze` pass (0 critical/high) aligned a plan test-note with tasks. ruff + mypy(strict)
   clean; full suite **466 passed** → **Verified**.
-- **010–014** — No `specs/` directory and no source → **Not started**.
+- **010** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; source
+  `src/loopplane/inspect/` (6 modules) + `examples/inspect_quickstart.py` +
+  `docs/observability-debug.md`. Tasks **27/27 complete**; ~31 inspect tests pass (core unit
+  + US1–US5 integration + import/no-run boundary + metadata-only + public-safety); the layer is a
+  read-only DATA layer that composes only the public Phase-3 Loop Event/State (reusing
+  `reconstruct_state`) and Phase-1 Runtime Event surfaces, **drives no run and re-emits no live bus**
+  (Constitution VI), and surfaces only metadata (ids / types / sequences / counts / public-safe
+  reasons). A `/speckit.analyze` pass (0 critical/high) added `base.py` to the plan source tree.
+  ruff + mypy(strict) clean; full suite **497 passed** → **Verified**.
+- **011–014** — No `specs/` directory and no source → **Not started**.
 
 ---
 
@@ -179,11 +189,11 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **010-loopplane-observability-debug-console** |
-| Active feature directory | _(not created — `/speckit.specify` will create `specs/010-loopplane-observability-debug-console`)_ |
+| Active unit | **011-loopplane-web-api-host** |
+| Active feature directory | _(not created — `/speckit.specify` will create `specs/011-loopplane-web-api-host`)_ |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main`, no dedicated feature branch required (see §7 Branch Strategy) |
-| Current Spec Kit step | **Specify** (009 is **Verified**; 010 has no `specs/` directory yet) |
-| Depends on | 001, 003 |
+| Current Spec Kit step | **Specify** (010 is **Verified**; 011 has no `specs/` directory yet) |
+| Depends on | 002 |
 | Next command | **`/speckit.specify`** |
 | Stop condition status | None active. Branch strategy is **main-only** — a missing feature branch is *not* a stop condition (see §7 / §9). |
 

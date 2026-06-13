@@ -400,3 +400,43 @@ def test_phase9_governance_files_are_public_safe() -> None:
                     violations.append(f"{relative}:{lineno}: {label}")
 
     assert not violations, "Phase-9 public-safety scan found:\n" + "\n".join(violations)
+
+
+# Phase-10 inspect files are covered explicitly so they are scanned even before
+# they are committed (T023; SC-006, NFR-002).
+PHASE10_TARGETS = [
+    REPO_ROOT / "src" / "loopplane" / "inspect",
+    REPO_ROOT / "examples" / "inspect_quickstart.py",
+    REPO_ROOT / "docs" / "observability-debug.md",
+    REPO_ROOT / "specs" / "010-loopplane-observability-debug-console",
+]
+
+
+def test_phase10_inspect_files_are_public_safe() -> None:
+    compiled = {
+        label: re.compile(pattern) for label, pattern in BUILTIN_PATTERNS.items()
+    }
+
+    targets: list[Path] = []
+    for target in PHASE10_TARGETS:
+        if target.is_dir():
+            targets.extend(sorted(target.rglob("*.py")))
+            targets.extend(sorted(target.rglob("*.md")))
+        elif target.is_file():
+            targets.append(target)
+    assert targets, "expected Phase-10 inspect files to scan"
+
+    violations: list[str] = []
+    for path in targets:
+        text = _read_text(path)
+        if text is None:
+            continue
+        relative = path.relative_to(REPO_ROOT)
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for label, regex in compiled.items():
+                if regex.search(line):
+                    violations.append(f"{relative}:{lineno}: {label}")
+
+    assert not violations, "Phase-10 public-safety scan found:\n" + "\n".join(
+        violations
+    )
