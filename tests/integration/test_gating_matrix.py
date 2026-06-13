@@ -21,6 +21,7 @@ from loopplane.checkpoint import CheckpointStore
 from loopplane.controller.controller import RuntimeController
 from loopplane.events import RuntimeEvent
 from loopplane.events.emitter import EventSink
+from loopplane.gateway import ToolGateway
 from loopplane.memory import MemoryStore
 from loopplane.model import (
     ScriptedModel,
@@ -31,7 +32,6 @@ from loopplane.model import (
     TokenUsage,
     ToolCallRequest,
 )
-from loopplane.gateway import ToolGateway
 from loopplane.observability.overlay import ObservabilitySink
 
 from .conftest import ECHO_DESCRIPTOR, EventCollector, echo_handler

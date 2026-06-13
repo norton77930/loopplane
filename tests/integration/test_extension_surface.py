@@ -10,7 +10,9 @@ from pathlib import Path
 
 import pytest
 
+from loopplane.controller.controller import RuntimeController
 from loopplane.events import RuntimeEvent
+from loopplane.gateway import ToolGateway
 from loopplane.model import (
     ScriptedModel,
     ScriptedTurn,
@@ -19,8 +21,6 @@ from loopplane.model import (
     TokenUsage,
     ToolCallRequest,
 )
-from loopplane.controller.controller import RuntimeController
-from loopplane.gateway import ToolGateway
 
 from .conftest import ECHO_DESCRIPTOR, EventCollector, echo_handler
 
