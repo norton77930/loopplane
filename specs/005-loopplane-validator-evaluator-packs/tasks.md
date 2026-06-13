@@ -42,7 +42,7 @@ modified.
 
 **Purpose**: The outcome reader that every pack uses. **⚠️ Blocks US1–US5.**
 
-- [ ] T003 [P] Write unit tests in `tests/unit/test_packs_core.py` (MUST FAIL first): `read_outcome` extracts the terminal reason, the last assistant entry's concatenated `TextBlock` text (empty when none), and the artifact references from `state.artifacts`; the combinator status-precedence helper; and the length/JSON math.
+- [ ] T003 [P] Write unit tests in `tests/unit/test_packs_core.py` (MUST FAIL first): `read_outcome` extracts the terminal reason, the last assistant entry's concatenated `TextBlock` text (empty when none), and the artifact references from `state.artifacts`. (Pure-unit coverage of the combinator precedence and the length/JSON math lives in their own story phases — US4/US3/US2 — so the foundational gate T006 depends only on the reader.)
 - [ ] T004 Implement `src/loopplane/packs/reader.py`: `OutcomeView` + `read_outcome(outcome, state)` reading only the public surface (FR-002).
 - [ ] T005 Populate `src/loopplane/packs/__init__.py` exports for `OutcomeView` and `read_outcome`.
 - [ ] T006 Run `pytest tests/unit/test_packs_core.py` → green (reader + helpers).
