@@ -10,10 +10,17 @@ contracts/inspect-boundary.md).
 """
 
 from loopplane.inspect.base import SequencedEvent
-from loopplane.inspect.diagnostics import LoopDiagnostics, loop_diagnostics
+from loopplane.inspect.diagnostics import (
+    LoopDiagnostics,
+    RunDiagnostics,
+    loop_diagnostics,
+    run_diagnostics,
+)
 
 __all__ = [
     "LoopDiagnostics",
+    "RunDiagnostics",
     "SequencedEvent",
     "loop_diagnostics",
+    "run_diagnostics",
 ]

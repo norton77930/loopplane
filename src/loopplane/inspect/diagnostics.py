@@ -16,6 +16,7 @@ from loopplane.inspect.base import count_by_type
 
 if TYPE_CHECKING:
     from loopplane.engineering import LoopEvent
+    from loopplane.events import RuntimeEvent
 
 _TERMINAL = ("loop_completed", "loop_failed")
 
@@ -57,4 +58,29 @@ def loop_diagnostics(events: Sequence[LoopEvent]) -> LoopDiagnostics:
         latest_validation_status=validation.status if validation is not None else None,
         latest_evaluation_label=evaluation.label if evaluation is not None else None,
         terminal_status=terminal_status,
+    )
+
+
+@dataclass(frozen=True)
+class RunDiagnostics:
+    tool_calls: int
+    turns: int
+    errors: int
+    termination_reason: str | None
+
+
+def run_diagnostics(events: Sequence[RuntimeEvent]) -> RunDiagnostics:
+    """Summarize a recorded Runtime Event stream: tool-call / turn / error counts
+    by type and the termination reason — metadata only. An empty stream yields a
+    zero/``None`` report; an unknown type is skipped (FR-020, FR-021)."""
+
+    termination_reason: str | None = None
+    for event in events:
+        if event.type == "run-terminated":
+            termination_reason = event.payload.reason
+    return RunDiagnostics(
+        tool_calls=count_by_type(events, "tool-call-started"),
+        turns=count_by_type(events, "turn-completed"),
+        errors=count_by_type(events, "diagnostic"),
+        termination_reason=termination_reason,
     )
