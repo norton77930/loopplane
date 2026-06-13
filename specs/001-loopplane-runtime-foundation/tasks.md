@@ -279,19 +279,21 @@ behavior; scan exported telemetry for planted sentinels.
 
 ## Phase 8: Polish & Cross-Cutting (plan Phase H)
 
-- [ ] T049 [P] Build the demonstration consumer — per-run summary from the public extension
+- [X] T049 [P] Build the demonstration consumer — per-run summary from the public extension
       surface only — in `examples/run_summary_consumer.py` with an integration test in
       `tests/integration/test_extension_surface.py` (FR-120–FR-122; SC-009)
-- [ ] T050 [P] Add the gating matrix test — all optional subsystems off vs on, identical
+- [X] T050 [P] Add the gating matrix test — all optional subsystems off vs on, identical
       event sequences — in `tests/integration/test_gating_matrix.py` (SC-007)
-- [ ] T051 Write the embedding quickstart in `docs/quickstart.md` and validate it by
+- [X] T051 Write the embedding quickstart in `docs/quickstart.md` and validate it by
       executing its steps against the built package
-- [ ] T052 Run the public-safety scan over all committed files and resolve any hit
+- [X] T052 Run the public-safety scan over all committed files and resolve any hit
       (SC-006; constitution VII)
-- [ ] T053 Full-suite validation: both CI platforms green; confirm each of SC-001–SC-009
+- [X] T053 Full-suite validation: both CI platforms green; confirm each of SC-001–SC-009
       maps to at least one passing test and record the mapping at the end of this file
 - [ ] T054 Validate one real-model integration following a documented manual procedure in
-      `docs/real-model-validation.md` (spec Assumptions; outside CI)
+      `docs/real-model-validation.md` (spec Assumptions; outside CI) — the procedure
+      document is delivered; executing it requires real model credentials and remains a
+      manual, human-run step
 
 ---
 
@@ -312,3 +314,17 @@ Deliver incrementally — US1 alone is a demonstrable MVP (loop + events + cance
 each later story adds value without breaking earlier ones; stop at any checkpoint and the
 system is consistent and shippable as a library pre-release. Avoid big-bang integration:
 every task lands with its tests on the feature branch.
+
+## Success-Criteria Traceability (T053)
+
+| SC | Verified by |
+|---|---|
+| SC-001 | `tests/integration/test_us1_plain_run.py`, `tests/integration/test_us1_tool_run.py` (single `drive` entry point, golden sequences); `tests/contract/test_run_lifecycle.py::test_attach_replays_history_bracketed_with_replay_flags` (event history alone reconstructs the conversation) |
+| SC-002 | `tests/contract/test_tool_gateway.py::test_no_execution_path_outside_the_gateway` (structural audit); `tests/integration/test_us2_mcp.py` (external tools traverse the same pipeline) |
+| SC-003 | `tests/integration/test_us3_resume.py` (crash/resume, repair flagged); `tests/contract/test_checkpoint.py` (records-alone rebuild, corrupt-record skip) |
+| SC-004 | `tests/contract/test_observability.py::test_sentinel_content_is_absent_from_all_telemetry`, `::test_nested_run_turn_and_call_spans_with_durations`; `tests/integration/test_us5_trace.py` |
+| SC-005 | `tests/contract/test_approval.py`; `tests/integration/test_us2_governance.py::test_denied_tool_never_executes_and_the_run_continues`, `::test_ask_policy_round_trip_with_session_memory` |
+| SC-006 | `tests/contract/test_public_safety.py` (permanent scan over all committed files) |
+| SC-007 | `tests/integration/test_gating_matrix.py` (all optional subsystems on vs core loop alone: identical sequences) |
+| SC-008 | `tests/integration/test_us1_termination.py` (pre-turn, mid-stream, and dispatcher round-trip cancellations all end with a `cancelled` terminal event); `tests/contract/test_run_lifecycle.py::test_disconnect_mid_run_denies_pending_approvals_and_never_hangs` |
+| SC-009 | `tests/integration/test_extension_surface.py` (stub consumer on the public surface; structural audit of internals references) |

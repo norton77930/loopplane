@@ -16,6 +16,9 @@ venv/
 .env.*
 !.env.example
 
+# Build artifacts
+/dist/
+
 # Logs / runtime files (root-anchored so source packages are not caught)
 /logs/
 /tmp/
