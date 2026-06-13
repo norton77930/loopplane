@@ -136,11 +136,11 @@ ever gating control flow. Absent policy ⇒ no evaluation step.
 score-threshold stop halts at the right iteration; removing the policy leaves the loop functional; an
 evaluator error is non-fatal.
 
-- [ ] T030 [P] [US4] Write integration tests in `tests/integration/test_loop_us4.py` (MUST FAIL first): score ≥ threshold ⇒ `evaluation_completed`+`loop_completed`; low score + `pass` ⇒ control follows validator/stop (non-gating); no evaluation policy ⇒ no evaluation step or event; evaluator raises ⇒ non-fatal diagnostic, iteration proceeds on validation (US4 scenarios 1–4; FR-040–FR-043).
-- [ ] T031 [US4] Implement optional evaluator invocation in `controller.py`: after validation, when an `EvaluationPolicy` exists, call the evaluator, emit `evaluation_completed`, and record `LoopState.latest_evaluation`; when absent, run no evaluation step and emit no event (depends on T021) (FR-041, FR-042).
-- [ ] T032 [US4] Implement evaluator error handling in `controller.py`: an evaluator that raises becomes a non-fatal diagnostic; the iteration proceeds on the validation result and the Loop Run continues (depends on T031) (FR-043).
-- [ ] T033 [US4] Wire `stop_when_score_at_least` to read `LoopState.latest_evaluation.score` so evaluation can drive **stopping** but never retry/repair (depends on T031, T010) (FR-007, FR-041).
-- [ ] T034 [US4] Run `pytest tests/integration/test_loop_us4.py` → green (FR-040–FR-043).
+- [X] T030 [P] [US4] Write integration tests in `tests/integration/test_loop_us4.py` (MUST FAIL first): score ≥ threshold ⇒ `evaluation_completed`+`loop_completed`; low score + `pass` ⇒ control follows validator/stop (non-gating); no evaluation policy ⇒ no evaluation step or event; evaluator raises ⇒ non-fatal diagnostic, iteration proceeds on validation (US4 scenarios 1–4; FR-040–FR-043).
+- [X] T031 [US4] Implement optional evaluator invocation in `controller.py`: after validation, when an `EvaluationPolicy` exists, call the evaluator, emit `evaluation_completed`, and record `LoopState.latest_evaluation`; when absent, run no evaluation step and emit no event (depends on T021) (FR-041, FR-042).
+- [X] T032 [US4] Implement evaluator error handling in `controller.py`: an evaluator that raises becomes a non-fatal diagnostic; the iteration proceeds on the validation result and the Loop Run continues (depends on T031) (FR-043).
+- [X] T033 [US4] Wire `stop_when_score_at_least` to read `LoopState.latest_evaluation.score` so evaluation can drive **stopping** but never retry/repair (depends on T031, T010) (FR-007, FR-041).
+- [X] T034 [US4] Run `pytest tests/integration/test_loop_us4.py` → green (FR-040–FR-043).
 
 **Checkpoint**: Optional, non-gating evaluation and quality-driven stopping work.
 
