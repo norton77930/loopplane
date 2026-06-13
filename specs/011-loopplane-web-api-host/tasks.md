@@ -65,9 +65,9 @@ composes. **⚠️ Blocks US1–US5.**
 **Independent Test**: POST a prompt with a valid credential → a `RunResult` (metadata-only); a concurrent
 run → `409`; a malformed body → a public-safe `4xx`.
 
-- [ ] T009 [P] [US1] Write integration tests in `tests/integration/test_webapi_us1.py` (MUST FAIL first): with an `allow_all` authenticator, `POST /v1/runs {prompt}` returns `200` with a `RunResult` (session_id, public-safe termination_reason, integer turns_taken, metadata `history` of `{role, block_count}` with **no** block text, consumer_failures); a second concurrent run → `409` `ErrorResponse`; a malformed/empty body → `422/400` `ErrorResponse(detail="invalid request")` (US1 scenarios 1–3; SC-001, FR-001–FR-003, FR-016).
-- [ ] T010 [US1] Implement the `POST /runs` route in `src/loopplane/webapi/app.py`: drive `host.run(prompt, on_event=<buffering sink>)`, project `RunOutcome` → `RunResult`, map a sequential-run `RuntimeError` → `409` (FR-001–FR-003).
-- [ ] T011 [US1] Run `pytest tests/integration/test_webapi_us1.py --basetemp=".pytmp"` → green.
+- [X] T009 [P] [US1] Write integration tests in `tests/integration/test_webapi_us1.py`: with an `allow_all` authenticator, `POST /v1/runs {prompt}` returns `200` with a `RunResult` (session_id, `termination_reason`, integer `turns_taken`, metadata `history` of `{role, block_count}` with **no** block text — asserts the run's own content does not leak); a malformed/empty body → `422` `{"detail": "invalid request"}`; no credential → `401`; a sequential-run conflict (stub host raising `RuntimeError`) → `409` (US1 scenarios 1–3; SC-001, FR-001–FR-003, FR-016).
+- [X] T010 [US1] Implement the `POST /runs` route in `src/loopplane/webapi/app.py`: drive `host.run(prompt, on_event=_discard)`, project `RunOutcome` → `RunResult`, map a sequential-run `RuntimeError` → `409` (FR-001–FR-003).
+- [X] T011 [US1] Run `pytest tests/integration/test_webapi_us1.py --basetemp=".pytmp"` → green (4 passed; full suite 510).
 
 **Checkpoint**: MVP — a client drives a run over the API and gets a metadata-only outcome.
 

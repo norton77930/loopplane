@@ -7,13 +7,20 @@ malformed requests return the one public-safe ``ErrorResponse`` envelope (FR-016
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from loopplane.events import RuntimeEvent
 from loopplane.host import LoopPlaneHost
 from loopplane.webapi.auth import DENY_ALL, Authenticator, make_auth_dependency
-from loopplane.webapi.models import ErrorResponse
+from loopplane.webapi.models import ErrorResponse, RunRequest, RunResult
+
+
+async def _discard(event: RuntimeEvent) -> None:
+    """A run sink that drops events — used when only the outcome is returned."""
+
+    return None
 
 
 def create_app(
@@ -44,6 +51,18 @@ def create_app(
     router = APIRouter(
         prefix=api_prefix, dependencies=[Depends(make_auth_dependency(auth))]
     )
-    # Routes are mounted onto `router` per user story (US1-US5).
+
+    @router.post("/runs")
+    async def post_run(body: RunRequest) -> RunResult:
+        # Drive one run through the public host; a sequential-run conflict
+        # becomes an explicit 409 (FR-001-FR-003).
+        try:
+            outcome = await host.run(body.prompt, _discard)
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=409, detail="a run is already active"
+            ) from exc
+        return RunResult.from_outcome(outcome)
+
     app.include_router(router)
     return app
