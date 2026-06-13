@@ -133,12 +133,17 @@ git history) — not invented.
 - **006** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
   `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; source
   `src/loopplane/review/` (7 modules) + `examples/review_quickstart.py` +
-  `docs/human-review.md`. Tasks **31/31 complete**; 33 review tests pass (RA unit
-  + US1–US5 integration + import-boundary + public-safety); the layer composes
-  only the Phase-3 review hook and never the Phase-1 approval machinery. The 006
-  spec was grounded in a multi-agent read-only survey of the existing
-  approval/question/review surface. ruff + mypy(strict) clean; full suite
-  **347 passed** → **Verified**.
+  `docs/human-review.md`. Tasks **31/31 complete**; 42 review tests pass (RA unit
+  + gate-hardening unit + US1–US5 integration + import-boundary + public-safety);
+  the layer composes only the Phase-3 review hook and never the Phase-1 approval
+  machinery. The 006 spec was grounded in a multi-agent read-only survey of the
+  existing approval/question/review surface; a post-implement multi-agent
+  adversarial verification then hardened the gate fail-safe edges (a raising
+  event sink or review-key never crashes the review — FR-052/NFR-005) and carried
+  the decision `metadata` into the `review_decided` event (FR-002/SC-007), and
+  corrected the `resume_review` contract (no `on_approval`: `OnApproval` is not on
+  the Phase-3 public surface this layer may name). ruff + mypy(strict) clean; full
+  suite **356 passed** → **Verified**.
 - **007–014** — No `specs/` directory and no source → **Not started**.
 
 ---

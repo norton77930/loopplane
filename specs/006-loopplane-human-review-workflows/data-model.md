@@ -175,7 +175,6 @@ async def resume_review(
     decision: ReviewDecision,
     *,
     on_event: ... = None,
-    on_approval: ... = None,
 ) -> LoopOutcome: ...
 ```
 

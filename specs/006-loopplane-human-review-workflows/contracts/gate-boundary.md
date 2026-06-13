@@ -37,14 +37,16 @@ async def resume_review(
     decision: ReviewDecision,
     *,
     on_event: ReviewEventSink | None = None,
-    on_approval: OnApproval | None = None,
 ) -> LoopOutcome: ...
 ```
 
 - `inspect_paused` returns a Review Request when `outcome.paused`, else `None` (FR-020).
 - `resume_review` drives the Loop Run through `run_loop(definition, review_resolver=<one-shot mapped
   decision>)` and returns the terminal outcome (FR-021). Resume is **in-process** only; durable
-  cross-restart resume is reserved (FR-022, FR-062).
+  cross-restart resume is reserved (FR-022, FR-062). Resume exposes no tool-approval handler: Phase-1
+  in-run tool approval stays the host's concern (surfaced through the host's `on_approval`, not
+  re-implemented here), and the `OnApproval` type is not on the Phase-3 public surface this layer may
+  name (NFR-003).
 
 ## Review Events (FR-050–FR-052)
 

@@ -79,7 +79,7 @@ the loop with a supplied decision — in process.
 with approve ⇒ completes, reject ⇒ fails.
 
 - [X] T013 [P] [US2] Write integration tests in `tests/integration/test_review_us2.py` (MUST FAIL first): a no-resolver run pauses and `inspect_paused` returns a Review Request matching the paused state; `inspect_paused` on a terminal outcome returns `None`; `resume_review` with approve ⇒ `loop_completed`, reject ⇒ `loop_failed`; resume drives only through `run_loop` and writes nothing to disk (US2 scenarios 1–4; SC-004).
-- [X] T014 [US2] Implement `inspect_paused(outcome)` and `resume_review(definition, decision, *, on_event=None, on_approval=None)` in `gate.py` (in-process re-drive via `run_loop` with a one-shot mapped resolver; durable resume reserved) (depends on T011) (FR-020–FR-022).
+- [X] T014 [US2] Implement `inspect_paused(outcome)` and `resume_review(definition, decision, *, on_event=None)` in `gate.py` (in-process re-drive via `run_loop` with a one-shot mapped resolver; durable resume reserved) (depends on T011) (FR-020–FR-022).
 - [X] T015 [US2] Export `inspect_paused`, `resume_review`; run `pytest tests/integration/test_review_us2.py` → green (SC-004).
 
 **Checkpoint**: Out-of-band pause/inspect/resume works in process.

@@ -13,12 +13,16 @@ from loopplane.review import (
 )
 
 
-def _state(*, validation: ValidationResult | None) -> LoopState:
+def _state(
+    *,
+    validation: ValidationResult | None,
+    run_refs: tuple[RunReference, ...] = (RunReference("s1", "natural-completion"),),
+) -> LoopState:
     return LoopState(
         loop_id="L",
         loop_definition_id="defL",
         iteration_index=2,
-        run_refs=(RunReference("s1", "natural-completion"),),
+        run_refs=run_refs,
         latest_validation=validation,
         artifacts=(ArtifactRef("s1", "a/1"),),
     )
@@ -63,3 +67,21 @@ def test_default_review_key_is_the_loop_id() -> None:
         _state(validation=ValidationResult(status="needs_human_review"))
     )
     assert default_review_key(request) == "L"
+
+
+def test_build_review_request_uses_last_run_ref_session() -> None:
+    state = _state(
+        validation=ValidationResult(status="needs_human_review"),
+        run_refs=(
+            RunReference("s1", "natural-completion"),
+            RunReference("s2", "natural-completion"),
+        ),
+    )
+    # The session reference is the most recent Agent Run (FR-001).
+    assert build_review_request(state).session_id == "s2"
+
+
+def test_build_review_request_without_run_refs_is_safe() -> None:
+    # No run recorded yet ⇒ no session id, never an index crash (NFR-005).
+    state = _state(validation=None, run_refs=())
+    assert build_review_request(state).session_id is None

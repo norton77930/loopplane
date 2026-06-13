@@ -115,7 +115,7 @@ distinct.
 ## Decision 8 — Pause / inspect / resume is in-process (durable resume reserved)
 
 - **Decision**: `inspect_paused(outcome) -> ReviewRequest | None` reads a paused `LoopOutcome`.
-  `resume_review(definition, decision, *, on_event=None, on_approval=None) -> LoopOutcome` re-drives the
+  `resume_review(definition, decision, *, on_event=None) -> LoopOutcome` re-drives the
   Loop Run through `run_loop` with a one-shot resolver that returns the mapped decision. Durable
   cross-restart resume (re-attaching to a serialized paused run without re-driving) is **named, not built**
   (FR-022, FR-062, consistent with Phase-3 FR-064).

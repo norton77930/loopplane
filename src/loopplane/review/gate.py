@@ -64,7 +64,11 @@ def build_review_resolver(
             session_id=request.session_id,
             payload=payload,
         )
-        await on_event(event)
+        try:
+            await on_event(event)
+        except Exception:  # noqa: BLE001 - fail-safe observation (FR-052, NFR-005)
+            # A raising sink never changes the decision or the loop outcome.
+            return
 
     async def resolver(state: LoopState) -> EngineeringReviewDecision:
         request = build_review_request(state, options=options)
@@ -78,7 +82,7 @@ def build_review_resolver(
         )
 
         if memory is not None:
-            remembered = memory.recall(request)
+            remembered = _safe_recall(memory, request)
             if remembered is not None:
                 await emit(
                     "review_resolved_from_memory",
@@ -96,7 +100,7 @@ def build_review_resolver(
         context = ReviewContext(asker=asker, emit=bound_emit)
         decision = await _run_reviewer(reviewer, request, context)
         if memory is not None:
-            memory.remember_decision(request, decision)
+            _safe_remember(memory, request, decision)
         await _emit_decided(emit, request, decision, source="reviewer")
         return to_phase3_decision(decision)
 
@@ -113,6 +117,7 @@ async def _emit_decided(
             "outcome": decision.outcome,
             "reason": decision.reason,
             "reviewer": decision.reviewer,
+            "metadata": decision.metadata,
             "source": source,
         },
     )
@@ -137,6 +142,29 @@ async def _run_reviewer(
             reason=f"fail-safe: unrecognized review outcome {decision.outcome!r}",
         )
     return decision
+
+
+def _safe_recall(memory: ReviewMemory, request: ReviewRequest) -> ReviewDecision | None:
+    """Recall a remembered decision, failing safe: a raising review-key function
+    or store maps to a cache miss so the review proceeds to the reviewer, never a
+    crash (NFR-005)."""
+
+    try:
+        return memory.recall(request)
+    except Exception:  # noqa: BLE001 - fail safe: proceed without memory
+        return None
+
+
+def _safe_remember(
+    memory: ReviewMemory, request: ReviewRequest, decision: ReviewDecision
+) -> None:
+    """Persist a decision, failing safe: a raising review-key function or store is
+    swallowed because the decision already stands (NFR-005)."""
+
+    try:
+        memory.remember_decision(request, decision)
+    except Exception:  # noqa: BLE001 - fail safe: the decision is unaffected
+        pass
 
 
 def inspect_paused(outcome: LoopOutcome) -> ReviewRequest | None:
