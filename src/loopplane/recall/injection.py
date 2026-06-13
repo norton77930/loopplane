@@ -2,9 +2,9 @@
 produce a Phase-3 ``InputSource`` (contracts/injection-boundary.md; FR-050,
 FR-054, FR-055).
 
-``assemble_recall`` runs each source over the public Loop State, applies the
-Retrieval Budget, and formats a bounded preamble (cross-source de-duplication is
-added in US4). ``build_recall_input`` wraps a base ``InputSource`` so the loop's
+``assemble_recall`` runs each source over the public Loop State, de-duplicates by
+identifier, applies the Retrieval Budget, and formats a bounded preamble.
+``build_recall_input`` wraps a base ``InputSource`` so the loop's
 first prompt is prefixed with the recalled preamble — never mutating the base,
 the state, or any store.
 """
@@ -36,11 +36,12 @@ class RecallAssembly:
 def assemble_recall(
     sources: Sequence[RecallSource], budget: RetrievalBudget, *, state: LoopState
 ) -> RecallAssembly:
-    """Compose sources in order, apply the budget, and format a bounded preamble.
+    """Compose sources in order, de-duplicate by identifier, apply the budget, and
+    format a bounded preamble.
 
-    A source that raises contributes nothing and its label lands in ``skipped``
-    (fail-safe; NFR-005). Reads only the public Loop State and mutates nothing
-    (NFR-006).
+    Duplicates collapse to the first (highest-precedence) occurrence; a source that
+    raises contributes nothing and its label lands in ``skipped`` (fail-safe;
+    NFR-005). Reads only the public Loop State and mutates nothing (NFR-006).
     """
 
     collected: list[RecalledEntry] = []
@@ -50,7 +51,7 @@ def assemble_recall(
             collected.extend(source(state))
         except Exception:  # noqa: BLE001 - fail safe: a raising source is skipped
             skipped.append(f"source[{index}]")
-    result = apply_budget(collected, budget)
+    result = apply_budget(_dedupe(collected), budget)
     return RecallAssembly(
         preamble=_format_preamble(result.kept),
         entries=result.kept,
@@ -71,6 +72,23 @@ def build_recall_input(
     yields the base prompt unchanged (FR-055)."""
 
     return _RecallInput(base=base, sources=tuple(sources), budget=budget, state=state)
+
+
+def _dedupe(entries: Sequence[RecalledEntry]) -> list[RecalledEntry]:
+    """Drop duplicate identifiers keeping the first (highest-precedence)
+    occurrence; ``identifier=None`` entries are never collapsed (FR-051)."""
+
+    seen: set[str] = set()
+    out: list[RecalledEntry] = []
+    for entry in entries:
+        if entry.identifier is None:
+            out.append(entry)
+            continue
+        if entry.identifier in seen:
+            continue
+        seen.add(entry.identifier)
+        out.append(entry)
+    return out
 
 
 def _format_preamble(entries: Sequence[RecalledEntry]) -> str:
