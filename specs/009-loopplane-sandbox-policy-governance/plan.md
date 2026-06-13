@@ -132,7 +132,7 @@ docs/
 
 tests/
 ├── unit/
-│   └── test_governance_core.py     # as_decider, deny-wins all_of, safe_failure, default_deny, cost model
+│   └── test_governance_core.py     # as_decider + allow/deny helpers (policies tested in their us suites)
 ├── integration/
 │   ├── test_governance_us1.py      # US1: permission policy over resolve_rules, default-deny (SC-001/003/009)
 │   ├── test_governance_us2.py      # US2: path containment, traversal/absolute/missing -> deny (SC-004)
