@@ -12,6 +12,12 @@ contracts/toolkit-boundary.md).
 """
 
 from loopplane.toolkit.catalog import DiscoveredTool, ToolCatalog, discover
+from loopplane.toolkit.diagnostics import (
+    Diagnostic,
+    DiagnosticKind,
+    DiagnosticsReport,
+    diagnose,
+)
 from loopplane.toolkit.manifest import CapabilityManifest, build_manifest
 from loopplane.toolkit.plugin import (
     AdapterRegistrar,
@@ -19,15 +25,29 @@ from loopplane.toolkit.plugin import (
     ToolPlugin,
     register_plugin,
 )
+from loopplane.toolkit.version import (
+    ToolkitError,
+    Version,
+    parse_version,
+    select_by_policy,
+)
 
 __all__ = [
     "AdapterRegistrar",
     "CapabilityManifest",
+    "Diagnostic",
+    "DiagnosticKind",
+    "DiagnosticsReport",
     "DiscoveredTool",
     "ToolCatalog",
     "ToolPackage",
     "ToolPlugin",
+    "ToolkitError",
+    "Version",
     "build_manifest",
+    "diagnose",
     "discover",
+    "parse_version",
     "register_plugin",
+    "select_by_policy",
 ]
