@@ -33,8 +33,8 @@ modified.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Create the `loopplane.packs` package skeleton: `src/loopplane/packs/__init__.py` with a module docstring and an empty `__all__` placeholder.
-- [ ] T002 [P] Add pack test helpers in `tests/packs_helpers.py`: a `scripted_outcome(*, text="", terminal="natural-completion", artifacts=())` builder returning a Phase-3 `RunOutcome` + `LoopState` pair for pure-pack tests (reusing Phase-3 value types).
+- [X] T001 Create the `loopplane.packs` package skeleton: `src/loopplane/packs/__init__.py` with a module docstring and an empty `__all__` placeholder.
+- [X] T002 [P] Add pack test helpers in `tests/packs_helpers.py`: a `scripted_outcome(*, text="", terminal="natural-completion", artifacts=())` builder returning a Phase-3 `RunOutcome` + `LoopState` pair for pure-pack tests (reusing Phase-3 value types).
 
 ---
 
@@ -42,10 +42,10 @@ modified.
 
 **Purpose**: The outcome reader that every pack uses. **⚠️ Blocks US1–US5.**
 
-- [ ] T003 [P] Write unit tests in `tests/unit/test_packs_core.py` (MUST FAIL first): `read_outcome` extracts the terminal reason, the last assistant entry's concatenated `TextBlock` text (empty when none), and the artifact references from `state.artifacts`. (Pure-unit coverage of the combinator precedence and the length/JSON math lives in their own story phases — US4/US3/US2 — so the foundational gate T006 depends only on the reader.)
-- [ ] T004 Implement `src/loopplane/packs/reader.py`: `OutcomeView` + `read_outcome(outcome, state)` reading only the public surface (FR-002).
-- [ ] T005 Populate `src/loopplane/packs/__init__.py` exports for `OutcomeView` and `read_outcome`.
-- [ ] T006 Run `pytest tests/unit/test_packs_core.py` → green (reader + helpers).
+- [X] T003 [P] Write unit tests in `tests/unit/test_packs_core.py` (MUST FAIL first): `read_outcome` extracts the terminal reason, the last assistant entry's concatenated `TextBlock` text (empty when none), and the artifact references from `state.artifacts`. (Pure-unit coverage of the combinator precedence and the length/JSON math lives in their own story phases — US4/US3/US2 — so the foundational gate T006 depends only on the reader.)
+- [X] T004 Implement `src/loopplane/packs/reader.py`: `OutcomeView` + `read_outcome(outcome, state)` reading only the public surface (FR-002).
+- [X] T005 Populate `src/loopplane/packs/__init__.py` exports for `OutcomeView` and `read_outcome`.
+- [X] T006 Run `pytest tests/unit/test_packs_core.py` → green (reader + helpers).
 
 **Checkpoint**: The shared reader is ready — pack work can begin.
 
@@ -59,10 +59,10 @@ modified.
 **Independent Test**: Build a scripted `RunOutcome`, apply a rule-based validator, and assert `pass` /
 `fail` per the predicate, deterministically.
 
-- [ ] T007 [P] [US1] Write integration tests in `tests/integration/test_packs_us1.py` (MUST FAIL first): `rule_validator` returns `pass` when the predicate holds and `fail` (with a reason) otherwise; a raising predicate fails safe to `fail`; the result plugs into a Phase-3 `ValidationPolicy`; applied twice it returns equal results (determinism); a boundary audit that only the public surface was read (US1 scenarios 1–4; SC-001, SC-002, SC-007).
-- [ ] T008 [US1] Implement `src/loopplane/packs/validators.py` with `rule_validator(predicate, *, reason=...)` and `PackConfigError`, returning a Phase-3 `Validator` callable; fail-safe on a raising predicate (depends on T004) (FR-010, FR-014).
-- [ ] T009 [US1] Export `rule_validator`, `PackConfigError` from `src/loopplane/packs/__init__.py`.
-- [ ] T010 [US1] Run `pytest tests/integration/test_packs_us1.py` → green (boundary audit + determinism).
+- [X] T007 [P] [US1] Write integration tests in `tests/integration/test_packs_us1.py` (MUST FAIL first): `rule_validator` returns `pass` when the predicate holds and `fail` (with a reason) otherwise; a raising predicate fails safe to `fail`; the result plugs into a Phase-3 `ValidationPolicy`; applied twice it returns equal results (determinism); a boundary audit that only the public surface was read (US1 scenarios 1–4; SC-001, SC-002, SC-007).
+- [X] T008 [US1] Implement `src/loopplane/packs/validators.py` with `rule_validator(predicate, *, reason=...)` and `PackConfigError`, returning a Phase-3 `Validator` callable; fail-safe on a raising predicate (depends on T004) (FR-010, FR-014).
+- [X] T009 [US1] Export `rule_validator`, `PackConfigError` from `src/loopplane/packs/__init__.py`.
+- [X] T010 [US1] Run `pytest tests/integration/test_packs_us1.py` → green (boundary audit + determinism).
 
 **Checkpoint**: MVP — a pack gates a loop on a rule through the public surface.
 
@@ -76,10 +76,10 @@ malformed input.
 **Independent Test**: Apply the text validator to matching/non-matching outputs; apply the JSON-schema
 validator to valid, schema-invalid, and non-JSON outputs and assert `pass`/`fail`/fail-safe-`fail`.
 
-- [ ] T011 [P] [US2] Write integration tests in `tests/integration/test_packs_us2.py` (MUST FAIL first): `text_validator` `contains`/`matches`/`not_contains` modes (pass/fail); an invalid regex raises `PackConfigError` at construction; `json_schema_validator` ⇒ `pass` on valid JSON+schema, `fail` on a schema violation, and a **fail-safe** `fail` on unparseable JSON — never a silent pass (US2 scenarios 1–4; SC-003, SC-008).
-- [ ] T012 [US2] Implement `text_validator(*, mode, pattern, reason=None)` in `validators.py`: compile the regex at construction (`PackConfigError` on an invalid pattern); apply `re.fullmatch`/`re.search` over `final_text` (depends on T008) (FR-011).
-- [ ] T013 [US2] Implement `json_schema_validator(*, schema)` in `validators.py`: parse `final_text` with stdlib `json` and validate with `jsonschema`; `fail` with the reason on a violation, fail-safe `fail` on unparseable JSON (depends on T008) (FR-012, FR-014).
-- [ ] T014 [US2] Run `pytest tests/integration/test_packs_us2.py` → green (SC-003, SC-008).
+- [X] T011 [P] [US2] Write integration tests in `tests/integration/test_packs_us2.py` (MUST FAIL first): `text_validator` `contains`/`matches`/`not_contains` modes (pass/fail); an invalid regex raises `PackConfigError` at construction; `json_schema_validator` ⇒ `pass` on valid JSON+schema, `fail` on a schema violation, and a **fail-safe** `fail` on unparseable JSON — never a silent pass (US2 scenarios 1–4; SC-003, SC-008).
+- [X] T012 [US2] Implement `text_validator(*, mode, pattern, reason=None)` in `validators.py`: compile the regex at construction (`PackConfigError` on an invalid pattern); apply `re.fullmatch`/`re.search` over `final_text` (depends on T008) (FR-011).
+- [X] T013 [US2] Implement `json_schema_validator(*, schema)` in `validators.py`: parse `final_text` with stdlib `json` and validate with `jsonschema`; `fail` with the reason on a violation, fail-safe `fail` on unparseable JSON (depends on T008) (FR-012, FR-014).
+- [X] T014 [US2] Run `pytest tests/integration/test_packs_us2.py` → green (SC-003, SC-008).
 
 **Checkpoint**: Text and structured-output validation work and fail safe.
 
@@ -92,9 +92,9 @@ validator to valid, schema-invalid, and non-JSON outputs and assert `pass`/`fail
 **Independent Test**: Apply each evaluator to a scripted outcome and assert the score/label; confirm
 non-gating and `[0, 1]` length scores.
 
-- [ ] T015 [P] [US3] Write integration tests in `tests/integration/test_packs_us3.py` (MUST FAIL first): `scoring_evaluator` returns the computed score (and `None` with a reason when the scoring function raises); `label_evaluator` returns the expected categorical label; `length_evaluator` returns a normalized score in `[0, 1]`; no evaluator returns a `ValidationResult` or gates (US3 scenarios 1–4; SC-004, SC-008).
-- [ ] T016 [US3] Implement `src/loopplane/packs/evaluators.py`: `scoring_evaluator(score_fn, *, label=None)`, `label_evaluator(rules, *, default)`, `length_evaluator(*, target_chars)` returning Phase-3 `Evaluator` callables; a raising `score_fn` ⇒ non-fatal diagnostic (`score=None`) (depends on T004) (FR-020–FR-023).
-- [ ] T017 [US3] Export the evaluators from `__init__.py`; run `pytest tests/integration/test_packs_us3.py` → green (SC-004).
+- [X] T015 [P] [US3] Write integration tests in `tests/integration/test_packs_us3.py` (MUST FAIL first): `scoring_evaluator` returns the computed score (and `None` with a reason when the scoring function raises); `label_evaluator` returns the expected categorical label; `length_evaluator` returns a normalized score in `[0, 1]`; no evaluator returns a `ValidationResult` or gates (US3 scenarios 1–4; SC-004, SC-008).
+- [X] T016 [US3] Implement `src/loopplane/packs/evaluators.py`: `scoring_evaluator(score_fn, *, label=None)`, `label_evaluator(rules, *, default)`, `length_evaluator(*, target_chars)` returning Phase-3 `Evaluator` callables; a raising `score_fn` ⇒ non-fatal diagnostic (`score=None`) (depends on T004) (FR-020–FR-023).
+- [X] T017 [US3] Export the evaluators from `__init__.py`; run `pytest tests/integration/test_packs_us3.py` → green (SC-004).
 
 **Checkpoint**: Non-gating evaluators work.
 
@@ -108,10 +108,10 @@ evaluation-to-gating conversion).
 **Independent Test**: Compose validators with all-of/any-of and assert the combined status per the
 precedence; build a threshold gate and assert score-based gating + fail-safe on a missing score.
 
-- [ ] T018 [P] [US4] Write integration tests in `tests/integration/test_packs_us4.py` (MUST FAIL first): `all_of` passes iff all pass and otherwise yields the most-cautious status; `any_of` passes iff ≥1 passes; a `needs_human_review`/`needs_repair` sub-result is never downgraded; empty `all_of` ⇒ `pass`, empty `any_of` ⇒ `fail`; `threshold_gate` ⇒ `pass` at/above threshold, configured `fail`/`needs_repair` below, and fail-safe `fail` on a missing score (US4 scenarios 1–4; SC-005, SC-006, SC-008).
-- [ ] T019 [US4] Implement `src/loopplane/packs/combinators.py`: `all_of(*validators)` / `any_of(*validators)` with the documented status precedence (`needs_human_review` > `needs_repair` > `fail` > `pass`) and empty defaults (depends on T008) (FR-030, FR-031, FR-034).
-- [ ] T020 [US4] Implement `threshold_gate(evaluator, *, threshold, below="fail")` in `combinators.py`: run the evaluator, gate on the score, fail-safe on a missing score — the only evaluation-to-gating pack (depends on T016) (FR-032, FR-033).
-- [ ] T021 [US4] Export the combinators + gate from `__init__.py`; run `pytest tests/integration/test_packs_us4.py` → green (SC-005, SC-006).
+- [X] T018 [P] [US4] Write integration tests in `tests/integration/test_packs_us4.py` (MUST FAIL first): `all_of` passes iff all pass and otherwise yields the most-cautious status; `any_of` passes iff ≥1 passes; a `needs_human_review`/`needs_repair` sub-result is never downgraded; empty `all_of` ⇒ `pass`, empty `any_of` ⇒ `fail`; `threshold_gate` ⇒ `pass` at/above threshold, configured `fail`/`needs_repair` below, and fail-safe `fail` on a missing score (US4 scenarios 1–4; SC-005, SC-006, SC-008).
+- [X] T019 [US4] Implement `src/loopplane/packs/combinators.py`: `all_of(*validators)` / `any_of(*validators)` with the documented status precedence (`needs_human_review` > `needs_repair` > `fail` > `pass`) and empty defaults (depends on T008) (FR-030, FR-031, FR-034).
+- [X] T020 [US4] Implement `threshold_gate(evaluator, *, threshold, below="fail")` in `combinators.py`: run the evaluator, gate on the score, fail-safe on a missing score — the only evaluation-to-gating pack (depends on T016) (FR-032, FR-033).
+- [X] T021 [US4] Export the combinators + gate from `__init__.py`; run `pytest tests/integration/test_packs_us4.py` → green (SC-005, SC-006).
 
 **Checkpoint**: Composition and the single gating conversion work.
 
@@ -124,11 +124,11 @@ precedence; build a threshold gate and assert score-based gating + fail-safe on 
 **Independent Test**: Apply the artifact validator to outcomes with/without artifacts; apply each pack to
 an empty outcome and assert an explicit fail-safe result; run the example.
 
-- [ ] T022 [P] [US5] Write integration tests in `tests/integration/test_packs_us5.py` (MUST FAIL first): `artifact_presence_validator(require=True/False)` ⇒ correct pass/fail on `artifact_references` presence/absence; every pack applied to an empty/degenerate outcome returns an explicit result (fail-safe), never a silent pass (US5 scenarios 1–4; SC-003, SC-008).
-- [ ] T023 [US5] Implement `artifact_presence_validator(*, require=True)` in `validators.py` reading `OutcomeView.artifact_references` (depends on T008) (FR-013).
-- [ ] T024 [P] [US5] Create `examples/packs_quickstart.py`: compose packs (text + artifact + threshold gate) into a `ValidationPolicy`/`EvaluationPolicy` and apply them to a scripted outcome, printing the results (public-safe).
-- [ ] T025 [P] [US5] Write `docs/packs.md`: a public-safe guide (outcome reader → validators → evaluators → combinators → threshold gate) that points at the Phase-3 contract boundary.
-- [ ] T026 [US5] Run `pytest tests/integration/test_packs_us5.py` → green (SC-003, SC-008).
+- [X] T022 [P] [US5] Write integration tests in `tests/integration/test_packs_us5.py` (MUST FAIL first): `artifact_presence_validator(require=True/False)` ⇒ correct pass/fail on `artifact_references` presence/absence; every pack applied to an empty/degenerate outcome returns an explicit result (fail-safe), never a silent pass (US5 scenarios 1–4; SC-003, SC-008).
+- [X] T023 [US5] Implement `artifact_presence_validator(*, require=True)` in `validators.py` reading `OutcomeView.artifact_references` (depends on T008) (FR-013).
+- [X] T024 [P] [US5] Create `examples/packs_quickstart.py`: compose packs (text + artifact + threshold gate) into a `ValidationPolicy`/`EvaluationPolicy` and apply them to a scripted outcome, printing the results (public-safe).
+- [X] T025 [P] [US5] Write `docs/packs.md`: a public-safe guide (outcome reader → validators → evaluators → combinators → threshold gate) that points at the Phase-3 contract boundary.
+- [X] T026 [US5] Run `pytest tests/integration/test_packs_us5.py` → green (SC-003, SC-008).
 
 **Checkpoint**: Artifact validation and fail-safe edges close the phase scope.
 
@@ -136,11 +136,11 @@ an empty outcome and assert an explicit fail-safe result; run the example.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T027 [P] Write `tests/contract/test_packs_boundary.py`: an import-boundary audit asserting `loopplane.packs` imports only `loopplane.engineering` (+ stdlib + `jsonschema`) and no Phase-1/2 internal or `LoopController` mechanics; a public-surface-only assertion (no pack starts a run, SC-002); and a determinism check (each pack applied twice returns equal results, SC-007) (NFR-003).
-- [ ] T028 Extend `tests/contract/test_public_safety.py` to include all committed Phase-5 files (`src/loopplane/packs/`, `examples/packs_quickstart.py`, `docs/packs.md`, `specs/005-*`) so the scan finds zero private references (SC-010, NFR-004).
-- [ ] T029 [P] Execute the [quickstart.md](./quickstart.md) scenarios end-to-end as a smoke check and reconcile any drift.
-- [ ] T030 Final validation: full `pytest` green, `ruff format --check` + `ruff check` clean, `mypy` clean, `git diff --check` clean (board §10).
-- [ ] T031 Update `docs/loopplane-agent-board.md`: advance unit 005 status (→ Verified) and its Next Action; set the active feature to 006.
+- [X] T027 [P] Write `tests/contract/test_packs_boundary.py`: an import-boundary audit asserting `loopplane.packs` imports only `loopplane.engineering` (+ stdlib + `jsonschema`) and no Phase-1/2 internal or `LoopController` mechanics; a public-surface-only assertion (no pack starts a run, SC-002); and a determinism check (each pack applied twice returns equal results, SC-007) (NFR-003).
+- [X] T028 Extend `tests/contract/test_public_safety.py` to include all committed Phase-5 files (`src/loopplane/packs/`, `examples/packs_quickstart.py`, `docs/packs.md`, `specs/005-*`) so the scan finds zero private references (SC-010, NFR-004).
+- [X] T029 [P] Execute the [quickstart.md](./quickstart.md) scenarios end-to-end as a smoke check and reconcile any drift.
+- [X] T030 Final validation: full `pytest` green, `ruff format --check` + `ruff check` clean, `mypy` clean, `git diff --check` clean (board §10).
+- [X] T031 Update `docs/loopplane-agent-board.md`: advance unit 005 status (→ Verified) and its Next Action; set the active feature to 006.
 
 ---
 
