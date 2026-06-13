@@ -87,7 +87,7 @@ git history) — not invented.
 | **005-loopplane-validator-evaluator-packs** | `specs/005-loopplane-validator-evaluator-packs` | **Verified** | Reusable validators and evaluators: rule-based validators, schema validators, artifact validators, scoring evaluators, threshold gates, quality labels, validator/evaluator examples. | 003 | None — implemented & verified on `main` (`loopplane.packs`). |
 | **006-loopplane-human-review-workflows** | `specs/006-loopplane-human-review-workflows` | **Verified** | Extend approval boundaries into human review workflows: review request, user question event, approval memory, review decision, pause/resume, human gate loop. No UI unless separately specified. | 003 | None — implemented & verified on `main` (`loopplane.review`). |
 | **007-loopplane-memory-recall-knowledge** | `specs/007-loopplane-memory-recall-knowledge` | **Verified** | Recall and knowledge indexing as loop-aware context sources: conversation recall, artifact recall, knowledge index contract, memory injection policy, retrieval budget, loop-aware memory usage. | 001, 003 | None — implemented & verified on `main` (`loopplane.recall`). |
-| **008-loopplane-tool-gateway-advanced** | _(not created)_ | **Not started** | Expand the tool ecosystem beyond the foundation: MCP tool discovery, remote tool registry, plugin bundle, tool package metadata, tool capability manifest, tool versioning, tool diagnostics. | 001 | `/speckit.specify`. |
+| **008-loopplane-tool-gateway-advanced** | `specs/008-loopplane-tool-gateway-advanced` | **Verified** | Expand the tool ecosystem beyond the foundation: MCP tool discovery, remote tool registry, plugin bundle, tool package metadata, tool capability manifest, tool versioning, tool diagnostics. | 001 | None — implemented & verified on `main` (`loopplane.toolkit`). |
 | **009-loopplane-sandbox-policy-governance** | _(not created)_ | **Not started** | Stronger execution safety and governance: sandbox execution, path policy, permission policy, budget policy, quota policy, cost governance, safe failure behavior. | 001 | `/speckit.specify`. |
 | **010-loopplane-observability-debug-console** | _(not created)_ | **Not started** | Make runs and loops inspectable: trace viewer data contract, event replay, debug timeline, run diagnostics, loop diagnostics, metadata-only observability. No full frontend unless separately specified. | 001, 003 | `/speckit.specify`. |
 | **011-loopplane-web-api-host** | _(not created)_ | **Not started** | Expose LoopPlane through a web/API host: FastAPI or equivalent host, REST endpoints, SSE or WebSocket streaming, auth boundary, session APIs, host-level integration tests. | 002 | `/speckit.specify`. |
@@ -153,7 +153,16 @@ git history) — not invented.
   (`engineering`) surfaces, injects through the Phase-3 `InputSource`, drives no run, and
   mutates nothing. A `/speckit.analyze` pass (0 critical/high) realigned the plan phase
   table with tasks. ruff + mypy(strict) clean; full suite **400 passed** → **Verified**.
-- **008–014** — No `specs/` directory and no source → **Not started**.
+- **008** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; source
+  `src/loopplane/toolkit/` (6 modules) + `examples/toolkit_quickstart.py` +
+  `docs/tool-gateway-advanced.md`. Tasks **28/28 complete**; 30 toolkit tests pass (core unit
+  + US1–US5 integration + import/no-invoke boundary + public-safety); the layer composes only the
+  public Phase-1 `ToolAdapter` SPI (`describe()` only) and `ToolDescriptor` identity, **never
+  invokes a tool**, and registers only through the gateway's `register_adapter` (Constitution V).
+  A `/speckit.analyze` pass (0 critical/high) aligned a plan test-note with tasks. ruff +
+  mypy(strict) clean; full suite **430 passed** → **Verified**.
+- **009–014** — No `specs/` directory and no source → **Not started**.
 
 ---
 
@@ -161,10 +170,10 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **008-loopplane-tool-gateway-advanced** |
-| Active feature directory | _(not created — `/speckit.specify` will create `specs/008-loopplane-tool-gateway-advanced`)_ |
+| Active unit | **009-loopplane-sandbox-policy-governance** |
+| Active feature directory | _(not created — `/speckit.specify` will create `specs/009-loopplane-sandbox-policy-governance`)_ |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main`, no dedicated feature branch required (see §7 Branch Strategy) |
-| Current Spec Kit step | **Specify** (007 is **Verified**; 008 has no `specs/` directory yet) |
+| Current Spec Kit step | **Specify** (008 is **Verified**; 009 has no `specs/` directory yet) |
 | Depends on | 001 |
 | Next command | **`/speckit.specify`** |
 | Stop condition status | None active. Branch strategy is **main-only** — a missing feature branch is *not* a stop condition (see §7 / §9). |

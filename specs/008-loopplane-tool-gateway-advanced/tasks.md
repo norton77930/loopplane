@@ -34,8 +34,8 @@ No Phase-1/2/3 source is modified.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Create the `loopplane.toolkit` package skeleton: `src/loopplane/toolkit/__init__.py` with a module docstring and an empty `__all__` placeholder.
-- [ ] T002 [P] Add toolkit test helpers in `tests/toolkit_helpers.py`: a `tool_descriptor(name, *, source="internal", read_only=False, concurrency_safe=False, input_schema=None)` builder over the public `ToolDescriptor`; a `ScriptedToolAdapter(descriptors, *, raising=False)` whose `describe()` returns the descriptors (or raises when `raising`) and whose `invoke` raises immediately (to catch any accidental invocation); and a `RecordingRegistrar` that records each `register_adapter(adapter)` call.
+- [X] T001 Create the `loopplane.toolkit` package skeleton: `src/loopplane/toolkit/__init__.py` with a module docstring and an empty `__all__` placeholder.
+- [X] T002 [P] Add toolkit test helpers in `tests/toolkit_helpers.py`: a `tool_descriptor(name, *, source="internal", read_only=False, concurrency_safe=False, input_schema=None)` builder over the public `ToolDescriptor`; a `ScriptedToolAdapter(descriptors, *, raising=False)` whose `describe()` returns the descriptors (or raises when `raising`) and whose `invoke` raises immediately (to catch any accidental invocation); and a `RecordingRegistrar` that records each `register_adapter(adapter)` call.
 
 ---
 
@@ -44,10 +44,10 @@ No Phase-1/2/3 source is modified.
 **Purpose**: The recalled tool-identity value type and the catalog container every story builds on.
 **⚠️ Blocks US1–US5.**
 
-- [ ] T003 [P] Write unit tests in `tests/unit/test_toolkit_core.py` (MUST FAIL first): `DiscoveredTool` carries `source` / `name` / `description` / `read_only` / `concurrency_safe` / `input_schema`; `ToolCatalog(tools, failed_sources)` exposes `list()` returning its tools; an empty catalog lists nothing (FR-001).
-- [ ] T004 [P] Implement `src/loopplane/toolkit/catalog.py` value types: the frozen `DiscoveredTool` and the `ToolCatalog` dataclass (fields `tools`, `failed_sources`) with `list()` (FR-001).
-- [ ] T005 Populate `src/loopplane/toolkit/__init__.py` exports for `DiscoveredTool` and `ToolCatalog`.
-- [ ] T006 Run `pytest tests/unit/test_toolkit_core.py --basetemp=".pytmp"` → green (gate for Foundational).
+- [X] T003 [P] Write unit tests in `tests/unit/test_toolkit_core.py` (MUST FAIL first): `DiscoveredTool` carries `source` / `name` / `description` / `read_only` / `concurrency_safe` / `input_schema`; `ToolCatalog(tools, failed_sources)` exposes `list()` returning its tools; an empty catalog lists nothing (FR-001).
+- [X] T004 [P] Implement `src/loopplane/toolkit/catalog.py` value types: the frozen `DiscoveredTool` and the `ToolCatalog` dataclass (fields `tools`, `failed_sources`) with `list()` (FR-001).
+- [X] T005 Populate `src/loopplane/toolkit/__init__.py` exports for `DiscoveredTool` and `ToolCatalog`.
+- [X] T006 Run `pytest tests/unit/test_toolkit_core.py --basetemp=".pytmp"` → green (gate for Foundational).
 
 **Checkpoint**: The tool-identity vocabulary and the catalog container are ready.
 
@@ -61,9 +61,9 @@ catalog keyed by `(source, name)`; a source that fails to describe is recorded, 
 **Independent Test**: Given scripted sources exposing known identities, assert the catalog lists every tool
 with its source in deterministic order; a raising source is recorded in `failed_sources`; no tool is invoked.
 
-- [ ] T007 [P] [US1] Write integration tests in `tests/integration/test_toolkit_us1.py` (MUST FAIL first): `discover([a, b])` lists every tool keyed by `(source, name)` in deterministic order; discovering twice is identical; a source whose `describe()` raises contributes no tools and is recorded in `failed_sources` with no crash; discovery never calls `invoke` (the scripted adapter's `invoke` raises if reached) (US1 scenarios 1–3; SC-001/002/003).
-- [ ] T008 [US1] Implement `discover(sources)` in `src/loopplane/toolkit/catalog.py`: iterate sources, call `describe()` only, build `DiscoveredTool`s, sort by `(source, name)`; a raising `describe()` records the source in `failed_sources` (fail-safe) (FR-002–FR-004, NFR-005/NFR-006).
-- [ ] T009 [US1] Export `discover` from `__init__.py`; run `pytest tests/integration/test_toolkit_us1.py --basetemp=".pytmp"` → green.
+- [X] T007 [P] [US1] Write integration tests in `tests/integration/test_toolkit_us1.py` (MUST FAIL first): `discover([a, b])` lists every tool keyed by `(source, name)` in deterministic order; discovering twice is identical; a source whose `describe()` raises contributes no tools and is recorded in `failed_sources` with no crash; discovery never calls `invoke` (the scripted adapter's `invoke` raises if reached) (US1 scenarios 1–3; SC-001/002/003).
+- [X] T008 [US1] Implement `discover(sources)` in `src/loopplane/toolkit/catalog.py`: iterate sources, call `describe()` only, build `DiscoveredTool`s, sort by `(source, name)`; a raising `describe()` records the source in `failed_sources` (fail-safe) (FR-002–FR-004, NFR-005/NFR-006).
+- [X] T009 [US1] Export `discover` from `__init__.py`; run `pytest tests/integration/test_toolkit_us1.py --basetemp=".pytmp"` → green.
 
 **Checkpoint**: MVP — a host produces a complete, deterministic tool inventory from its sources.
 
@@ -76,9 +76,9 @@ with its source in deterministic order; a raising source is recorded in `failed_
 **Independent Test**: With a catalog from two sources sharing a tool name, assert lookup returns the
 documented occurrence, listing is deterministic, and the collision is reported.
 
-- [ ] T010 [P] [US2] Write integration tests in `tests/integration/test_toolkit_us2.py` (MUST FAIL first): `lookup(name)` returns the first match by `(source, name)` or `None` (never raises); `list_by_source` and `list_by_capability(read_only=…, concurrency_safe=…)` are deterministic; two sources exposing the same tool name ⇒ `collisions()` reports that name and no entry is silently overwritten (US2 scenarios 1–3; SC-004, FR-010–FR-012).
-- [ ] T011 [US2] Extend `ToolCatalog` in `src/loopplane/toolkit/catalog.py` with `lookup`, `list_by_source`, `list_by_capability`, and `collisions` (FR-010–FR-012).
-- [ ] T012 [US2] Run `pytest tests/integration/test_toolkit_us2.py --basetemp=".pytmp"` → green.
+- [X] T010 [P] [US2] Write integration tests in `tests/integration/test_toolkit_us2.py` (MUST FAIL first): `lookup(name)` returns the first match by `(source, name)` or `None` (never raises); `list_by_source` and `list_by_capability(read_only=…, concurrency_safe=…)` are deterministic; two sources exposing the same tool name ⇒ `collisions()` reports that name and no entry is silently overwritten (US2 scenarios 1–3; SC-004, FR-010–FR-012).
+- [X] T011 [US2] Extend `ToolCatalog` in `src/loopplane/toolkit/catalog.py` with `lookup`, `list_by_source`, `list_by_capability`, and `collisions` (FR-010–FR-012).
+- [X] T012 [US2] Run `pytest tests/integration/test_toolkit_us2.py --basetemp=".pytmp"` → green.
 
 **Checkpoint**: US1 + US2 — the catalog is queryable and collision-aware.
 
@@ -92,9 +92,9 @@ public `register_adapter`; the layer invokes no tool.
 **Independent Test**: Register a plugin against a recording registrar; assert each source was handed to
 `register_adapter` exactly once and no tool was invoked.
 
-- [ ] T013 [P] [US3] Write integration tests in `tests/integration/test_toolkit_us3.py` (MUST FAIL first): `register_plugin(plugin, RecordingRegistrar())` calls `register_adapter` once per adapter in order; the layer never invokes a tool; `ToolPackage`/`ToolPlugin` carry their metadata (US3 scenarios 1–2; SC-005/007, FR-020–FR-022).
-- [ ] T014 [US3] Implement `src/loopplane/toolkit/plugin.py`: `ToolPackage`, `ToolPlugin`, the `AdapterRegistrar` Protocol, and `register_plugin(plugin, registrar)` (calls `registrar.register_adapter` per adapter and nothing else) (FR-020–FR-022, FR-030).
-- [ ] T015 [US3] Export `ToolPackage`, `ToolPlugin`, `AdapterRegistrar`, `register_plugin`; run `pytest tests/integration/test_toolkit_us3.py --basetemp=".pytmp"` → green.
+- [X] T013 [P] [US3] Write integration tests in `tests/integration/test_toolkit_us3.py` (MUST FAIL first): `register_plugin(plugin, RecordingRegistrar())` calls `register_adapter` once per adapter in order; the layer never invokes a tool; `ToolPackage`/`ToolPlugin` carry their metadata (US3 scenarios 1–2; SC-005/007, FR-020–FR-022).
+- [X] T014 [US3] Implement `src/loopplane/toolkit/plugin.py`: `ToolPackage`, `ToolPlugin`, the `AdapterRegistrar` Protocol, and `register_plugin(plugin, registrar)` (calls `registrar.register_adapter` per adapter and nothing else) (FR-020–FR-022, FR-030).
+- [X] T015 [US3] Export `ToolPackage`, `ToolPlugin`, `AdapterRegistrar`, `register_plugin`; run `pytest tests/integration/test_toolkit_us3.py --basetemp=".pytmp"` → green.
 
 **Checkpoint**: US1–US3 — tools can be inventoried and bundled, executing only through the gateway.
 
@@ -108,9 +108,9 @@ built without invocation.
 **Independent Test**: For a tool with known declared attributes and package metadata, assert the manifest
 reflects read-only / concurrency-safe / source / package / tags deterministically, with no tool invoked.
 
-- [ ] T016 [P] [US4] Write integration tests in `tests/integration/test_toolkit_us4.py` (MUST FAIL first): `build_manifest(tool, package)` reflects `read_only` / `concurrency_safe` / `source` / package name+version / `tags`; identical inputs ⇒ identical manifest; no tool is invoked (US4 scenarios 1–2; SC-005, FR-031/FR-032).
-- [ ] T017 [US4] Implement `src/loopplane/toolkit/manifest.py`: `CapabilityManifest` and `build_manifest(tool, package)` deriving from the declared identity + package tags (FR-031–FR-032).
-- [ ] T018 [US4] Export `CapabilityManifest`, `build_manifest`; run `pytest tests/integration/test_toolkit_us4.py --basetemp=".pytmp"` → green.
+- [X] T016 [P] [US4] Write integration tests in `tests/integration/test_toolkit_us4.py` (MUST FAIL first): `build_manifest(tool, package)` reflects `read_only` / `concurrency_safe` / `source` / package name+version / `tags`; identical inputs ⇒ identical manifest; no tool is invoked (US4 scenarios 1–2; SC-005, FR-031/FR-032).
+- [X] T017 [US4] Implement `src/loopplane/toolkit/manifest.py`: `CapabilityManifest` and `build_manifest(tool, package)` deriving from the declared identity + package tags (FR-031–FR-032).
+- [X] T018 [US4] Export `CapabilityManifest`, `build_manifest`; run `pytest tests/integration/test_toolkit_us4.py --basetemp=".pytmp"` → green.
 
 **Checkpoint**: US1–US4 — tools are inventoried, bundled, and capability-inspectable.
 
@@ -124,10 +124,10 @@ reflects read-only / concurrency-safe / source / package / tags deterministicall
 version is flagged; run diagnostics over a catalog with a duplicate name and a malformed schema and assert
 both are reported.
 
-- [ ] T019 [P] [US5] Write integration tests in `tests/integration/test_toolkit_us5.py` (MUST FAIL first): `parse_version("1.2.3")` ⇒ `Version(1,2,3)`; a malformed version ⇒ `ToolkitError`; `Version` order is total; `select_by_policy(packages)` picks the highest deterministically and an empty input ⇒ `None`; `diagnose(catalog)` reports `name_collision`, `missing_schema`/`malformed_schema`, and `describe_failed`, sorted by `(kind, subject)`, invoking no tool (US5 scenarios 1–2; SC-008/009, FR-040–FR-042, FR-050/FR-051).
-- [ ] T020 [US5] Implement `src/loopplane/toolkit/version.py`: `Version` (`order=True`), `parse_version` (malformed ⇒ `ToolkitError`), `select_by_policy`, and `ToolkitError` (FR-040–FR-042).
-- [ ] T021 [US5] Implement `src/loopplane/toolkit/diagnostics.py`: `DiagnosticKind`, `Diagnostic`, `DiagnosticsReport`, and `diagnose(catalog)` (reads catalog data only; never invokes) (FR-050–FR-051).
-- [ ] T022 [US5] Export the version + diagnostics types; run `pytest tests/integration/test_toolkit_us5.py --basetemp=".pytmp"` → green.
+- [X] T019 [P] [US5] Write integration tests in `tests/integration/test_toolkit_us5.py` (MUST FAIL first): `parse_version("1.2.3")` ⇒ `Version(1,2,3)`; a malformed version ⇒ `ToolkitError`; `Version` order is total; `select_by_policy(packages)` picks the highest deterministically and an empty input ⇒ `None`; `diagnose(catalog)` reports `name_collision`, `missing_schema`/`malformed_schema`, and `describe_failed`, sorted by `(kind, subject)`, invoking no tool (US5 scenarios 1–2; SC-008/009, FR-040–FR-042, FR-050/FR-051).
+- [X] T020 [US5] Implement `src/loopplane/toolkit/version.py`: `Version` (`order=True`), `parse_version` (malformed ⇒ `ToolkitError`), `select_by_policy`, and `ToolkitError` (FR-040–FR-042).
+- [X] T021 [US5] Implement `src/loopplane/toolkit/diagnostics.py`: `DiagnosticKind`, `Diagnostic`, `DiagnosticsReport`, and `diagnose(catalog)` (reads catalog data only; never invokes) (FR-050–FR-051).
+- [X] T022 [US5] Export the version + diagnostics types; run `pytest tests/integration/test_toolkit_us5.py --basetemp=".pytmp"` → green.
 
 **Checkpoint**: All user stories are independently functional.
 
@@ -135,12 +135,12 @@ both are reported.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T023 [P] Write contract tests in `tests/contract/test_toolkit_boundary.py`: an import-boundary audit (every `src/loopplane/toolkit/*.py` imports only `loopplane.gateway` / `loopplane.model` / `loopplane.toolkit` + stdlib, and references no `ToolGateway` / `loopplane.controller` / `loopplane.context` / `loopplane.approval` / `loopplane.adapters` / `loopplane.tools` / `loopplane.host` / sibling-layer token); a **no-invoke** audit (no `.invoke(` reference in any toolkit module); determinism (`discover` twice ⇒ identical); registration reaches the gateway only through `register_adapter` (FR-060/FR-061, NFR-003/NFR-006, SC-002/005/007).
-- [ ] T024 [P] Extend `tests/contract/test_public_safety.py` with `PHASE8_TARGETS` (`src/loopplane/toolkit`, `examples/toolkit_quickstart.py`, `docs/tool-gateway-advanced.md`, `specs/008-loopplane-tool-gateway-advanced`) and a `test_phase8_toolkit_files_are_public_safe` scan.
-- [ ] T025 [P] Create `examples/toolkit_quickstart.py`: a public-safe, credential-free runnable `discover → catalog → build_manifest → diagnose → register_plugin` over scripted adapters + a recording registrar, invoking no tool (per [quickstart.md](./quickstart.md)).
-- [ ] T026 [P] Create `docs/tool-gateway-advanced.md`: a public-safe guide — `discover → catalog → plugin → manifest → version → diagnose`, Constitution V (the gateway owns execution), and the reserved extension points (FR-090–FR-094).
-- [ ] T027 Finalize `src/loopplane/toolkit/__init__.py` public `__all__`; run `ruff format` + `ruff check` + `mypy` (strict) → clean.
-- [ ] T028 Run the full suite `pytest --basetemp=".pytmp"` → green; run `python examples/toolkit_quickstart.py`; confirm the public-safety scan is green (SC-006); update the board status to **Verified**.
+- [X] T023 [P] Write contract tests in `tests/contract/test_toolkit_boundary.py`: an import-boundary audit (every `src/loopplane/toolkit/*.py` imports only `loopplane.gateway` / `loopplane.model` / `loopplane.toolkit` + stdlib, and references no `ToolGateway` / `loopplane.controller` / `loopplane.context` / `loopplane.approval` / `loopplane.adapters` / `loopplane.tools` / `loopplane.host` / sibling-layer token); a **no-invoke** audit (no `.invoke(` reference in any toolkit module); determinism (`discover` twice ⇒ identical); registration reaches the gateway only through `register_adapter` (FR-060/FR-061, NFR-003/NFR-006, SC-002/005/007).
+- [X] T024 [P] Extend `tests/contract/test_public_safety.py` with `PHASE8_TARGETS` (`src/loopplane/toolkit`, `examples/toolkit_quickstart.py`, `docs/tool-gateway-advanced.md`, `specs/008-loopplane-tool-gateway-advanced`) and a `test_phase8_toolkit_files_are_public_safe` scan.
+- [X] T025 [P] Create `examples/toolkit_quickstart.py`: a public-safe, credential-free runnable `discover → catalog → build_manifest → diagnose → register_plugin` over scripted adapters + a recording registrar, invoking no tool (per [quickstart.md](./quickstart.md)).
+- [X] T026 [P] Create `docs/tool-gateway-advanced.md`: a public-safe guide — `discover → catalog → plugin → manifest → version → diagnose`, Constitution V (the gateway owns execution), and the reserved extension points (FR-090–FR-094).
+- [X] T027 Finalize `src/loopplane/toolkit/__init__.py` public `__all__`; run `ruff format` + `ruff check` + `mypy` (strict) → clean.
+- [X] T028 Run the full suite `pytest --basetemp=".pytmp"` → green; run `python examples/toolkit_quickstart.py`; confirm the public-safety scan is green (SC-006); update the board status to **Verified**.
 
 ---
 
