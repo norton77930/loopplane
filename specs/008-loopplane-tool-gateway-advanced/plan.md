@@ -128,7 +128,7 @@ docs/
 
 tests/
 ├── unit/
-│   └── test_toolkit_core.py        # DiscoveredTool, discover ordering, raising-describe diagnostic, version compare
+│   └── test_toolkit_core.py        # DiscoveredTool + ToolCatalog value types (discovery in us1, version in us5)
 ├── integration/
 │   ├── test_toolkit_us1.py         # US1: discover + catalog from sources, deterministic, raising source (SC-001/002/003)
 │   ├── test_toolkit_us2.py         # US2: lookup, listing by source/capability, collision report (SC-004)
