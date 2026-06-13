@@ -37,8 +37,8 @@ The layer starts/observes Agent Runs **only** through the Phase-2 `loopplane.hos
 
 **Purpose**: Create the new package and shared deterministic test helpers.
 
-- [ ] T001 Create the `loopplane.engineering` package skeleton: `src/loopplane/engineering/__init__.py` with a module docstring and an empty `__all__` placeholder (per [plan.md](./plan.md) structure).
-- [ ] T002 [P] Add deterministic loop test helpers in `tests/loop_helpers.py`: `build_scripted_host(...)` (a `LoopPlaneHost` over a `ScriptedModel` + echo tool), `scripted_validator(statuses)`, `scripted_evaluator(results)`, and a `LoopEventRecorder` sink — all credential-free and public-safe.
+- [X] T001 Create the `loopplane.engineering` package skeleton: `src/loopplane/engineering/__init__.py` with a module docstring and an empty `__all__` placeholder (per [plan.md](./plan.md) structure).
+- [X] T002 [P] Add deterministic loop test helpers in `tests/loop_helpers.py`: `build_scripted_host(...)` (a `LoopPlaneHost` over a `ScriptedModel` + echo tool), `scripted_validator(statuses)`, `scripted_evaluator(results)`, and a `LoopEventRecorder` sink — all credential-free and public-safe.
 
 ---
 
@@ -49,18 +49,18 @@ depend on. **No user-story controller work may begin until this phase is green.*
 
 **⚠️ CRITICAL**: Blocks US1–US5.
 
-- [ ] T003 [P] Write unit tests in `tests/unit/test_engineering_core.py` (MUST FAIL first): definition validation (empty `loop_id`, unresolvable host profile, missing `max_iterations` bound), the `decide()` status→action mapping table, the hard stop bound, and `reconstruct_state` round-trip from a Loop Event stream.
-- [ ] T004 [P] Implement `src/loopplane/engineering/events.py`: `LOOP_SCHEMA_VERSION`, `LoopEventType` (the ten event names), frozen `LoopEvent` envelope (FR-072), and `LoopEventSink` type (FR-070–FR-075).
-- [ ] T005 [P] Implement `src/loopplane/engineering/state.py` types: `RunReference`, `ArtifactRef`, `ApprovalStatus`, and the mutable `LoopState` (reference-only fields per FR-060–FR-061, FR-063).
-- [ ] T006 [P] Implement `src/loopplane/engineering/validation.py`: `ValidationStatus`, frozen `ValidationResult`, the `Validator` `Protocol`, and a pure `decide(status, retries_used, max_retries, stop_satisfied) -> NextAction` mapping helper (FR-030–FR-032).
-- [ ] T007 [P] Implement `src/loopplane/engineering/evaluation.py`: frozen `EvaluationResult` and the optional `Evaluator` `Protocol` (FR-040, non-gating types only).
-- [ ] T008 [P] Implement `src/loopplane/engineering/triggers.py`: `ManualTrigger` (executable marker) plus `IntervalTrigger` and `ConditionTrigger` frozen **contract** dataclasses, and the `Trigger` union (FR-020–FR-023).
-- [ ] T009 Implement `src/loopplane/engineering/policies.py`: `ValidationPolicy`, `EvaluationPolicy`, `RetryPolicy` (+ `BackoffContract`), `RepairPolicy` (+ `RepairInstructionSource`), `ArtifactPolicy`, `ApprovalPolicy`, `ObservationPolicy` (depends on T006, T007) (FR-004–FR-009, FR-051).
-- [ ] T010 Implement `src/loopplane/engineering/stopping.py`: `StopCondition` plus reference constructors `stop_on_pass()`, `max_iterations(n)`, `stop_when_score_at_least(threshold, *, max_iterations)`, with the mandatory hard bound (depends on T005, T007) (FR-007, FR-013).
-- [ ] T011 Implement `src/loopplane/engineering/definition.py`: `InputSource` Protocol, `HostRuntimeProfile` (`config`/`selector` → `build()`), frozen `LoopDefinition`, and `validate_definition(defn)` raising a public-safe `LoopDefinitionError` (depends on T008, T009, T010) (FR-001–FR-009).
-- [ ] T012 Add `reconstruct_state(events, outcomes) -> LoopState` to `src/loopplane/engineering/state.py` (depends on T004, T005, T006, T007) (FR-062, FR-073, SC-006).
-- [ ] T013 Populate `src/loopplane/engineering/__init__.py` exports for all foundational types (definition, policies, triggers, validation, evaluation, stopping, events, state).
-- [ ] T014 Run `pytest tests/unit/test_engineering_core.py` → green (gate for EA).
+- [X] T003 [P] Write unit tests in `tests/unit/test_engineering_core.py` (MUST FAIL first): definition validation (empty `loop_id`, unresolvable host profile, missing `max_iterations` bound), the `decide()` status→action mapping table, the hard stop bound, and `reconstruct_state` round-trip from a Loop Event stream.
+- [X] T004 [P] Implement `src/loopplane/engineering/events.py`: `LOOP_SCHEMA_VERSION`, `LoopEventType` (the ten event names), frozen `LoopEvent` envelope (FR-072), and `LoopEventSink` type (FR-070–FR-075).
+- [X] T005 [P] Implement `src/loopplane/engineering/state.py` types: `RunReference`, `ArtifactRef`, `ApprovalStatus`, and the mutable `LoopState` (reference-only fields per FR-060–FR-061, FR-063).
+- [X] T006 [P] Implement `src/loopplane/engineering/validation.py`: `ValidationStatus`, frozen `ValidationResult`, the `Validator` `Protocol`, and a pure `decide(status, retries_used, max_retries, stop_satisfied) -> NextAction` mapping helper (FR-030–FR-032).
+- [X] T007 [P] Implement `src/loopplane/engineering/evaluation.py`: frozen `EvaluationResult` and the optional `Evaluator` `Protocol` (FR-040, non-gating types only).
+- [X] T008 [P] Implement `src/loopplane/engineering/triggers.py`: `ManualTrigger` (executable marker) plus `IntervalTrigger` and `ConditionTrigger` frozen **contract** dataclasses, and the `Trigger` union (FR-020–FR-023).
+- [X] T009 Implement `src/loopplane/engineering/policies.py`: `ValidationPolicy`, `EvaluationPolicy`, `RetryPolicy` (+ `BackoffContract`), `RepairPolicy` (+ `RepairInstructionSource`), `ArtifactPolicy`, `ApprovalPolicy`, `ObservationPolicy` (depends on T006, T007) (FR-004–FR-009, FR-051).
+- [X] T010 Implement `src/loopplane/engineering/stopping.py`: `StopCondition` plus reference constructors `stop_on_pass()`, `max_iterations(n)`, `stop_when_score_at_least(threshold, *, max_iterations)`, with the mandatory hard bound (depends on T005, T007) (FR-007, FR-013).
+- [X] T011 Implement `src/loopplane/engineering/definition.py`: `InputSource` Protocol, `HostRuntimeProfile` (`config`/`selector` → `build()`), frozen `LoopDefinition`, and `validate_definition(defn)` raising a public-safe `LoopDefinitionError` (depends on T008, T009, T010) (FR-001–FR-009).
+- [X] T012 Add `reconstruct_state(events, outcomes) -> LoopState` to `src/loopplane/engineering/state.py` (depends on T004, T005, T006, T007) (FR-062, FR-073, SC-006).
+- [X] T013 Populate `src/loopplane/engineering/__init__.py` exports for all foundational types (definition, policies, triggers, validation, evaluation, stopping, events, state).
+- [X] T014 Run `pytest tests/unit/test_engineering_core.py` → green (gate for EA).
 
 **Checkpoint**: Contracts + state ready — user-story controller work can begin.
 
