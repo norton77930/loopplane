@@ -172,3 +172,41 @@ def test_phase3_engineering_files_are_public_safe() -> None:
                     violations.append(f"{relative}:{lineno}: {label}")
 
     assert not violations, "Phase-3 public-safety scan found:\n" + "\n".join(violations)
+
+
+# Phase-4 scheduler files are covered explicitly so they are scanned even before
+# they are committed (T031; SC-010, NFR-004).
+PHASE4_TARGETS = [
+    REPO_ROOT / "src" / "loopplane" / "scheduling",
+    REPO_ROOT / "examples" / "scheduler_quickstart.py",
+    REPO_ROOT / "docs" / "scheduling.md",
+    REPO_ROOT / "specs" / "004-loopplane-scheduler-trigger-engine",
+]
+
+
+def test_phase4_scheduling_files_are_public_safe() -> None:
+    compiled = {
+        label: re.compile(pattern) for label, pattern in BUILTIN_PATTERNS.items()
+    }
+
+    targets: list[Path] = []
+    for target in PHASE4_TARGETS:
+        if target.is_dir():
+            targets.extend(sorted(target.rglob("*.py")))
+            targets.extend(sorted(target.rglob("*.md")))
+        elif target.is_file():
+            targets.append(target)
+    assert targets, "expected Phase-4 scheduler files to scan"
+
+    violations: list[str] = []
+    for path in targets:
+        text = _read_text(path)
+        if text is None:
+            continue
+        relative = path.relative_to(REPO_ROOT)
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for label, regex in compiled.items():
+                if regex.search(line):
+                    violations.append(f"{relative}:{lineno}: {label}")
+
+    assert not violations, "Phase-4 public-safety scan found:\n" + "\n".join(violations)

@@ -147,11 +147,11 @@ never run concurrently.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T030 [P] Write `tests/contract/test_scheduling_boundary.py`: an import-boundary audit asserting `loopplane.scheduling` imports only `loopplane.engineering` (+ stdlib) and no Phase-1/2 internal or `LoopController` mechanics; a `run_loop`-only firing assertion (SC-002); an observation-parity check (observed vs unobserved decisions/outcome identical, SC-009); and an unknown-future-Scheduler-Event tolerance check (FR-081) (NFR-003).
-- [ ] T031 Extend `tests/contract/test_public_safety.py` to include all committed Phase-4 files (`src/loopplane/scheduling/`, `examples/scheduler_quickstart.py`, `docs/scheduling.md`, `specs/004-*`) so the scan finds zero private references (SC-010, NFR-004).
-- [ ] T032 [P] Execute the [quickstart.md](./quickstart.md) scenarios end-to-end as a smoke check and reconcile any drift.
-- [ ] T033 Final validation: full `pytest` green, `ruff format --check` + `ruff check` clean, `mypy` clean, `git diff --check` clean (board §10).
-- [ ] T034 Update `docs/loopplane-agent-board.md`: advance unit 004 status (→ Verified) and its Next Action; set the active feature to 005.
+- [X] T030 [P] Write `tests/contract/test_scheduling_boundary.py`: an import-boundary audit asserting `loopplane.scheduling` imports only `loopplane.engineering` (+ stdlib) and no Phase-1/2 internal or `LoopController` mechanics; a `run_loop`-only firing assertion (SC-002); an observation-parity check (observed vs unobserved decisions/outcome identical, SC-009); and an unknown-future-Scheduler-Event tolerance check (FR-081) (NFR-003).
+- [X] T031 Extend `tests/contract/test_public_safety.py` to include all committed Phase-4 files (`src/loopplane/scheduling/`, `examples/scheduler_quickstart.py`, `docs/scheduling.md`, `specs/004-*`) so the scan finds zero private references (SC-010, NFR-004).
+- [X] T032 [P] Execute the [quickstart.md](./quickstart.md) scenarios end-to-end as a smoke check and reconcile any drift.
+- [X] T033 Final validation: full `pytest` green, `ruff format --check` + `ruff check` clean, `mypy` clean, `git diff --check` clean (board §10).
+- [X] T034 Update `docs/loopplane-agent-board.md`: advance unit 004 status (→ Verified) and its Next Action; set the active feature to 005.
 
 ---
 
