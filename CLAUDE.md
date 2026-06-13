@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at
-specs/009-loopplane-sandbox-policy-governance/plan.md
+specs/010-loopplane-observability-debug-console/plan.md
 <!-- SPECKIT END -->
