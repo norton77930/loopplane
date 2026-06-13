@@ -16,11 +16,16 @@ from loopplane.inspect.diagnostics import (
     loop_diagnostics,
     run_diagnostics,
 )
+from loopplane.inspect.trace import SpanKind, Trace, TraceSpan, build_trace
 
 __all__ = [
     "LoopDiagnostics",
     "RunDiagnostics",
     "SequencedEvent",
+    "SpanKind",
+    "Trace",
+    "TraceSpan",
+    "build_trace",
     "loop_diagnostics",
     "run_diagnostics",
 ]
