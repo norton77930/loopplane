@@ -40,6 +40,37 @@ class ToolCatalog:
     def list(self) -> tuple[DiscoveredTool, ...]:
         return self.tools
 
+    def lookup(self, name: str) -> DiscoveredTool | None:
+        """The first tool with this name by ``(source, name)`` order, else ``None``
+        — never raises (FR-010)."""
+
+        for tool in self.tools:
+            if tool.name == name:
+                return tool
+        return None
+
+    def list_by_source(self, source: str) -> tuple[DiscoveredTool, ...]:
+        return tuple(tool for tool in self.tools if tool.source == source)
+
+    def list_by_capability(
+        self, *, read_only: bool | None = None, concurrency_safe: bool | None = None
+    ) -> tuple[DiscoveredTool, ...]:
+        return tuple(
+            tool
+            for tool in self.tools
+            if (read_only is None or tool.read_only == read_only)
+            and (concurrency_safe is None or tool.concurrency_safe == concurrency_safe)
+        )
+
+    def collisions(self) -> tuple[str, ...]:
+        """Tool names exposed by two or more entries, sorted — the case that would
+        make the gateway's ``register_adapter`` raise (FR-012)."""
+
+        counts: dict[str, int] = {}
+        for tool in self.tools:
+            counts[tool.name] = counts.get(tool.name, 0) + 1
+        return tuple(sorted(name for name, count in counts.items() if count >= 2))
+
 
 def discover(sources: Sequence[ToolAdapter]) -> ToolCatalog:
     """Discover the tools a set of sources expose, reading ``describe()`` only.
