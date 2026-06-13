@@ -18,6 +18,18 @@ control_documents:
   constitution: ".specify/memory/constitution.md" # governing principles
   active_feature_pointer: ".specify/feature.json" # names the active feature directory
 
+# Branch policy for autopilot. main-only: every roadmap unit advances directly on main.
+branch_strategy:
+  mode: "main-only"
+  feature_branch_required: false        # applies to ALL units, including 003-014
+  commit_after_each_safe_stage: true
+  push_after_each_safe_commit: true
+  description: >
+    Autopilot runs directly on main. All roadmap units (000-014) progress on main; no dedicated
+    feature branch is created or required, and autopilot must NOT stop merely because a unit lacks
+    a feature branch. Autopilot does not create, switch, or merge branches; a human may introduce
+    branches manually. Destructive git operations and merge conflicts remain hard stop conditions.
+
 # Ordered roadmap. Autopilot works the lowest-numbered unit that is NOT yet Verified and whose
 # depends_on units are all Verified. Status is inferred from repository state, never invented.
 roadmap_units:
@@ -213,4 +225,4 @@ handoff_rules:
   within_unit: "Advance one Spec Kit step at a time using board §6; under autopilot, chain steps until a human gate or a hard stop condition."
   unit_complete: "A unit is done when all tasks are complete, tests pass, the public-safety scan passes, and final review sets the board status to Verified."
   advance: "Only after the current unit is Verified, continue to the next unit. Update docs/loopplane-agent-board.md status before advancing."
-  branch: "Do not perform destructive git or auto-create/merge branches during handoff. If a dedicated feature branch is required, stop and confirm with the user."
+  branch: "Main-only autopilot: continue directly on main for every unit (000-014). Do NOT create, switch, or merge branches, and do NOT stop for a missing feature branch. Destructive git remains a hard stop."

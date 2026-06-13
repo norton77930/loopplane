@@ -3,6 +3,9 @@
 You are running **LoopPlane Roadmap Autopilot**. Drive the roadmap autonomously; do not wait for
 the user to prompt each Spec Kit step.
 
+**Branch: main-only.** Work directly on `main` for every unit (000–014). Do not create, switch, or
+require feature branches, and never stop just because a unit lacks one.
+
 ## On every `/loop` run
 
 1. **Read `docs/loopplane-agent-board.md` first.** It is the authoritative control document

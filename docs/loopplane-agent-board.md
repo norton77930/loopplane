@@ -120,11 +120,11 @@ git history) — not invented.
 | ----- | ----- |
 | Active unit | **003-loopplane-loop-engineering-layer** |
 | Active feature directory | `specs/003-loopplane-loop-engineering-layer` |
-| Current branch | `main` _(no dedicated `003-...` feature branch exists yet)_ |
+| Current branch | `main` — **main-only autopilot**; all units progress on `main`, no dedicated feature branch required (see §7 Branch Strategy) |
 | Current Spec Kit step | **Plan** (`spec.md` + `checklists/requirements.md` exist; `plan.md` missing) |
 | Depends on | 001, 002 |
 | Next command | **`/speckit.plan`** |
-| Stop condition status | None active. Note: the `003` spec directory is currently **untracked**; first safe commit should stage it (`docs: define LoopPlane loop-engineering-layer spec`). |
+| Stop condition status | None active. Branch strategy is **main-only** — a missing feature branch is *not* a stop condition (see §7 / §9). |
 
 ---
 
@@ -183,8 +183,16 @@ Autopilot may:
 7. Move to the next roadmap unit when the current unit is **Verified**.
 8. Stop only on hard stop conditions (Section 9).
 
+**Branch strategy — main-only.** Autopilot runs directly on `main`. All roadmap units (000–014)
+progress on `main`; no dedicated feature branch is created or required, and autopilot must **not**
+stop merely because a unit lacks a feature branch. After each safe stage it makes a small scoped
+commit and pushes (Sections 10–11). A human may introduce branches manually; autopilot itself does
+not create, switch, or merge branches.
+
 Autopilot constraints:
 
+- Branch strategy is **main-only**: do **not** create, switch, or merge branches; a missing feature
+  branch is **not** a stop condition.
 - Must **not** perform destructive git operations.
 - Must **not** modify raw `openspec/`.
 - Must **not** rewrite previously completed public contracts (001, 002) without explicit approval.
@@ -237,6 +245,10 @@ Stop and ask the user if:
 10. The agent would need to rewrite the roadmap itself.
 11. Push fails due to authentication or remote conflict.
 12. Merge conflicts occur.
+
+> **Not a stop condition:** the absence of a dedicated feature branch. Autopilot is **main-only**
+> (see §7) — continue directly on `main`. Branch creation/merge is simply *not performed*; it is
+> never a reason to pause.
 
 ---
 
