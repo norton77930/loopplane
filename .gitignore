@@ -16,10 +16,13 @@ venv/
 .env.*
 !.env.example
 
-# Logs / runtime files
-logs/
-tmp/
-artifacts/
+# Build artifacts
+/dist/
+
+# Logs / runtime files (root-anchored so source packages are not caught)
+/logs/
+/tmp/
+/artifacts/
 
 # IDE
 .vscode/
