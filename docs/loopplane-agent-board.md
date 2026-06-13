@@ -85,7 +85,7 @@ git history) — not invented.
 | **003-loopplane-loop-engineering-layer** | `specs/003-loopplane-loop-engineering-layer` | **Verified** | Outer loop-engineering layer on top of runtime + host: Loop Definition, Loop Controller, Manual trigger, Interval trigger contract, Condition trigger contract, Validator interface, Evaluator interface, Retry policy, Repair policy, in-memory reconstructable Loop State, Loop Events, Host Interface integration. | 001, 002 | None — implemented & verified on `main` (full Spec Kit flow; `loopplane.engineering`). |
 | **004-loopplane-scheduler-trigger-engine** | `specs/004-loopplane-scheduler-trigger-engine` | **Verified** | Turn trigger contracts into usable local scheduling and condition-watch behavior: local scheduler, interval trigger, condition trigger, manual trigger registry, trigger state, missed-run policy. No distributed queue yet unless explicitly approved. | 003 | None — implemented & verified on `main` (`loopplane.scheduling`). |
 | **005-loopplane-validator-evaluator-packs** | `specs/005-loopplane-validator-evaluator-packs` | **Verified** | Reusable validators and evaluators: rule-based validators, schema validators, artifact validators, scoring evaluators, threshold gates, quality labels, validator/evaluator examples. | 003 | None — implemented & verified on `main` (`loopplane.packs`). |
-| **006-loopplane-human-review-workflows** | _(not created)_ | **Not started** | Extend approval boundaries into human review workflows: review request, user question event, approval memory, review decision, pause/resume, human gate loop. No UI unless separately specified. | 003 | `/speckit.specify`. |
+| **006-loopplane-human-review-workflows** | `specs/006-loopplane-human-review-workflows` | **Verified** | Extend approval boundaries into human review workflows: review request, user question event, approval memory, review decision, pause/resume, human gate loop. No UI unless separately specified. | 003 | None — implemented & verified on `main` (`loopplane.review`). |
 | **007-loopplane-memory-recall-knowledge** | _(not created)_ | **Not started** | Recall and knowledge indexing as loop-aware context sources: conversation recall, artifact recall, knowledge index contract, memory injection policy, retrieval budget, loop-aware memory usage. | 001, 003 | `/speckit.specify`. |
 | **008-loopplane-tool-gateway-advanced** | _(not created)_ | **Not started** | Expand the tool ecosystem beyond the foundation: MCP tool discovery, remote tool registry, plugin bundle, tool package metadata, tool capability manifest, tool versioning, tool diagnostics. | 001 | `/speckit.specify`. |
 | **009-loopplane-sandbox-policy-governance** | _(not created)_ | **Not started** | Stronger execution safety and governance: sandbox execution, path policy, permission policy, budget policy, quota policy, cost governance, safe failure behavior. | 001 | `/speckit.specify`. |
@@ -130,7 +130,16 @@ git history) — not invented.
   US1–US5 integration + import-boundary + public-safety); packs are pure
   callables that read only the public `RunOutcome`/`LoopState` surface and never
   start runs. ruff + mypy(strict) clean; full suite **314 passed** → **Verified**.
-- **006–014** — No `specs/` directory and no source → **Not started**.
+- **006** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; source
+  `src/loopplane/review/` (7 modules) + `examples/review_quickstart.py` +
+  `docs/human-review.md`. Tasks **31/31 complete**; 33 review tests pass (RA unit
+  + US1–US5 integration + import-boundary + public-safety); the layer composes
+  only the Phase-3 review hook and never the Phase-1 approval machinery. The 006
+  spec was grounded in a multi-agent read-only survey of the existing
+  approval/question/review surface. ruff + mypy(strict) clean; full suite
+  **347 passed** → **Verified**.
+- **007–014** — No `specs/` directory and no source → **Not started**.
 
 ---
 
@@ -138,11 +147,11 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **006-loopplane-human-review-workflows** |
-| Active feature directory | _(not created — `/speckit.specify` will create `specs/006-loopplane-human-review-workflows`)_ |
+| Active unit | **007-loopplane-memory-recall-knowledge** |
+| Active feature directory | _(not created — `/speckit.specify` will create `specs/007-loopplane-memory-recall-knowledge`)_ |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main`, no dedicated feature branch required (see §7 Branch Strategy) |
-| Current Spec Kit step | **Specify** (005 is **Verified**; 006 has no `specs/` directory yet) |
-| Depends on | 003 |
+| Current Spec Kit step | **Specify** (006 is **Verified**; 007 has no `specs/` directory yet) |
+| Depends on | 001, 003 |
 | Next command | **`/speckit.specify`** |
 | Stop condition status | None active. Branch strategy is **main-only** — a missing feature branch is *not* a stop condition (see §7 / §9). |
 
