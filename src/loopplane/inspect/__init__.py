@@ -16,6 +16,7 @@ from loopplane.inspect.diagnostics import (
     loop_diagnostics,
     run_diagnostics,
 )
+from loopplane.inspect.timeline import Timeline, TimelineEntry, build_timeline
 from loopplane.inspect.trace import SpanKind, Trace, TraceSpan, build_trace
 
 __all__ = [
@@ -23,8 +24,11 @@ __all__ = [
     "RunDiagnostics",
     "SequencedEvent",
     "SpanKind",
+    "Timeline",
+    "TimelineEntry",
     "Trace",
     "TraceSpan",
+    "build_timeline",
     "build_trace",
     "loop_diagnostics",
     "run_diagnostics",
