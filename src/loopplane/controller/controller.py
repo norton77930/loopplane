@@ -1,8 +1,10 @@
-"""The Runtime Controller: session lifecycle — create, drive, terminate —
-with in-memory state (contracts/run-lifecycle.md; FR-010).
+"""The Runtime Controller: session lifecycle — create, attach, drive,
+detach, resume, terminate, list (contracts/run-lifecycle.md; FR-010).
 
-Attach/detach/resume/list arrive with durability in a later phase; the
-Controller is already the only owner of session state and event emission.
+The Controller owns the recording boundary (FR-094): when a checkpoint
+store is configured, history appends and run terminations are recorded
+durably as they occur, and replacement decisions flow through the same
+stream. Without stores, sessions are purely in-memory (the US1/US2 posture).
 """
 
 from __future__ import annotations
@@ -17,14 +19,43 @@ from typing import Literal
 import anyio
 
 from loopplane.approval.interactions import InteractionBroker
+from loopplane.artifacts.budget import (
+    DEFAULT_REPLACEMENT_BUDGET_BYTES,
+    ReplacementDecision,
+    ReplacementLedger,
+)
+from loopplane.artifacts.store import ArtifactStore
+from loopplane.checkpoint.rebuild import rebuild_session
+from loopplane.checkpoint.recorder import RecordingSink, SessionRecorder
+from loopplane.checkpoint.store import CheckpointStore, SessionSummary
 from loopplane.context import RunContext
 from loopplane.events.emitter import EventEmitter, EventSink
+from loopplane.events.envelope import (
+    AssistantOutputIncrementEvent,
+    AssistantOutputIncrementPayload,
+    ReplayCompletedEvent,
+    ReplayCompletedPayload,
+    ReplayStartedEvent,
+    ReplayStartedPayload,
+    RuntimeEvent,
+    ToolCallCompletedEvent,
+    ToolCallCompletedPayload,
+    ToolCallStartedEvent,
+    ToolCallStartedPayload,
+    UserInputEvent,
+    UserInputPayload,
+)
 from loopplane.events.sequencer import EventSequencer
 from loopplane.gateway.gateway import ToolGateway
-from loopplane.loop.history import HistoryEntry, SessionHistory
+from loopplane.loop.history import HistoryEntry, HistoryHook, SessionHistory
 from loopplane.loop.loop import AgentLoop
 from loopplane.model.boundary import ModelBoundary
-from loopplane.model.content import ContentBlock
+from loopplane.model.content import (
+    ContentBlock,
+    TextBlock,
+    ToolCallBlock,
+    ToolResultBlock,
+)
 
 SessionState = Literal["created", "active", "suspended", "terminated"]
 
@@ -40,20 +71,34 @@ class _Session:
     turn_budget: int | None
     history: SessionHistory
     emitter: EventEmitter
+    sink: EventSink
+    sequencer: EventSequencer
     loop: AgentLoop
     broker: InteractionBroker
     approval_memory: dict[str, Literal["allow", "deny"]]
     cancellation: anyio.Event
+    ledger: ReplacementLedger | None = None
+    attached: bool = False
     driving: bool = False
 
 
 class RuntimeController:
     def __init__(
-        self, *, model: ModelBoundary, gateway: ToolGateway, event_sink: EventSink
+        self,
+        *,
+        model: ModelBoundary,
+        gateway: ToolGateway,
+        event_sink: EventSink,
+        checkpoint_store: CheckpointStore | None = None,
+        artifact_store: ArtifactStore | None = None,
+        replacement_budget_bytes: int = DEFAULT_REPLACEMENT_BUDGET_BYTES,
     ) -> None:
         self._model = model
         self._gateway = gateway
         self._event_sink = event_sink
+        self._checkpoint = checkpoint_store
+        self._artifacts = artifact_store
+        self._replacement_budget = replacement_budget_bytes
         self._sessions: dict[str, _Session] = {}
 
     def create_session(
@@ -64,21 +109,113 @@ class RuntimeController:
         turn_budget: int | None = None,
     ) -> str:
         session_id = uuid.uuid4().hex
-        history = SessionHistory()
-        emitter = EventEmitter(
-            session_id=session_id, sequencer=EventSequencer(), sink=self._event_sink
-        )
         now = datetime.now(UTC)
-        self._sessions[session_id] = _Session(
+        self._sessions[session_id] = self._assemble(
             session_id=session_id,
             working_scope=working_scope,
             label=label,
+            turn_budget=turn_budget,
             created_at=now,
-            last_active_at=now,
             state="created",
+            entries=None,
+            decisions=(),
+            next_record_sequence=1,
+            meta_recorded=False,
+        )
+        return session_id
+
+    async def resume(self, session_id: str) -> None:
+        """Reconstruct conversation state from durable records alone
+        (FR-081); repairs and skipped records surface as diagnostics
+        (FR-082, FR-083).
+        """
+        if self._checkpoint is None:
+            raise RuntimeError("resume requires a checkpoint store")
+        records, problems = self._checkpoint.load(session_id)
+        if not records:
+            raise KeyError(f"unknown session: {session_id}")
+        rebuilt = rebuild_session(records)
+        decisions = tuple(
+            ReplacementDecision(
+                artifact_reference=payload.artifact_reference,
+                replaced_call_id=payload.replaced_call_id,
+                preview=payload.preview,
+                decided_at=payload.decided_at,
+            )
+            for payload in rebuilt.decisions
+        )
+        session = self._assemble(
+            session_id=session_id,
+            working_scope=Path.cwd(),
+            label=rebuilt.label,
+            turn_budget=None,
+            created_at=rebuilt.created_at or datetime.now(UTC),
+            state="active",
+            entries=rebuilt.entries,
+            decisions=decisions,
+            next_record_sequence=max(record.sequence for record in records) + 1,
+            meta_recorded=True,
+        )
+        self._sessions[session_id] = session
+        for problem in problems:
+            await session.emitter.diagnostic("warning", "checkpoint", problem)
+        for repair in rebuilt.repairs:
+            await session.emitter.diagnostic("warning", "checkpoint", repair)
+
+    def _assemble(
+        self,
+        *,
+        session_id: str,
+        working_scope: Path,
+        label: str | None,
+        turn_budget: int | None,
+        created_at: datetime,
+        state: SessionState,
+        entries: Sequence[HistoryEntry] | None,
+        decisions: Sequence[ReplacementDecision],
+        next_record_sequence: int,
+        meta_recorded: bool,
+    ) -> _Session:
+        ledger: ReplacementLedger | None = None
+        if self._artifacts is not None:
+            ledger = ReplacementLedger(
+                budget_bytes=self._replacement_budget,
+                store=self._artifacts,
+                session_id=session_id,
+            )
+            ledger.restore(decisions)
+
+        sink: EventSink = self._event_sink
+        hook: HistoryHook | None = None
+        if self._checkpoint is not None:
+            recorder = SessionRecorder(
+                store=self._checkpoint,
+                session_id=session_id,
+                created_at=created_at,
+                label=label,
+                next_sequence=next_record_sequence,
+                meta_recorded=meta_recorded,
+            )
+            sink = RecordingSink(self._event_sink, recorder)
+            hook = self._make_history_hook(recorder, ledger)
+
+        sequencer = EventSequencer()
+        emitter = EventEmitter(session_id=session_id, sequencer=sequencer, sink=sink)
+        history = SessionHistory(on_append=hook)
+        if entries is not None:
+            history.restore(entries)
+        return _Session(
+            session_id=session_id,
+            working_scope=working_scope,
+            label=label,
+            created_at=created_at,
+            last_active_at=datetime.now(UTC),
+            state=state,
             turn_budget=turn_budget,
             history=history,
             emitter=emitter,
+            sink=sink,
+            sequencer=sequencer,
             loop=AgentLoop(
                 model=self._model,
                 gateway=self._gateway,
@@ -88,8 +225,31 @@ class RuntimeController:
             broker=InteractionBroker(emitter=emitter),
             approval_memory={},
             cancellation=anyio.Event(),
+            ledger=ledger,
         )
-        return session_id
+
+    def _make_history_hook(
+        self, recorder: SessionRecorder, ledger: ReplacementLedger | None
+    ) -> HistoryHook:
+        async def hook(entry: HistoryEntry) -> None:
+            await recorder.record_entry(entry)
+            if ledger is None or entry.role != "user":
+                return
+            results = [
+                block for block in entry.blocks if isinstance(block, ToolResultBlock)
+            ]
+            if not results or len(results) != len(entry.blocks):
+                return
+            for block in results:
+                for decision in await ledger.track(block.call_id, list(block.outputs)):
+                    await recorder.record_replacement(
+                        artifact_reference=decision.artifact_reference,
+                        replaced_call_id=decision.replaced_call_id,
+                        preview=decision.preview,
+                        decided_at=decision.decided_at,
+                    )
+
+        return hook
 
     async def drive(
         self, session_id: str, input_blocks: Sequence[ContentBlock]
@@ -119,6 +279,143 @@ class RuntimeController:
             session.last_active_at = datetime.now(UTC)
             # The signal is one-shot; arm a fresh one for the next run.
             session.cancellation = anyio.Event()
+
+    async def attach(self, session_id: str) -> None:
+        """Bind the single driving consumer (research A8), replacing any
+        previous attachment; durable history replays first as events with
+        `replay: true`, bracketed by replay-started/-completed (FR-014).
+        """
+        session = self._require(session_id)
+        session.attached = True
+        body = self._replay_events(session)
+        await session.sink(
+            ReplayStartedEvent(
+                session_id=session_id,
+                sequence=session.sequencer.next_sequence(),
+                occurred_at=datetime.now(UTC),
+                replay=True,
+                payload=ReplayStartedPayload(count=len(body)),
+            )
+        )
+        for event in body:
+            await session.sink(event)
+        await session.sink(
+            ReplayCompletedEvent(
+                session_id=session_id,
+                sequence=session.sequencer.next_sequence(),
+                occurred_at=datetime.now(UTC),
+                replay=True,
+                payload=ReplayCompletedPayload(count=len(body)),
+            )
+        )
+
+    def _replay_events(self, session: _Session) -> list[RuntimeEvent]:
+        """History as events, sufficient to reconstruct the visible
+        conversation (FR-014).
+        """
+        now = datetime.now(UTC)
+        results_by_call: dict[str, ToolResultBlock] = {}
+        for entry in session.history.snapshot():
+            for block in entry.blocks:
+                if isinstance(block, ToolResultBlock):
+                    results_by_call[block.call_id] = block
+
+        events: list[RuntimeEvent] = []
+
+        def sequence() -> int:
+            return session.sequencer.next_sequence()
+
+        turn_index = 0
+        for entry in session.history.snapshot():
+            blocks = entry.blocks
+            if entry.role == "user":
+                if blocks and all(isinstance(b, ToolResultBlock) for b in blocks):
+                    continue  # results replay with their calls below
+                events.append(
+                    UserInputEvent(
+                        session_id=session.session_id,
+                        sequence=sequence(),
+                        occurred_at=now,
+                        replay=True,
+                        payload=UserInputPayload(blocks=list(blocks)),
+                    )
+                )
+                continue
+            text = "".join(b.text for b in blocks if isinstance(b, TextBlock))
+            if text:
+                events.append(
+                    AssistantOutputIncrementEvent(
+                        session_id=session.session_id,
+                        sequence=sequence(),
+                        occurred_at=now,
+                        replay=True,
+                        payload=AssistantOutputIncrementPayload(
+                            text=text, turn_index=turn_index
+                        ),
+                    )
+                )
+            for block in blocks:
+                if not isinstance(block, ToolCallBlock):
+                    continue
+                events.append(
+                    ToolCallStartedEvent(
+                        session_id=session.session_id,
+                        sequence=sequence(),
+                        occurred_at=now,
+                        replay=True,
+                        payload=ToolCallStartedPayload(
+                            call_id=block.call_id,
+                            tool_name=block.tool_name,
+                            input=block.input,
+                        ),
+                    )
+                )
+                result = results_by_call.get(block.call_id)
+                if result is None:
+                    continue
+                events.append(
+                    ToolCallCompletedEvent(
+                        session_id=session.session_id,
+                        sequence=sequence(),
+                        occurred_at=now,
+                        replay=True,
+                        payload=ToolCallCompletedPayload(
+                            call_id=result.call_id,
+                            outcome=result.outcome,
+                            outputs=result.outputs,
+                            artifact_reference=result.artifact_reference,
+                            error=result.error,
+                            duration_seconds=0.0,
+                        ),
+                    )
+                )
+            turn_index += 1
+        return events
+
+    def detach(self, session_id: str) -> None:
+        """Unbind the consumer: in-flight work cancels cleanly and the
+        session suspends, consistent and resumable.
+        """
+        session = self._require(session_id)
+        session.attached = False
+        session.cancellation.set()
+        if session.state != "terminated":
+            session.state = "suspended"
+
+    def list_sessions(self) -> list[SessionSummary]:
+        """Identity and recency, newest first (FR-085)."""
+        if self._checkpoint is not None:
+            return self._checkpoint.list_sessions()
+        summaries = [
+            SessionSummary(
+                session_id=session.session_id,
+                label=session.label,
+                created_at=session.created_at,
+                last_active_at=session.last_active_at,
+            )
+            for session in self._sessions.values()
+        ]
+        return sorted(summaries, key=lambda s: s.last_active_at, reverse=True)
 
     def cancel(self, session_id: str) -> None:
         """Request cancellation: takes effect pre-turn and mid-stream and

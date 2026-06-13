@@ -22,15 +22,21 @@ from loopplane.approval.decisions import (
 from loopplane.context import RunContext
 from loopplane.errors import ErrorCategory, NormalizedError
 from loopplane.events.emitter import EventEmitter
-from loopplane.gateway.sizing import reduce_outputs
+from loopplane.gateway.sizing import measure_outputs, reduce_outputs
 from loopplane.gateway.spi import AdapterOutput, ErrorOutput, ToolAdapter
 from loopplane.gateway.validation import validate_input
 from loopplane.model.boundary import ToolCallRequest, ToolDescriptor
-from loopplane.model.content import OutputBlock, ToolResultBlock
+from loopplane.model.content import OutputBlock, TextBlock, ToolResultBlock
 
 ToolHandler = Callable[
     [dict[str, object], RunContext], Awaitable[Sequence[OutputBlock]]
 ]
+
+ArtifactHandoff = Callable[
+    [ToolCallRequest, list[OutputBlock], RunContext],
+    Awaitable[tuple[str, str]],
+]
+"""Persists oversized outputs in full; returns (stable reference, preview)."""
 
 DEFAULT_CALL_TIMEOUT_SECONDS = 60.0
 DEFAULT_OUTPUT_LIMIT_BYTES = 64 * 1024  # research A3
@@ -81,11 +87,13 @@ class ToolGateway:
         decide: PolicyDecider | None = None,
         call_timeout_seconds: float | None = DEFAULT_CALL_TIMEOUT_SECONDS,
         output_limit_bytes: int = DEFAULT_OUTPUT_LIMIT_BYTES,
+        artifact_handoff: ArtifactHandoff | None = None,
     ) -> None:
         self._registry: dict[str, _RegisteredTool] = {}
         self._decide: PolicyDecider = decide if decide is not None else allow_all
         self._call_timeout_seconds = call_timeout_seconds
         self._output_limit_bytes = output_limit_bytes
+        self._artifact_handoff = artifact_handoff
 
     def register(self, descriptor: ToolDescriptor, handler: ToolHandler) -> None:
         self._add(descriptor, _HandlerAdapter(descriptor, handler))
@@ -244,10 +252,23 @@ class ToolGateway:
         if error is not None:
             return self._failure(call, error, outputs), elapsed()
 
-        # Stage 7: size-manage (FR-026).
-        outputs = reduce_outputs(outputs, self._output_limit_bytes)
+        # Stage 7: size-manage (FR-026). With artifact storage attached the
+        # full output is preserved and the result carries preview + reference
+        # (FR-090, FR-091); otherwise reduction is bounded truncation.
+        artifact_reference: str | None = None
+        if measure_outputs(outputs) > self._output_limit_bytes:
+            if self._artifact_handoff is not None:
+                artifact_reference, preview = await self._artifact_handoff(
+                    call, outputs, context
+                )
+                outputs = [TextBlock(text=preview)]
+            else:
+                outputs = reduce_outputs(outputs, self._output_limit_bytes)
         result = ToolResultBlock(
-            call_id=call.call_id, outcome="success", outputs=outputs
+            call_id=call.call_id,
+            outcome="success",
+            outputs=outputs,
+            artifact_reference=artifact_reference,
         )
         return result, elapsed()
 
@@ -271,4 +292,5 @@ class ToolGateway:
             outputs=result.outputs,
             duration_seconds=duration,
             error=result.error,
+            artifact_reference=result.artifact_reference,
         )

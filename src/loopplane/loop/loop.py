@@ -73,7 +73,7 @@ class AgentLoop:
             await self._emitter.run_terminated("turn-budget-exhausted", 0)
             return
 
-        self._history.append("user", input_blocks)
+        await self._history.append("user", input_blocks)
         await self._emitter.user_input(input_blocks)
 
         turn_index = 0
@@ -127,7 +127,7 @@ class AgentLoop:
                 # Cancelled while output was streaming (FR-003): keep any
                 # partial output; never leave the input orphaned (FR-007).
                 if text_parts:
-                    self._history.append(
+                    await self._history.append(
                         "assistant", [TextBlock(text="".join(text_parts))]
                     )
                 await self._terminate_cancelled(run_start, turns_completed)
@@ -144,7 +144,7 @@ class AgentLoop:
                 for call in calls
             )
             if assistant_blocks:
-                self._history.append("assistant", assistant_blocks)
+                await self._history.append("assistant", assistant_blocks)
 
             if not calls:
                 await self._emitter.run_terminated(
@@ -153,7 +153,7 @@ class AgentLoop:
                 return
 
             results = await self._execute_calls(calls, context)
-            self._history.append("user", results)
+            await self._history.append("user", results)
             turn_index += 1
 
     async def _execute_calls(

@@ -41,6 +41,7 @@ class ToolResultBlock(_Block):
     outcome: Literal["success", "failure"]
     outputs: list[OutputBlock] = []
     error: NormalizedError | None = None
+    artifact_reference: str | None = None
 
 
 class SummaryDigest(_Block):

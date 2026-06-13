@@ -1,0 +1,296 @@
+"""Contract tests for the run lifecycle (contracts/run-lifecycle.md).
+
+Asserts the Controller operations (create, attach, drive, detach, resume,
+terminate, list), single-driving-consumer attach replacement, mid-turn
+submit-input rejection, disconnect semantics, replay brackets with `replay`
+flags including past user inputs, and increment batching that never reorders
+(FR-010–FR-015).
+"""
+
+from __future__ import annotations
+
+import math
+from datetime import UTC, datetime
+from pathlib import Path
+
+import anyio
+import pytest
+
+from loopplane.approval import HumanApproval
+from loopplane.checkpoint import CheckpointStore
+from loopplane.controller.controller import RuntimeController
+from loopplane.controller.dispatcher import (
+    BatchingSink,
+    ConsumerRequest,
+    Dispatcher,
+    SubmitInput,
+)
+from loopplane.events import (
+    AssistantOutputIncrementEvent,
+    AssistantOutputIncrementPayload,
+    RuntimeEvent,
+    TurnCompletedEvent,
+    TurnCompletedPayload,
+)
+from loopplane.gateway import ToolGateway
+from loopplane.model import (
+    ScriptedModel,
+    ScriptedTurn,
+    ScriptEntry,
+    TextBlock,
+    TextIncrement,
+    TokenUsage,
+    ToolCallRequest,
+)
+from tests.integration.conftest import ECHO_DESCRIPTOR, EventCollector, echo_handler
+
+pytestmark = pytest.mark.anyio
+
+
+def _controller(
+    script: list[ScriptEntry],
+    sink: EventCollector,
+    tmp_path: Path,
+    *,
+    durable: bool = True,
+    decide: HumanApproval | None = None,
+) -> RuntimeController:
+    gateway = ToolGateway(decide=decide)
+    gateway.register(ECHO_DESCRIPTOR, echo_handler)
+    return RuntimeController(
+        model=ScriptedModel(script=script, context_capacity=100_000),
+        gateway=gateway,
+        event_sink=sink,
+        checkpoint_store=CheckpointStore(tmp_path / "sessions") if durable else None,
+    )
+
+
+def _tool_script() -> list[ScriptEntry]:
+    return [
+        ScriptedTurn(
+            increments=[
+                TextIncrement(text="using the tool"),
+                ToolCallRequest(call_id="c1", tool_name="echo", input={"text": "hi"}),
+            ],
+            stop_reason="tool-use",
+        ),
+        ScriptedTurn(increments=[TextIncrement(text="done")]),
+    ]
+
+
+# --- controller operations -----------------------------------------------------
+
+
+async def test_create_drive_detach_resume_terminate_and_list(tmp_path: Path) -> None:
+    sink = EventCollector()
+    controller = _controller(
+        [ScriptedTurn(increments=[TextIncrement(text="hi")])], sink, tmp_path
+    )
+
+    session_id = controller.create_session(working_scope=tmp_path, label="lifecycle")
+    await controller.drive(session_id, [TextBlock(text="hello")])
+
+    controller.detach(session_id)
+
+    listed = controller.list_sessions()
+    assert [s.session_id for s in listed] == [session_id]
+    assert listed[0].label == "lifecycle"
+
+    fresh = _controller([], EventCollector(), tmp_path)
+    await fresh.resume(session_id)
+    assert [e.role for e in fresh.history_snapshot(session_id)] == ["user", "assistant"]
+
+    fresh.terminate(session_id)
+    with pytest.raises(RuntimeError):
+        await fresh.drive(session_id, [TextBlock(text="after terminate")])
+
+
+# --- replay on attach (FR-014) ----------------------------------------------------
+
+
+async def test_attach_replays_history_bracketed_with_replay_flags(
+    tmp_path: Path,
+) -> None:
+    first = _controller(_tool_script(), EventCollector(), tmp_path)
+    session_id = first.create_session(working_scope=tmp_path)
+    await first.drive(session_id, [TextBlock(text="please echo")])
+    del first
+
+    sink = EventCollector()
+    second = _controller([], sink, tmp_path)
+    await second.resume(session_id)
+    sink.events.clear()  # drop resume diagnostics; observe the replay alone
+
+    await second.attach(session_id)
+
+    types = sink.types
+    assert types[0] == "replay-started"
+    assert types[-1] == "replay-completed"
+    body = sink.events[1:-1]
+    assert all(event.replay is True for event in sink.events)
+
+    # Past user inputs replay verbatim (FR-014).
+    user_inputs = [e for e in body if e.type == "user-input"]
+    assert len(user_inputs) == 1
+    assert list(user_inputs[0].payload.blocks) == [TextBlock(text="please echo")]
+
+    body_types = [e.type for e in body]
+    assert "assistant-output-increment" in body_types
+    assert "tool-call-started" in body_types
+    assert "tool-call-completed" in body_types
+    assert sink.events[0].payload.count == len(body)
+    assert sink.events[-1].payload.count == len(body)
+
+
+async def test_attach_replaces_the_previous_driving_consumer(tmp_path: Path) -> None:
+    sink = EventCollector()
+    controller = _controller(
+        [ScriptedTurn(increments=[TextIncrement(text="hi")])], sink, tmp_path
+    )
+    session_id = controller.create_session(working_scope=tmp_path)
+    await controller.drive(session_id, [TextBlock(text="hello")])
+
+    await controller.attach(session_id)
+    first_replay = [e for e in sink.events if e.replay]
+    sink.events.clear()
+
+    await controller.attach(session_id)  # a new consumer replaces the old one
+    second_replay = [e for e in sink.events if e.replay]
+
+    assert [e.type for e in second_replay] == [e.type for e in first_replay]
+
+
+# --- dispatcher semantics (FR-012, FR-013, FR-015) ---------------------------------
+
+
+async def test_submit_input_during_an_active_turn_is_rejected_with_a_diagnostic(
+    tmp_path: Path,
+) -> None:
+    script = [
+        ScriptedTurn(increments=[TextIncrement(text=f"chunk-{i}") for i in range(30)]),
+        ScriptedTurn(increments=[TextIncrement(text="second")]),
+    ]
+    sink = EventCollector()
+    controller = _controller(script, sink, tmp_path, durable=False)
+    session_id = controller.create_session(working_scope=tmp_path)
+
+    send_requests, receive_requests = anyio.create_memory_object_stream[
+        ConsumerRequest
+    ](math.inf)
+    dispatcher = Dispatcher(
+        controller=controller, session_id=session_id, inbound=receive_requests
+    )
+
+    async with anyio.create_task_group() as task_group:
+        task_group.start_soon(dispatcher.run)
+        await send_requests.send(SubmitInput(blocks=(TextBlock(text="first"),)))
+        with anyio.fail_after(5):
+            while not any(e.type == "assistant-output-increment" for e in sink.events):
+                await anyio.lowlevel.checkpoint()
+            await send_requests.send(SubmitInput(blocks=(TextBlock(text="rejected"),)))
+            while not any(e.type == "diagnostic" for e in sink.events):
+                await anyio.lowlevel.checkpoint()
+        send_requests.close()
+
+    diagnostic = next(e for e in sink.events if e.type == "diagnostic")
+    assert "already active" in diagnostic.payload.message
+    assert sum(1 for e in sink.events if e.type == "user-input") == 1
+
+
+async def test_disconnect_mid_run_denies_pending_approvals_and_never_hangs(
+    tmp_path: Path,
+) -> None:
+    sink = EventCollector()
+    controller = _controller(
+        _tool_script(), sink, tmp_path, durable=False, decide=HumanApproval(rules=[])
+    )
+    session_id = controller.create_session(working_scope=tmp_path)
+
+    send_requests, receive_requests = anyio.create_memory_object_stream[
+        ConsumerRequest
+    ](math.inf)
+    dispatcher = Dispatcher(
+        controller=controller, session_id=session_id, inbound=receive_requests
+    )
+
+    with anyio.fail_after(10):
+        async with anyio.create_task_group() as task_group:
+            task_group.start_soon(dispatcher.run)
+            await send_requests.send(SubmitInput(blocks=(TextBlock(text="go"),)))
+            while not any(e.type == "approval-requested" for e in sink.events):
+                await anyio.lowlevel.checkpoint()
+            # The consumer channel closes while the approval is pending.
+            send_requests.close()
+
+    resolved = next(e for e in sink.events if e.type == "approval-resolved")
+    assert resolved.payload.decision == "deny"
+    assert resolved.payload.resolution_source == "disconnect"
+    terminated = next(e for e in sink.events if e.type == "run-terminated")
+    assert terminated.payload.reason == "cancelled"
+
+
+# --- increment batching (FR-015) -----------------------------------------------------
+
+
+def _increment(sequence: int, text: str) -> RuntimeEvent:
+    return AssistantOutputIncrementEvent(
+        session_id="s1",
+        sequence=sequence,
+        occurred_at=datetime.now(UTC),
+        payload=AssistantOutputIncrementPayload(text=text, turn_index=0),
+    )
+
+
+def _turn_completed(sequence: int) -> RuntimeEvent:
+    return TurnCompletedEvent(
+        session_id="s1",
+        sequence=sequence,
+        occurred_at=datetime.now(UTC),
+        payload=TurnCompletedPayload(
+            turn_index=0, stop_reason="end-turn", usage=TokenUsage()
+        ),
+    )
+
+
+async def test_batching_buffers_increments_until_a_non_incremental_event(
+    tmp_path: Path,
+) -> None:
+    delivered: list[RuntimeEvent] = []
+
+    async def capture(event: RuntimeEvent) -> None:
+        delivered.append(event)
+
+    sink = BatchingSink(capture, max_buffer=16)
+
+    await sink(_increment(1, "a"))
+    await sink(_increment(2, "b"))
+    assert delivered == []  # increments may be buffered (FR-015)
+
+    await sink(_turn_completed(3))
+    assert [e.sequence for e in delivered] == [
+        1,
+        2,
+        3,
+    ]  # flushed first, never reordered
+
+
+async def test_batching_never_reorders_and_flushes_on_buffer_limit(
+    tmp_path: Path,
+) -> None:
+    delivered: list[RuntimeEvent] = []
+
+    async def capture(event: RuntimeEvent) -> None:
+        delivered.append(event)
+
+    sink = BatchingSink(capture, max_buffer=3)
+
+    fed = [_increment(i, f"t{i}") for i in range(1, 5)]
+    for event in fed:
+        await sink(event)
+    assert [e.sequence for e in delivered] == [1, 2, 3]  # limit flush
+
+    await sink(_turn_completed(5))
+    await sink(_increment(6, "after"))
+    await sink.flush()
+
+    assert [e.sequence for e in delivered] == [1, 2, 3, 4, 5, 6]

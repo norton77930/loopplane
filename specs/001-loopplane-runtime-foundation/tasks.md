@@ -175,16 +175,16 @@ records alone, compare reconstructed state.
 
 ### Tests for User Story 3 (write first; confirm they fail)
 
-- [ ] T031 [P] [US3] Contract tests for checkpoint in
+- [X] T031 [P] [US3] Contract tests for checkpoint in
       `tests/contract/test_checkpoint.py`: append-as-you-go, resume from records alone,
       dangling-call repair with warning, corrupted-record skip, concurrent-write safety,
       newest-first listing (contracts/checkpoint.md; FR-080–FR-085)
-- [ ] T032 [P] [US3] Contract tests for artifacts in `tests/contract/test_artifacts.py`:
+- [X] T032 [P] [US3] Contract tests for artifacts in `tests/contract/test_artifacts.py`:
       threshold offload, preview + stable reference, budget replacement frozen across
       resume, retrieval by reference (contracts/artifacts.md; FR-090–FR-093)
-- [ ] T033 [P] [US3] Crash/resume integration tests for acceptance 3.1–3.4 in
+- [X] T033 [P] [US3] Crash/resume integration tests for acceptance 3.1–3.4 in
       `tests/integration/test_us3_resume.py` (SC-003)
-- [ ] T034 [P] [US3] Contract tests for the run lifecycle in
+- [X] T034 [P] [US3] Contract tests for the run lifecycle in
       `tests/contract/test_run_lifecycle.py`: Controller operations (create, attach,
       drive, detach, resume, terminate, list), single-driving-consumer attach
       replacement, mid-turn submit-input rejection with a diagnostic, disconnect
@@ -196,15 +196,15 @@ records alone, compare reconstructed state.
 
 ### Implementation for User Story 3
 
-- [ ] T035 [US3] Implement checkpoint records and the recording boundary in
+- [X] T035 [US3] Implement checkpoint records and the recording boundary in
       `src/loopplane/checkpoint/` — the Controller records; the loop never persists
       (FR-080, FR-084, FR-094; research R6)
-- [ ] T036 [US3] Implement resume, repair, and session listing in
+- [X] T036 [US3] Implement resume, repair, and session listing in
       `src/loopplane/checkpoint/` (FR-081–FR-083, FR-085)
-- [ ] T037 [US3] Implement Artifact Storage — offload, metadata, replacement budget,
+- [X] T037 [US3] Implement Artifact Storage — offload, metadata, replacement budget,
       retrieval — in `src/loopplane/artifacts/`, recording decisions through the
       checkpoint boundary (FR-090–FR-094; research A3)
-- [ ] T038 [US3] Implement Dispatcher history replay with `replay` flags, replay brackets,
+- [X] T038 [US3] Implement Dispatcher history replay with `replay` flags, replay brackets,
       and the no-reorder batching rule in `src/loopplane/controller/dispatcher.py`
       (FR-014, FR-015)
 

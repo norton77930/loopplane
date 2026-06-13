@@ -163,12 +163,12 @@ async def test_sequential_batch_never_overlaps(tmp_path: Path) -> None:
 # --- snapshot immutability ---------------------------------------------------
 
 
-def test_snapshot_is_point_in_time_and_immutable() -> None:
+async def test_snapshot_is_point_in_time_and_immutable() -> None:
     history = SessionHistory()
-    history.append("user", [TextBlock(text="a")])
+    await history.append("user", [TextBlock(text="a")])
     snapshot = history.snapshot()
 
-    history.append("assistant", [TextBlock(text="b")])
+    await history.append("assistant", [TextBlock(text="b")])
 
     assert len(snapshot) == 1
     assert len(history.snapshot()) == 2
@@ -178,11 +178,11 @@ def test_snapshot_is_point_in_time_and_immutable() -> None:
         snapshot[0].role = "assistant"  # type: ignore[misc]
 
 
-def test_rollback_drops_only_entries_after_the_mark() -> None:
+async def test_rollback_drops_only_entries_after_the_mark() -> None:
     history = SessionHistory()
-    history.append("user", [TextBlock(text="kept")])
+    await history.append("user", [TextBlock(text="kept")])
     mark = len(history)
-    history.append("user", [TextBlock(text="dropped")])
+    await history.append("user", [TextBlock(text="dropped")])
 
     history.rollback_to(mark)
 

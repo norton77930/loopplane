@@ -3,6 +3,7 @@
 from loopplane.controller.controller import RuntimeController, SessionState
 from loopplane.controller.dispatcher import (
     ApprovalDecision,
+    BatchingSink,
     Cancel,
     ConsumerRequest,
     Dispatcher,
@@ -12,6 +13,7 @@ from loopplane.controller.dispatcher import (
 
 __all__ = [
     "ApprovalDecision",
+    "BatchingSink",
     "Cancel",
     "ConsumerRequest",
     "Dispatcher",

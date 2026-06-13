@@ -16,7 +16,37 @@ import anyio
 from pydantic import BaseModel, ConfigDict
 
 from loopplane.controller.controller import RuntimeController
+from loopplane.events.emitter import EventSink
+from loopplane.events.envelope import RuntimeEvent
 from loopplane.model.content import ContentBlock
+
+_INCREMENT_TYPES = ("assistant-output-increment", "assistant-reasoning-increment")
+
+
+class BatchingSink:
+    """Optional outbound batching (FR-015): rapid increments MAY buffer for
+    delivery efficiency, but any non-incremental event flushes buffered
+    increments first — nothing is ever reordered.
+    """
+
+    def __init__(self, inner: EventSink, *, max_buffer: int = 16) -> None:
+        self._inner = inner
+        self._buffer: list[RuntimeEvent] = []
+        self._max_buffer = max_buffer
+
+    async def __call__(self, event: RuntimeEvent) -> None:
+        if event.type in _INCREMENT_TYPES:
+            self._buffer.append(event)
+            if len(self._buffer) >= self._max_buffer:
+                await self.flush()
+            return
+        await self.flush()
+        await self._inner(event)
+
+    async def flush(self) -> None:
+        buffered, self._buffer = self._buffer, []
+        for event in buffered:
+            await self._inner(event)
 
 
 class SubmitInput(BaseModel):
