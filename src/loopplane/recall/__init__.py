@@ -22,6 +22,7 @@ from loopplane.recall.injection import (
     assemble_recall,
     build_recall_input,
 )
+from loopplane.recall.memory import memory_entry_recall
 
 __all__ = [
     "ArtifactReader",
@@ -37,4 +38,5 @@ __all__ = [
     "build_recall_input",
     "conversation_recall",
     "default_query",
+    "memory_entry_recall",
 ]
