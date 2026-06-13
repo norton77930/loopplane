@@ -88,7 +88,7 @@ git history) — not invented.
 | **006-loopplane-human-review-workflows** | `specs/006-loopplane-human-review-workflows` | **Verified** | Extend approval boundaries into human review workflows: review request, user question event, approval memory, review decision, pause/resume, human gate loop. No UI unless separately specified. | 003 | None — implemented & verified on `main` (`loopplane.review`). |
 | **007-loopplane-memory-recall-knowledge** | `specs/007-loopplane-memory-recall-knowledge` | **Verified** | Recall and knowledge indexing as loop-aware context sources: conversation recall, artifact recall, knowledge index contract, memory injection policy, retrieval budget, loop-aware memory usage. | 001, 003 | None — implemented & verified on `main` (`loopplane.recall`). |
 | **008-loopplane-tool-gateway-advanced** | `specs/008-loopplane-tool-gateway-advanced` | **Verified** | Expand the tool ecosystem beyond the foundation: MCP tool discovery, remote tool registry, plugin bundle, tool package metadata, tool capability manifest, tool versioning, tool diagnostics. | 001 | None — implemented & verified on `main` (`loopplane.toolkit`). |
-| **009-loopplane-sandbox-policy-governance** | _(not created)_ | **Not started** | Stronger execution safety and governance: sandbox execution, path policy, permission policy, budget policy, quota policy, cost governance, safe failure behavior. | 001 | `/speckit.specify`. |
+| **009-loopplane-sandbox-policy-governance** | `specs/009-loopplane-sandbox-policy-governance` | **Verified** | Stronger execution safety and governance: sandbox execution, path policy, permission policy, budget policy, quota policy, cost governance, safe failure behavior. | 001 | None — implemented & verified on `main` (`loopplane.governance`). |
 | **010-loopplane-observability-debug-console** | _(not created)_ | **Not started** | Make runs and loops inspectable: trace viewer data contract, event replay, debug timeline, run diagnostics, loop diagnostics, metadata-only observability. No full frontend unless separately specified. | 001, 003 | `/speckit.specify`. |
 | **011-loopplane-web-api-host** | _(not created)_ | **Not started** | Expose LoopPlane through a web/API host: FastAPI or equivalent host, REST endpoints, SSE or WebSocket streaming, auth boundary, session APIs, host-level integration tests. | 002 | `/speckit.specify`. |
 | **012-loopplane-desktop-or-studio-host** | _(not created)_ | **Not started** | Local desktop or studio host: local app host, sidecar process, local session manager, developer console, optional UI shell. No private legacy UI copy. | 002 | `/speckit.specify`. |
@@ -162,7 +162,16 @@ git history) — not invented.
   invokes a tool**, and registers only through the gateway's `register_adapter` (Constitution V).
   A `/speckit.analyze` pass (0 critical/high) aligned a plan test-note with tasks. ruff +
   mypy(strict) clean; full suite **430 passed** → **Verified**.
-- **009–014** — No `specs/` directory and no source → **Not started**.
+- **009** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; source
+  `src/loopplane/governance/` (8 modules) + `examples/governance_quickstart.py` +
+  `docs/sandbox-policy-governance.md`. Tasks **29/29 complete**; 36 governance tests pass (core unit
+  + US1–US5 integration + import/no-invoke boundary + public-safety); every policy returns a Phase-1
+  allow/deny verdict and **never executes or OS-sandboxes a tool** (Constitution V), composing only the
+  public Phase-1 policy contracts (reusing `resolve_rules`) and distinct from the Human Approval boundary.
+  A `/speckit.analyze` pass (0 critical/high) aligned a plan test-note with tasks. ruff + mypy(strict)
+  clean; full suite **466 passed** → **Verified**.
+- **010–014** — No `specs/` directory and no source → **Not started**.
 
 ---
 
@@ -170,11 +179,11 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **009-loopplane-sandbox-policy-governance** |
-| Active feature directory | _(not created — `/speckit.specify` will create `specs/009-loopplane-sandbox-policy-governance`)_ |
+| Active unit | **010-loopplane-observability-debug-console** |
+| Active feature directory | _(not created — `/speckit.specify` will create `specs/010-loopplane-observability-debug-console`)_ |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main`, no dedicated feature branch required (see §7 Branch Strategy) |
-| Current Spec Kit step | **Specify** (008 is **Verified**; 009 has no `specs/` directory yet) |
-| Depends on | 001 |
+| Current Spec Kit step | **Specify** (009 is **Verified**; 010 has no `specs/` directory yet) |
+| Depends on | 001, 003 |
 | Next command | **`/speckit.specify`** |
 | Stop condition status | None active. Branch strategy is **main-only** — a missing feature branch is *not* a stop condition (see §7 / §9). |
 

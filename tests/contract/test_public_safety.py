@@ -362,3 +362,41 @@ def test_phase8_toolkit_files_are_public_safe() -> None:
                     violations.append(f"{relative}:{lineno}: {label}")
 
     assert not violations, "Phase-8 public-safety scan found:\n" + "\n".join(violations)
+
+
+# Phase-9 governance files are covered explicitly so they are scanned even before
+# they are committed (T025; SC-006, NFR-002).
+PHASE9_TARGETS = [
+    REPO_ROOT / "src" / "loopplane" / "governance",
+    REPO_ROOT / "examples" / "governance_quickstart.py",
+    REPO_ROOT / "docs" / "sandbox-policy-governance.md",
+    REPO_ROOT / "specs" / "009-loopplane-sandbox-policy-governance",
+]
+
+
+def test_phase9_governance_files_are_public_safe() -> None:
+    compiled = {
+        label: re.compile(pattern) for label, pattern in BUILTIN_PATTERNS.items()
+    }
+
+    targets: list[Path] = []
+    for target in PHASE9_TARGETS:
+        if target.is_dir():
+            targets.extend(sorted(target.rglob("*.py")))
+            targets.extend(sorted(target.rglob("*.md")))
+        elif target.is_file():
+            targets.append(target)
+    assert targets, "expected Phase-9 governance files to scan"
+
+    violations: list[str] = []
+    for path in targets:
+        text = _read_text(path)
+        if text is None:
+            continue
+        relative = path.relative_to(REPO_ROOT)
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for label, regex in compiled.items():
+                if regex.search(line):
+                    violations.append(f"{relative}:{lineno}: {label}")
+
+    assert not violations, "Phase-9 public-safety scan found:\n" + "\n".join(violations)
