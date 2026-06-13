@@ -34,8 +34,8 @@ starts no Loop Run and mutates no store or `LoopState`. See
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Create the `loopplane.recall` package skeleton: `src/loopplane/recall/__init__.py` with a module docstring and an empty `__all__` placeholder.
-- [ ] T002 [P] Add recall test helpers in `tests/recall_helpers.py`: a `scripted_state(*, loop_id="L", run_refs=(), artifacts=())` builder over the public `LoopState`/`RunReference`/`ArtifactRef`; a `ScriptedArtifactReader` (a dict of `(session_id, reference) -> ArtifactMeta`, with a `raising` flag); a `memory_entries(*specs)` builder of `MemoryEntry`; and a `ScriptedKnowledgeIndex` (seeded entries + a `raising` flag).
+- [X] T001 Create the `loopplane.recall` package skeleton: `src/loopplane/recall/__init__.py` with a module docstring and an empty `__all__` placeholder.
+- [X] T002 [P] Add recall test helpers in `tests/recall_helpers.py`: a `scripted_state(*, loop_id="L", run_refs=(), artifacts=())` builder over the public `LoopState`/`RunReference`/`ArtifactRef`; a `ScriptedArtifactReader` (a dict of `(session_id, reference) -> ArtifactMeta`, with a `raising` flag); a `memory_entries(*specs)` builder of `MemoryEntry`; and a `ScriptedKnowledgeIndex` (seeded entries + a `raising` flag).
 
 ---
 
@@ -43,12 +43,12 @@ starts no Loop Run and mutates no store or `LoopState`. See
 
 **Purpose**: The recall vocabulary and the injection seam every source plugs into. **⚠️ Blocks US1–US5.**
 
-- [ ] T003 [P] Write unit tests in `tests/unit/test_recall_core.py` (MUST FAIL first): `RecalledEntry` shape; `apply_budget` keeps entries in order until `max_entries`/`max_chars` then truncates with an explicit `dropped` count, and treats `None` bounds as unbounded; `assemble_recall` concatenates sources in order and applies the budget, and a raising source contributes nothing while its label lands in `skipped`; `build_recall_input` prepends the preamble to a string base, returns the base unchanged on empty recall, and passes a `ContentBlock`-sequence base through unchanged; recall mutates neither the `LoopState` nor a bound store (FR-001, FR-052–FR-055, NFR-005, NFR-006).
-- [ ] T004 [P] Implement `src/loopplane/recall/entry.py`: `RecalledEntry`, the `RecallSource` and `QueryFn` aliases, and `default_query` (deterministic, public-safe query from loop id + latest validation reason) (FR-001, FR-002).
-- [ ] T005 [P] Implement `src/loopplane/recall/budget.py`: `RetrievalBudget`, `BudgetResult`, and `apply_budget` (order-stable truncation with an explicit dropped count) (FR-052, FR-053).
-- [ ] T006 Implement `src/loopplane/recall/injection.py`: `RecallAssembly`, `assemble_recall` (source-order concat + `apply_budget`; a raising source is swallowed and recorded in `skipped`), and `build_recall_input` returning a Phase-3 `InputSource` (string-base preamble / empty passthrough / `ContentBlock`-base passthrough; never mutating base/state/store) (depends on T004, T005) (FR-050, FR-054, FR-055, NFR-005, NFR-006).
-- [ ] T007 Populate `src/loopplane/recall/__init__.py` exports for the foundational types (`RecalledEntry`, `RecallSource`, `default_query`, `RetrievalBudget`, `apply_budget`, `RecallAssembly`, `assemble_recall`, `build_recall_input`).
-- [ ] T008 Run `pytest tests/unit/test_recall_core.py --basetemp=".pytmp"` → green (gate for Foundational).
+- [X] T003 [P] Write unit tests in `tests/unit/test_recall_core.py` (MUST FAIL first): `RecalledEntry` shape; `apply_budget` keeps entries in order until `max_entries`/`max_chars` then truncates with an explicit `dropped` count, and treats `None` bounds as unbounded; `assemble_recall` concatenates sources in order and applies the budget, and a raising source contributes nothing while its label lands in `skipped`; `build_recall_input` prepends the preamble to a string base, returns the base unchanged on empty recall, and passes a `ContentBlock`-sequence base through unchanged; recall mutates neither the `LoopState` nor a bound store (FR-001, FR-052–FR-055, NFR-005, NFR-006).
+- [X] T004 [P] Implement `src/loopplane/recall/entry.py`: `RecalledEntry`, the `RecallSource` and `QueryFn` aliases, and `default_query` (deterministic, public-safe query from loop id + latest validation reason) (FR-001, FR-002).
+- [X] T005 [P] Implement `src/loopplane/recall/budget.py`: `RetrievalBudget`, `BudgetResult`, and `apply_budget` (order-stable truncation with an explicit dropped count) (FR-052, FR-053).
+- [X] T006 Implement `src/loopplane/recall/injection.py`: `RecallAssembly`, `assemble_recall` (source-order concat + `apply_budget`; a raising source is swallowed and recorded in `skipped`), and `build_recall_input` returning a Phase-3 `InputSource` (string-base preamble / empty passthrough / `ContentBlock`-base passthrough; never mutating base/state/store) (depends on T004, T005) (FR-050, FR-054, FR-055, NFR-005, NFR-006).
+- [X] T007 Populate `src/loopplane/recall/__init__.py` exports for the foundational types (`RecalledEntry`, `RecallSource`, `default_query`, `RetrievalBudget`, `apply_budget`, `RecallAssembly`, `assemble_recall`, `build_recall_input`).
+- [X] T008 Run `pytest tests/unit/test_recall_core.py --basetemp=".pytmp"` → green (gate for Foundational).
 
 **Checkpoint**: The recall vocabulary, budget, and injection seam are ready.
 
@@ -63,9 +63,9 @@ to the loop's first prompt, bounded and deterministic.
 state=<2 run_refs>)`; assert `initial()` contains both runs most-recent-first; an empty-run state ⇒ `"X"`
 unchanged; recalling twice is byte-identical.
 
-- [ ] T009 [P] [US1] Write integration tests in `tests/integration/test_recall_us1.py` (MUST FAIL first): `conversation_recall()` over a state with two `run_refs` yields both entries most-recent-first (`origin="conversation"`, `identifier=session_id`); `build_recall_input` injects them ahead of a `StaticInput`; an empty-`run_refs` state ⇒ the base prompt unchanged (FR-055); deterministic (twice identical); loop-scoped (only this state's runs); the `LoopState` is unmutated (US1 scenarios 1–3; SC-001/002/003).
-- [ ] T010 [US1] Implement `src/loopplane/recall/conversation.py`: `conversation_recall(*, limit=10)` reading `LoopState.run_refs`, most-recent-first, emitting public-safe `session_id`+`termination_reason` entries (FR-010–FR-013).
-- [ ] T011 [US1] Export `conversation_recall` from `__init__.py`; run `pytest tests/integration/test_recall_us1.py --basetemp=".pytmp"` → green.
+- [X] T009 [P] [US1] Write integration tests in `tests/integration/test_recall_us1.py` (MUST FAIL first): `conversation_recall()` over a state with two `run_refs` yields both entries most-recent-first (`origin="conversation"`, `identifier=session_id`); `build_recall_input` injects them ahead of a `StaticInput`; an empty-`run_refs` state ⇒ the base prompt unchanged (FR-055); deterministic (twice identical); loop-scoped (only this state's runs); the `LoopState` is unmutated (US1 scenarios 1–3; SC-001/002/003).
+- [X] T010 [US1] Implement `src/loopplane/recall/conversation.py`: `conversation_recall(*, limit=10)` reading `LoopState.run_refs`, most-recent-first, emitting public-safe `session_id`+`termination_reason` entries (FR-010–FR-013).
+- [X] T011 [US1] Export `conversation_recall` from `__init__.py`; run `pytest tests/integration/test_recall_us1.py --basetemp=".pytmp"` → green.
 
 **Checkpoint**: MVP — the loop begins each run with its bounded, loop-scoped prior-run context.
 
@@ -79,9 +79,9 @@ artifacts.
 **Independent Test**: `artifact_recall(reader)` over scripted artifact metadata yields newest-first
 reference+metadata entries; a reference with no metadata is skipped; a raising reader yields empty.
 
-- [ ] T012 [P] [US2] Write integration tests in `tests/integration/test_recall_us2.py` (MUST FAIL first): `artifact_recall(reader)` over a `ScriptedArtifactReader` orders entries newest-first by `ArtifactMeta.created_at`, each carrying only a reference + declared metadata (no content, no filesystem path); an `ArtifactRef` with `metadata(...) is None` is skipped; a raising reader contributes nothing (fail-safe); the store and state are unmutated (US2 scenarios 1–3; SC-007, NFR-005/006).
-- [ ] T013 [US2] Implement `src/loopplane/recall/artifacts.py`: the `ArtifactReader` Protocol (`metadata(session_id, reference) -> ArtifactMeta | None`) and `artifact_recall(reader, *, limit=10)` (FR-020–FR-022).
-- [ ] T014 [US2] Export `artifact_recall` and `ArtifactReader`; run `pytest tests/integration/test_recall_us2.py --basetemp=".pytmp"` → green.
+- [X] T012 [P] [US2] Write integration tests in `tests/integration/test_recall_us2.py` (MUST FAIL first): `artifact_recall(reader)` over a `ScriptedArtifactReader` orders entries newest-first by `ArtifactMeta.created_at`, each carrying only a reference + declared metadata (no content, no filesystem path); an `ArtifactRef` with `metadata(...) is None` is skipped; a raising reader contributes nothing (fail-safe); the store and state are unmutated (US2 scenarios 1–3; SC-007, NFR-005/006).
+- [X] T013 [US2] Implement `src/loopplane/recall/artifacts.py`: the `ArtifactReader` Protocol (`metadata(session_id, reference) -> ArtifactMeta | None`) and `artifact_recall(reader, *, limit=10)` (FR-020–FR-022).
+- [X] T014 [US2] Export `artifact_recall` and `ArtifactReader`; run `pytest tests/integration/test_recall_us2.py --basetemp=".pytmp"` → green.
 
 **Checkpoint**: US1 + US2 both work independently.
 
@@ -95,9 +95,9 @@ into recalled context.
 **Independent Test**: `memory_entry_recall(entries)` returns exactly the `select_entries(entries, query,
 limit)` result, adapted into entries, deterministically.
 
-- [ ] T015 [P] [US3] Write integration tests in `tests/integration/test_recall_us3.py` (MUST FAIL first): `memory_entry_recall(entries)` over a scripted `MemoryEntry` list returns entries corresponding exactly to `select_entries(entries, default_query(state), limit)`, in the same order, adapted (`origin="memory"`, `identifier=name`); identical inputs ⇒ identical result; no ranking of its own; the entry list and state are unmutated (US3 scenarios 1–2; SC-002, NFR-006).
-- [ ] T016 [US3] Implement `src/loopplane/recall/memory.py`: `memory_entry_recall(entries, *, query=default_query, limit=5)` calling the Phase-1 `select_entries` and adapting each result (FR-030–FR-032).
-- [ ] T017 [US3] Export `memory_entry_recall`; run `pytest tests/integration/test_recall_us3.py --basetemp=".pytmp"` → green.
+- [X] T015 [P] [US3] Write integration tests in `tests/integration/test_recall_us3.py` (MUST FAIL first): `memory_entry_recall(entries)` over a scripted `MemoryEntry` list returns entries corresponding exactly to `select_entries(entries, default_query(state), limit)`, in the same order, adapted (`origin="memory"`, `identifier=name`); identical inputs ⇒ identical result; no ranking of its own; the entry list and state are unmutated (US3 scenarios 1–2; SC-002, NFR-006).
+- [X] T016 [US3] Implement `src/loopplane/recall/memory.py`: `memory_entry_recall(entries, *, query=default_query, limit=5)` calling the Phase-1 `select_entries` and adapting each result (FR-030–FR-032).
+- [X] T017 [US3] Export `memory_entry_recall`; run `pytest tests/integration/test_recall_us3.py --basetemp=".pytmp"` → green.
 
 **Checkpoint**: US1–US3 each work independently.
 
@@ -111,9 +111,9 @@ and surfaces explicit truncation — proven across conversation + artifact + mem
 **Independent Test**: Two+ sources with overlapping identifiers and a budget smaller than their union ⇒ the
 injected block is de-duplicated by precedence, within budget, with the dropped count surfaced.
 
-- [ ] T018 [P] [US4] Write integration tests in `tests/integration/test_recall_us4.py` (MUST FAIL first): `assemble_recall` over `[conversation_recall(), artifact_recall(reader), memory_entry_recall(entries)]` with overlapping identifiers de-duplicates by source precedence (first occurrence kept; `identifier=None` always kept) and orders by source-then-within-source; a tight `RetrievalBudget` truncates order-stably with `RecallAssembly.dropped` surfaced; `build_recall_input`'s injected prompt is within budget; an empty union ⇒ base unchanged (US4 scenarios 1–3; SC-004, SC-009, FR-050–FR-053).
-- [ ] T019 [US4] Extend `src/loopplane/recall/injection.py`: add de-duplication by `RecalledEntry.identifier` in `assemble_recall` (highest-precedence occurrence kept; `None` never collapsed) ahead of `apply_budget`, keeping the dropped count surfaced on `RecallAssembly` (FR-051, FR-053) (depends on T010, T013, T016).
-- [ ] T020 [US4] Run `pytest tests/integration/test_recall_us4.py --basetemp=".pytmp"` → green (composition + budget).
+- [X] T018 [P] [US4] Write integration tests in `tests/integration/test_recall_us4.py` (MUST FAIL first): `assemble_recall` over `[conversation_recall(), artifact_recall(reader), memory_entry_recall(entries)]` with overlapping identifiers de-duplicates by source precedence (first occurrence kept; `identifier=None` always kept) and orders by source-then-within-source; a tight `RetrievalBudget` truncates order-stably with `RecallAssembly.dropped` surfaced; `build_recall_input`'s injected prompt is within budget; an empty union ⇒ base unchanged (US4 scenarios 1–3; SC-004, SC-009, FR-050–FR-053).
+- [X] T019 [US4] Extend `src/loopplane/recall/injection.py`: add de-duplication by `RecalledEntry.identifier` in `assemble_recall` (highest-precedence occurrence kept; `None` never collapsed) ahead of `apply_budget`, keeping the dropped count surfaced on `RecallAssembly` (FR-051, FR-053) (depends on T010, T013, T016).
+- [X] T020 [US4] Run `pytest tests/integration/test_recall_us4.py --basetemp=".pytmp"` → green (composition + budget).
 
 **Checkpoint**: Multi-source composition under an explicit budget is proven.
 
@@ -127,9 +127,9 @@ query derives deterministically from the Loop State.
 **Independent Test**: `knowledge_recall(InMemoryKnowledgeIndex([...]))` returns the matched entries within
 the bound; a raising index ⇒ empty recall + diagnostic.
 
-- [ ] T021 [P] [US5] Write integration tests in `tests/integration/test_recall_us5.py` (MUST FAIL first): `InMemoryKnowledgeIndex.lookup` returns a deterministic, `limit`-bounded match over seeded entries; `knowledge_recall(index)` derives the query from the state via `default_query` and adapts results (`origin="knowledge"`, `identifier`); a raising index ⇒ empty recall recorded in `skipped` (fail-safe); an empty/missing index ⇒ empty (US5 scenarios 1–2; SC-005, FR-040–FR-043, NFR-005).
-- [ ] T022 [US5] Implement `src/loopplane/recall/knowledge.py`: `KnowledgeEntry`, the `KnowledgeIndex` Protocol, `InMemoryKnowledgeIndex` (deterministic match, empty by default, no domain data), and `knowledge_recall(index, *, query=default_query, limit=5)` (FR-040–FR-043).
-- [ ] T023 [US5] Export the knowledge types; run `pytest tests/integration/test_recall_us5.py --basetemp=".pytmp"` → green.
+- [X] T021 [P] [US5] Write integration tests in `tests/integration/test_recall_us5.py` (MUST FAIL first): `InMemoryKnowledgeIndex.lookup` returns a deterministic, `limit`-bounded match over seeded entries; `knowledge_recall(index)` derives the query from the state via `default_query` and adapts results (`origin="knowledge"`, `identifier`); a raising index ⇒ empty recall recorded in `skipped` (fail-safe); an empty/missing index ⇒ empty (US5 scenarios 1–2; SC-005, FR-040–FR-043, NFR-005).
+- [X] T022 [US5] Implement `src/loopplane/recall/knowledge.py`: `KnowledgeEntry`, the `KnowledgeIndex` Protocol, `InMemoryKnowledgeIndex` (deterministic match, empty by default, no domain data), and `knowledge_recall(index, *, query=default_query, limit=5)` (FR-040–FR-043).
+- [X] T023 [US5] Export the knowledge types; run `pytest tests/integration/test_recall_us5.py --basetemp=".pytmp"` → green.
 
 **Checkpoint**: All user stories are independently functional.
 
@@ -137,12 +137,12 @@ the bound; a raising index ⇒ empty recall + diagnostic.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T024 [P] Write contract tests in `tests/contract/test_recall_boundary.py`: an import-boundary audit (every `src/loopplane/recall/*.py` imports only `loopplane.engineering` / `loopplane.memory` / `loopplane.artifacts` / `loopplane.recall` + stdlib, and references no `loopplane.host` / `loopplane.model` / `loopplane.controller` / `loopplane.gateway` / `loopplane.approval` / `scheduling` / `packs` / `review` token); the layer drives no run (no `run_loop` import/call); recall leaves a bound store and the `LoopState` unmutated; determinism (assemble twice ⇒ identical) (FR-060, FR-061, NFR-003, NFR-006, SC-002/003/008).
-- [ ] T025 [P] Extend `tests/contract/test_public_safety.py` with `PHASE7_TARGETS` (`src/loopplane/recall`, `examples/recall_quickstart.py`, `docs/memory-recall.md`, `specs/007-loopplane-memory-recall-knowledge`) and a `test_phase7_recall_files_are_public_safe` scan.
-- [ ] T026 [P] Create `examples/recall_quickstart.py`: a public-safe, credential-free runnable recall over a scripted `LoopState` + in-memory reader/index/entries, printing the `RecallAssembly` (preamble, kept entries, dropped count) and the injected prompt (per [quickstart.md](./quickstart.md)).
-- [ ] T027 [P] Create `docs/memory-recall.md`: a public-safe guide — sources → budget → injection → `InputSource`, the knowledge index, and the reserved extension points (FR-090–FR-095).
-- [ ] T028 Finalize `src/loopplane/recall/__init__.py` public `__all__`; run `ruff format` + `ruff check` + `mypy` (strict) → clean.
-- [ ] T029 Run the full suite `pytest --basetemp=".pytmp"` → green; run `python examples/recall_quickstart.py`; confirm the public-safety scan is green (SC-006); update the board status to **Verified**.
+- [X] T024 [P] Write contract tests in `tests/contract/test_recall_boundary.py`: an import-boundary audit (every `src/loopplane/recall/*.py` imports only `loopplane.engineering` / `loopplane.memory` / `loopplane.artifacts` / `loopplane.recall` + stdlib, and references no `loopplane.host` / `loopplane.model` / `loopplane.controller` / `loopplane.gateway` / `loopplane.approval` / `scheduling` / `packs` / `review` token); the layer drives no run (no `run_loop` import/call); recall leaves a bound store and the `LoopState` unmutated; determinism (assemble twice ⇒ identical) (FR-060, FR-061, NFR-003, NFR-006, SC-002/003/008).
+- [X] T025 [P] Extend `tests/contract/test_public_safety.py` with `PHASE7_TARGETS` (`src/loopplane/recall`, `examples/recall_quickstart.py`, `docs/memory-recall.md`, `specs/007-loopplane-memory-recall-knowledge`) and a `test_phase7_recall_files_are_public_safe` scan.
+- [X] T026 [P] Create `examples/recall_quickstart.py`: a public-safe, credential-free runnable recall over a scripted `LoopState` + in-memory reader/index/entries, printing the `RecallAssembly` (preamble, kept entries, dropped count) and the injected prompt (per [quickstart.md](./quickstart.md)).
+- [X] T027 [P] Create `docs/memory-recall.md`: a public-safe guide — sources → budget → injection → `InputSource`, the knowledge index, and the reserved extension points (FR-090–FR-095).
+- [X] T028 Finalize `src/loopplane/recall/__init__.py` public `__all__`; run `ruff format` + `ruff check` + `mypy` (strict) → clean.
+- [X] T029 Run the full suite `pytest --basetemp=".pytmp"` → green; run `python examples/recall_quickstart.py`; confirm the public-safety scan is green (SC-006); update the board status to **Verified**.
 
 ---
 

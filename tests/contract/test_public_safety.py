@@ -286,3 +286,41 @@ def test_phase6_review_files_are_public_safe() -> None:
                     violations.append(f"{relative}:{lineno}: {label}")
 
     assert not violations, "Phase-6 public-safety scan found:\n" + "\n".join(violations)
+
+
+# Phase-7 recall files are covered explicitly so they are scanned even before they
+# are committed (T025; SC-006, NFR-002).
+PHASE7_TARGETS = [
+    REPO_ROOT / "src" / "loopplane" / "recall",
+    REPO_ROOT / "examples" / "recall_quickstart.py",
+    REPO_ROOT / "docs" / "memory-recall.md",
+    REPO_ROOT / "specs" / "007-loopplane-memory-recall-knowledge",
+]
+
+
+def test_phase7_recall_files_are_public_safe() -> None:
+    compiled = {
+        label: re.compile(pattern) for label, pattern in BUILTIN_PATTERNS.items()
+    }
+
+    targets: list[Path] = []
+    for target in PHASE7_TARGETS:
+        if target.is_dir():
+            targets.extend(sorted(target.rglob("*.py")))
+            targets.extend(sorted(target.rglob("*.md")))
+        elif target.is_file():
+            targets.append(target)
+    assert targets, "expected Phase-7 recall files to scan"
+
+    violations: list[str] = []
+    for path in targets:
+        text = _read_text(path)
+        if text is None:
+            continue
+        relative = path.relative_to(REPO_ROOT)
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for label, regex in compiled.items():
+                if regex.search(line):
+                    violations.append(f"{relative}:{lineno}: {label}")
+
+    assert not violations, "Phase-7 public-safety scan found:\n" + "\n".join(violations)

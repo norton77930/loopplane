@@ -86,7 +86,7 @@ git history) — not invented.
 | **004-loopplane-scheduler-trigger-engine** | `specs/004-loopplane-scheduler-trigger-engine` | **Verified** | Turn trigger contracts into usable local scheduling and condition-watch behavior: local scheduler, interval trigger, condition trigger, manual trigger registry, trigger state, missed-run policy. No distributed queue yet unless explicitly approved. | 003 | None — implemented & verified on `main` (`loopplane.scheduling`). |
 | **005-loopplane-validator-evaluator-packs** | `specs/005-loopplane-validator-evaluator-packs` | **Verified** | Reusable validators and evaluators: rule-based validators, schema validators, artifact validators, scoring evaluators, threshold gates, quality labels, validator/evaluator examples. | 003 | None — implemented & verified on `main` (`loopplane.packs`). |
 | **006-loopplane-human-review-workflows** | `specs/006-loopplane-human-review-workflows` | **Verified** | Extend approval boundaries into human review workflows: review request, user question event, approval memory, review decision, pause/resume, human gate loop. No UI unless separately specified. | 003 | None — implemented & verified on `main` (`loopplane.review`). |
-| **007-loopplane-memory-recall-knowledge** | _(not created)_ | **Not started** | Recall and knowledge indexing as loop-aware context sources: conversation recall, artifact recall, knowledge index contract, memory injection policy, retrieval budget, loop-aware memory usage. | 001, 003 | `/speckit.specify`. |
+| **007-loopplane-memory-recall-knowledge** | `specs/007-loopplane-memory-recall-knowledge` | **Verified** | Recall and knowledge indexing as loop-aware context sources: conversation recall, artifact recall, knowledge index contract, memory injection policy, retrieval budget, loop-aware memory usage. | 001, 003 | None — implemented & verified on `main` (`loopplane.recall`). |
 | **008-loopplane-tool-gateway-advanced** | _(not created)_ | **Not started** | Expand the tool ecosystem beyond the foundation: MCP tool discovery, remote tool registry, plugin bundle, tool package metadata, tool capability manifest, tool versioning, tool diagnostics. | 001 | `/speckit.specify`. |
 | **009-loopplane-sandbox-policy-governance** | _(not created)_ | **Not started** | Stronger execution safety and governance: sandbox execution, path policy, permission policy, budget policy, quota policy, cost governance, safe failure behavior. | 001 | `/speckit.specify`. |
 | **010-loopplane-observability-debug-console** | _(not created)_ | **Not started** | Make runs and loops inspectable: trace viewer data contract, event replay, debug timeline, run diagnostics, loop diagnostics, metadata-only observability. No full frontend unless separately specified. | 001, 003 | `/speckit.specify`. |
@@ -144,7 +144,16 @@ git history) — not invented.
   corrected the `resume_review` contract (no `on_approval`: `OnApproval` is not on
   the Phase-3 public surface this layer may name). ruff + mypy(strict) clean; full
   suite **356 passed** → **Verified**.
-- **007–014** — No `specs/` directory and no source → **Not started**.
+- **007** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; source
+  `src/loopplane/recall/` (8 modules) + `examples/recall_quickstart.py` +
+  `docs/memory-recall.md`. Tasks **29/29 complete**; 44 recall tests pass (core unit
+  + US1–US5 integration + import-boundary + non-mutation + determinism + public-safety);
+  the layer composes only the public Phase-1 (`memory`, `artifacts`) and Phase-3
+  (`engineering`) surfaces, injects through the Phase-3 `InputSource`, drives no run, and
+  mutates nothing. A `/speckit.analyze` pass (0 critical/high) realigned the plan phase
+  table with tasks. ruff + mypy(strict) clean; full suite **400 passed** → **Verified**.
+- **008–014** — No `specs/` directory and no source → **Not started**.
 
 ---
 
@@ -152,11 +161,11 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **007-loopplane-memory-recall-knowledge** |
-| Active feature directory | _(not created — `/speckit.specify` will create `specs/007-loopplane-memory-recall-knowledge`)_ |
+| Active unit | **008-loopplane-tool-gateway-advanced** |
+| Active feature directory | _(not created — `/speckit.specify` will create `specs/008-loopplane-tool-gateway-advanced`)_ |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main`, no dedicated feature branch required (see §7 Branch Strategy) |
-| Current Spec Kit step | **Specify** (006 is **Verified**; 007 has no `specs/` directory yet) |
-| Depends on | 001, 003 |
+| Current Spec Kit step | **Specify** (007 is **Verified**; 008 has no `specs/` directory yet) |
+| Depends on | 001 |
 | Next command | **`/speckit.specify`** |
 | Stop condition status | None active. Branch strategy is **main-only** — a missing feature branch is *not* a stop condition (see §7 / §9). |
 
