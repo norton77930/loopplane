@@ -12,6 +12,7 @@ contracts/toolkit-boundary.md).
 """
 
 from loopplane.toolkit.catalog import DiscoveredTool, ToolCatalog, discover
+from loopplane.toolkit.manifest import CapabilityManifest, build_manifest
 from loopplane.toolkit.plugin import (
     AdapterRegistrar,
     ToolPackage,
@@ -21,10 +22,12 @@ from loopplane.toolkit.plugin import (
 
 __all__ = [
     "AdapterRegistrar",
+    "CapabilityManifest",
     "DiscoveredTool",
     "ToolCatalog",
     "ToolPackage",
     "ToolPlugin",
+    "build_manifest",
     "discover",
     "register_plugin",
 ]
