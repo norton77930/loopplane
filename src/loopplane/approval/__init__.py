@@ -2,7 +2,7 @@
 (contracts/approval.md).
 """
 
-from loopplane.approval.approval import HumanApproval
+from loopplane.approval.approval import HumanApproval, SkillConstraint
 from loopplane.approval.decisions import (
     PolicyAllow,
     PolicyDecider,
@@ -33,5 +33,6 @@ __all__ = [
     "ResolutionSource",
     "RuleEffect",
     "RuleScope",
+    "SkillConstraint",
     "resolve_rules",
 ]

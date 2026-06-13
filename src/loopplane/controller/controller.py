@@ -10,7 +10,7 @@ stream. Without stores, sessions are purely in-memory (the US1/US2 posture).
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,8 +47,11 @@ from loopplane.events.envelope import (
 )
 from loopplane.events.sequencer import EventSequencer
 from loopplane.gateway.gateway import ToolGateway
+from loopplane.loop.assembly import AugmentationProvider, PromptAssembler
 from loopplane.loop.history import HistoryEntry, HistoryHook, SessionHistory
 from loopplane.loop.loop import AgentLoop
+from loopplane.memory.provider import MemoryAugmentation
+from loopplane.memory.store import MemoryStore
 from loopplane.model.boundary import ModelBoundary
 from loopplane.model.content import (
     ContentBlock,
@@ -56,6 +59,8 @@ from loopplane.model.content import (
     ToolCallBlock,
     ToolResultBlock,
 )
+from loopplane.skills.advertiser import DEFAULT_PROMPT_BUDGET_CHARS, SkillAdvertiser
+from loopplane.skills.loader import LoadedSkill
 
 SessionState = Literal["created", "active", "suspended", "terminated"]
 
@@ -92,6 +97,11 @@ class RuntimeController:
         checkpoint_store: CheckpointStore | None = None,
         artifact_store: ArtifactStore | None = None,
         replacement_budget_bytes: int = DEFAULT_REPLACEMENT_BUDGET_BYTES,
+        memory_store: MemoryStore | None = None,
+        skills: Mapping[str, LoadedSkill] | None = None,
+        skill_prompt_budget_chars: int = DEFAULT_PROMPT_BUDGET_CHARS,
+        enable_assembly: bool | None = None,
+        assembly_keep_last: int = 4,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -99,6 +109,17 @@ class RuntimeController:
         self._checkpoint = checkpoint_store
         self._artifacts = artifact_store
         self._replacement_budget = replacement_budget_bytes
+        self._memory_store = memory_store
+        self._skills = dict(skills) if skills else {}
+        self._skill_prompt_budget = skill_prompt_budget_chars
+        # Assembly is gated (NFR-002): off unless memory or skills are
+        # configured, or the host opts in explicitly.
+        self._assembly_enabled = (
+            enable_assembly
+            if enable_assembly is not None
+            else (memory_store is not None or bool(skills))
+        )
+        self._assembly_keep_last = assembly_keep_last
         self._sessions: dict[str, _Session] = {}
 
     def create_session(
@@ -199,6 +220,23 @@ class RuntimeController:
             sink = RecordingSink(self._event_sink, recorder)
             hook = self._make_history_hook(recorder, ledger)
 
+        assembler: PromptAssembler | None = None
+        if self._assembly_enabled:
+            providers: list[AugmentationProvider] = []
+            if self._memory_store is not None:
+                providers.append(MemoryAugmentation(self._memory_store))
+            if self._skills:
+                providers.append(
+                    SkillAdvertiser(
+                        self._skills, prompt_budget_chars=self._skill_prompt_budget
+                    )
+                )
+            assembler = PromptAssembler(
+                providers=providers,
+                replacement_previews=ledger.previews if ledger is not None else None,
+                keep_last=self._assembly_keep_last,
+            )
+
         sequencer = EventSequencer()
         emitter = EventEmitter(session_id=session_id, sequencer=sequencer, sink=sink)
         history = SessionHistory(on_append=hook)
@@ -221,6 +259,7 @@ class RuntimeController:
                 gateway=self._gateway,
                 emitter=emitter,
                 history=history,
+                assembler=assembler,
             ),
             broker=InteractionBroker(emitter=emitter),
             approval_memory={},

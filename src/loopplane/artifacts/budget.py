@@ -40,6 +40,12 @@ class ReplacementLedger:
     def decisions(self) -> list[ReplacementDecision]:
         return list(self._decisions)
 
+    def previews(self) -> dict[str, str]:
+        """The replaced-call preview map prompt assembly applies."""
+        return {
+            decision.replaced_call_id: decision.preview for decision in self._decisions
+        }
+
     def is_replaced(self, call_id: str) -> bool:
         return call_id in self._replaced
 

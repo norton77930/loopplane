@@ -16,6 +16,7 @@ from loopplane.context import RunContext
 from loopplane.errors import ErrorCategory
 from loopplane.events.envelope import Question
 from loopplane.gateway.spi import AdapterOutput, ErrorOutput
+from loopplane.memory.store import MemoryEntry, MemoryStore
 from loopplane.model.boundary import ToolDescriptor
 from loopplane.model.content import TextBlock
 
@@ -108,17 +109,38 @@ _DESCRIPTORS = [
 ]
 
 
+_MEMORY_WRITE_DESCRIPTOR = ToolDescriptor(
+    name="memory_write",
+    description="Create or update a durable memory entry.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "type": {"type": "string"},
+            "name": {"type": "string"},
+            "description": {"type": "string"},
+            "body": {"type": "string"},
+        },
+        "required": ["name", "description", "body"],
+        "additionalProperties": False,
+    },
+)
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
 class InternalToolAdapter:
-    def __init__(self) -> None:
+    def __init__(self, *, memory_store: MemoryStore | None = None) -> None:
         # (session_id, resolved path) -> content digest at the last read.
         self._reads: dict[tuple[str, str], str] = {}
+        self._memory = memory_store
 
     def describe(self) -> Sequence[ToolDescriptor]:
-        return list(_DESCRIPTORS)
+        descriptors = list(_DESCRIPTORS)
+        if self._memory is not None:
+            descriptors.append(_MEMORY_WRITE_DESCRIPTOR)
+        return descriptors
 
     async def invoke(
         self, name: str, call_input: dict[str, object], context: RunContext
@@ -129,6 +151,7 @@ class InternalToolAdapter:
             "search_files": self._search_files,
             "run_command": self._run_command,
             "ask_user": self._ask_user,
+            "memory_write": self._memory_write,
         }
         async for output in handlers[name](call_input, context):
             yield output
@@ -247,6 +270,24 @@ class InternalToolAdapter:
                     f"{stderr.strip() or '(no stderr)'}"
                 )
             )
+
+    async def _memory_write(
+        self, call_input: dict[str, object], context: RunContext
+    ) -> AsyncIterator[AdapterOutput]:
+        """The agent-writable memory path (FR-074): there is no privileged
+        write — every update traverses the full Gateway pipeline.
+        """
+        if self._memory is None:
+            yield ErrorOutput(message="memory is not enabled for this runtime")
+            return
+        entry = MemoryEntry(
+            type=str(call_input.get("type", "reference")),
+            name=str(call_input["name"]),
+            description=str(call_input["description"]),
+            body=str(call_input["body"]),
+        )
+        self._memory.write(entry)
+        yield TextBlock(text=f"memory entry {entry.name!r} saved")
 
     async def _ask_user(
         self, call_input: dict[str, object], context: RunContext

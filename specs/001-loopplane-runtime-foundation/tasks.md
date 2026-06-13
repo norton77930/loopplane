@@ -223,25 +223,25 @@ prompt assembly, advertisement behavior, and profile enforcement.
 
 ### Tests for User Story 4 (write first; confirm they fail)
 
-- [ ] T039 [P] [US4] Contract tests for memory in `tests/contract/test_memory.py`: scan
+- [X] T039 [P] [US4] Contract tests for memory in `tests/contract/test_memory.py`: scan
       resilience, deterministic selection with fallback, write-tool semantics, verbatim
       durable history (contracts/memory.md; FR-070–FR-074)
-- [ ] T040 [P] [US4] Unit tests for skill loading, merge precedence, variable substitution,
+- [X] T040 [P] [US4] Unit tests for skill loading, merge precedence, variable substitution,
       and profile enforcement in `tests/unit/test_skills.py` (FR-050–FR-055)
-- [ ] T041 [P] [US4] Integration tests for acceptance 4.1–4.4 plus compaction edge cases
+- [X] T041 [P] [US4] Integration tests for acceptance 4.1–4.4 plus compaction edge cases
       (no call/result split, single overflow retry, post-compaction re-establishment) in
       `tests/integration/test_us4_memory_skills.py` (FR-008, FR-053)
 
 ### Implementation for User Story 4
 
-- [ ] T042 [US4] Implement the prompt assembler — assembly-time augmentation with pristine
+- [X] T042 [US4] Implement the prompt assembler — assembly-time augmentation with pristine
       durable history — in `src/loopplane/loop/assembly.py` (FR-073; plan D2)
-- [ ] T043 [US4] Implement Memory — store, scan, deterministic selection, injection, and the
+- [X] T043 [US4] Implement Memory — store, scan, deterministic selection, injection, and the
       Gateway-governed write tool — in `src/loopplane/memory/` (FR-070–FR-074; research A5)
-- [ ] T044 [US4] Implement Skills — loading/validation, deterministic merge, incremental
+- [X] T044 [US4] Implement Skills — loading/validation, deterministic merge, incremental
       advertisement within budget, closed-list substitution, execution-profile enforcement
       via Gateway/approval — in `src/loopplane/skills/` (FR-050–FR-055; research A1)
-- [ ] T045 [US4] Implement history compaction — summary marker, never splitting a call from
+- [X] T045 [US4] Implement history compaction — summary marker, never splitting a call from
       its result, exactly one overflow retry, re-establishment of needed augmentations — in
       `src/loopplane/loop/` (FR-008, FR-053; research A6)
 

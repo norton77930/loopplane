@@ -49,6 +49,14 @@ class SessionHistory:
         """Adopt rebuilt entries on resume without re-recording them."""
         self._entries = list(entries)
 
+    def replace_prefix(self, count: int, entry: HistoryEntry) -> None:
+        """Compaction support (FR-008): replace the first `count` in-memory
+        entries with one summary entry. The durable stream is append-only
+        and keeps the originals; the recording hook is deliberately not
+        invoked.
+        """
+        self._entries[:count] = [entry]
+
     def snapshot(self) -> tuple[HistoryEntry, ...]:
         """A point-in-time view that cannot mutate internal state (FR-006)."""
         return tuple(self._entries)
