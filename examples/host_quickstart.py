@@ -58,9 +58,7 @@ def _text_config() -> RuntimeConfig:
     return RuntimeConfig(
         model=ScriptedModel(
             script=[
-                ScriptedTurn(
-                    increments=[TextIncrement(text="Hello from LoopPlane.")]
-                )
+                ScriptedTurn(increments=[TextIncrement(text="Hello from LoopPlane.")])
             ],
             context_capacity=100_000,
         )

@@ -222,9 +222,7 @@ class Session:
 
     async def submit(self, prompt: Prompt) -> RunOutcome:
         await self._controller.drive(self._session_id, _coerce_blocks(prompt))
-        self._outcome = _build_outcome(
-            self._controller, self._session_id, self._sink
-        )
+        self._outcome = _build_outcome(self._controller, self._session_id, self._sink)
         return self._outcome
 
     def cancel(self) -> None:
