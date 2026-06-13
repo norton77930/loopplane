@@ -20,6 +20,18 @@ from loopplane.host import LoopPlaneHost, RunOutcome, RuntimeConfig
 from loopplane.model import ScriptedModel, ScriptedTurn, TextIncrement
 
 
+def scripted_host(*texts: str, working_scope: Path | None = None) -> LoopPlaneHost:
+    """A single ``LoopPlaneHost`` over a scripted model with one text turn per
+    argument. The model cursor advances across iterations, so script one turn
+    per expected Agent Run."""
+
+    model = ScriptedModel(
+        script=[ScriptedTurn(increments=[TextIncrement(text=t)]) for t in texts],
+        context_capacity=100_000,
+    )
+    return LoopPlaneHost(RuntimeConfig(model=model), working_scope=working_scope)
+
+
 def scripted_host_factory(
     *texts: str, working_scope: Path | None = None
 ) -> Callable[[], LoopPlaneHost]:
@@ -28,11 +40,7 @@ def scripted_host_factory(
     an unexhausted model, which the determinism test relies on (US1.3)."""
 
     def build() -> LoopPlaneHost:
-        model = ScriptedModel(
-            script=[ScriptedTurn(increments=[TextIncrement(text=t)]) for t in texts],
-            context_capacity=100_000,
-        )
-        return LoopPlaneHost(RuntimeConfig(model=model), working_scope=working_scope)
+        return scripted_host(*texts, working_scope=working_scope)
 
     return build
 

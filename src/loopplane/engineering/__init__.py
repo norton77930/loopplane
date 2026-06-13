@@ -11,6 +11,14 @@ through ``loopplane.host``; the layer never reaches into Phase-1 components
 (FR-080–FR-083, FR-090).
 """
 
+from loopplane.engineering.controller import (
+    LoopController,
+    LoopOutcome,
+    LoopTerminal,
+    ReviewDecision,
+    ReviewResolver,
+    run_loop,
+)
 from loopplane.engineering.definition import (
     HostRuntimeProfile,
     InputSource,
@@ -91,12 +99,15 @@ __all__ = [
     "HostRuntimeProfile",
     "InputSource",
     "IntervalTrigger",
+    "LoopController",
     "LoopDefinition",
     "LoopDefinitionError",
     "LoopEvent",
     "LoopEventSink",
     "LoopEventType",
+    "LoopOutcome",
     "LoopState",
+    "LoopTerminal",
     "ManualTrigger",
     "NextAction",
     "ObservationPolicy",
@@ -105,6 +116,8 @@ __all__ = [
     "RepairInstructionSource",
     "RepairPolicy",
     "RetryPolicy",
+    "ReviewDecision",
+    "ReviewResolver",
     "RunReference",
     "StaticInput",
     "StopCondition",
@@ -117,6 +130,7 @@ __all__ = [
     "decide",
     "max_iterations",
     "reconstruct_state",
+    "run_loop",
     "stop_on_pass",
     "stop_when_score_at_least",
     "validate_definition",

@@ -77,11 +77,11 @@ single-iteration stop; trigger manually; assert exactly one `host.run`, Loop Sta
 `session_id` + artifacts, and events `loop_started → loop_iteration_started → loop_iteration_completed →
 validation_completed → loop_completed` in order; run twice for identical streams.
 
-- [ ] T015 [P] [US1] Write integration tests in `tests/integration/test_loop_us1.py` (MUST FAIL first): one-Agent-Run-via-`host.run`, Loop State references `session_id`/artifacts, ordered Loop Events, determinism (twice ⇒ identical), and a boundary audit asserting no Phase-1 internal was called (US1 scenarios 1–4; SC-001, SC-002).
-- [ ] T016 [US1] Implement `src/loopplane/engineering/controller.py`: `LoopController` + `run_loop(definition, *, on_loop_event=None, on_approval=None)` single-iteration path — build the host from `host_profile`, call `await host.run(prompt, on_event, on_approval=...)`, capture the `RunOutcome` as a `RunReference`, apply the validator, evaluate `stop_on_pass`, and update in-process `LoopState` (depends on Phase 2) (FR-010–FR-015, FR-080–FR-083).
-- [ ] T017 [US1] Add `LoopOutcome` and observation gating to `controller.py`: emit `loop_started`/`loop_iteration_started`/`loop_iteration_completed`/`validation_completed`/`loop_completed` only when `observation_policy.emit_loop_events` is on, with identical decisions when off (FR-009, NFR-005, SC-009).
-- [ ] T018 [US1] Export `run_loop`, `LoopController`, `LoopOutcome` from `src/loopplane/engineering/__init__.py`.
-- [ ] T019 [US1] Run `pytest tests/integration/test_loop_us1.py` → green (incl. boundary audit + determinism).
+- [X] T015 [P] [US1] Write integration tests in `tests/integration/test_loop_us1.py` (MUST FAIL first): one-Agent-Run-via-`host.run`, Loop State references `session_id`/artifacts, ordered Loop Events, determinism (twice ⇒ identical), and a boundary audit asserting no Phase-1 internal was called (US1 scenarios 1–4; SC-001, SC-002).
+- [X] T016 [US1] Implement `src/loopplane/engineering/controller.py`: `LoopController` + `run_loop(definition, *, on_loop_event=None, on_approval=None)` single-iteration path — build the host from `host_profile`, call `await host.run(prompt, on_event, on_approval=...)`, capture the `RunOutcome` as a `RunReference`, apply the validator, evaluate `stop_on_pass`, and update in-process `LoopState` (depends on Phase 2) (FR-010–FR-015, FR-080–FR-083).
+- [X] T017 [US1] Add `LoopOutcome` and observation gating to `controller.py`: emit `loop_started`/`loop_iteration_started`/`loop_iteration_completed`/`validation_completed`/`loop_completed` only when `observation_policy.emit_loop_events` is on, with identical decisions when off (FR-009, NFR-005, SC-009).
+- [X] T018 [US1] Export `run_loop`, `LoopController`, `LoopOutcome` from `src/loopplane/engineering/__init__.py`.
+- [X] T019 [US1] Run `pytest tests/integration/test_loop_us1.py` → green (incl. boundary audit + determinism).
 
 **Checkpoint**: MVP — a single-iteration loop runs end-to-end through the Host Interface.
 
