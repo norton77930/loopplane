@@ -66,12 +66,30 @@ class MCPToolAdapter:
 
     async def connect(self) -> None:
         for config in self._configs:
+            # Each server owns its own exit stack so a failed connect releases
+            # that server's transport/session immediately, rather than leaving
+            # half-open resources on the shared stack until shutdown (FR-043).
+            server_stack = AsyncExitStack()
             try:
-                await self._connect_one(config)
+                await self._connect_one(config, server_stack)
             except Exception as exc:  # isolation per server (FR-043)
+                await self._safe_aclose(server_stack)
                 self._failures[config.name] = f"{type(exc).__name__}: {exc}"
+            else:
+                await self._stack.enter_async_context(server_stack)
 
-    async def _connect_one(self, config: MCPServerConfig) -> None:
+    @staticmethod
+    async def _safe_aclose(stack: AsyncExitStack) -> None:
+        try:
+            await stack.aclose()
+        except Exception:
+            # Cleanup of a failed server must not mask the original failure
+            # or abort connecting the remaining servers.
+            pass
+
+    async def _connect_one(
+        self, config: MCPServerConfig, server_stack: AsyncExitStack
+    ) -> None:
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
 
@@ -80,18 +98,18 @@ class MCPToolAdapter:
             parameters = StdioServerParameters(
                 command=config.command, args=list(config.args)
             )
-            read, write = await self._stack.enter_async_context(
+            read, write = await server_stack.enter_async_context(
                 stdio_client(parameters)
             )
         else:
             from mcp.client.streamable_http import streamablehttp_client
 
             assert config.url is not None
-            read, write, _ = await self._stack.enter_async_context(
+            read, write, _ = await server_stack.enter_async_context(
                 streamablehttp_client(config.url)
             )
 
-        session = await self._stack.enter_async_context(ClientSession(read, write))
+        session = await server_stack.enter_async_context(ClientSession(read, write))
         # The timeout may only wrap plain awaits: wrapping the context
         # entries above would interleave cancel scopes across the exit stack.
         with anyio.fail_after(_CONNECT_TIMEOUT_SECONDS):
@@ -128,24 +146,27 @@ class MCPToolAdapter:
             )
             return
 
-        texts: list[str] = []
+        blocks: list[AdapterOutput] = []
         for item in result.content:
             text = getattr(item, "text", None)
             if isinstance(text, str):
-                texts.append(text)
+                blocks.append(TextBlock(text=text))
                 continue
             data = getattr(item, "data", None)
             mime_type = getattr(item, "mimeType", None)
             if isinstance(data, str) and isinstance(mime_type, str):
-                yield ImageBlock(media=data, format=mime_type)
+                blocks.append(ImageBlock(media=data, format=mime_type))
 
         if result.isError:
-            yield ErrorOutput(
-                message="; ".join(texts) or "external tool reported an error"
+            message = "; ".join(
+                block.text for block in blocks if isinstance(block, TextBlock)
             )
+            yield ErrorOutput(message=message or "external tool reported an error")
             return
-        for text in texts:
-            yield TextBlock(text=text)
+        # Preserve the server's original block order (text and image
+        # interleaved as returned).
+        for block in blocks:
+            yield block
 
     async def shutdown(self) -> None:
         await self._stack.aclose()

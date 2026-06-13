@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TypeGuard
 
 from loopplane.checkpoint.records import (
     AssistantMessageRecord,
@@ -19,8 +18,8 @@ from loopplane.checkpoint.records import (
     UserInputRecord,
 )
 from loopplane.errors import ErrorCategory, NormalizedError
-from loopplane.loop.history import HistoryEntry
-from loopplane.model.content import ContentBlock, ToolCallBlock, ToolResultBlock
+from loopplane.loop.history import HistoryEntry, is_tool_results_entry
+from loopplane.model.content import ToolCallBlock, ToolResultBlock
 
 
 @dataclass
@@ -30,16 +29,6 @@ class RebuildResult:
     label: str | None = None
     created_at: datetime | None = None
     repairs: list[str] = field(default_factory=list)
-
-
-def _is_results_entry(entry: HistoryEntry) -> bool:
-    return entry.role == "user" and len(entry.blocks) > 0 and _all_results(entry.blocks)
-
-
-def _all_results(
-    blocks: tuple[ContentBlock, ...],
-) -> TypeGuard[tuple[ToolResultBlock, ...]]:
-    return all(isinstance(block, ToolResultBlock) for block in blocks)
 
 
 def rebuild_session(records: list[CheckpointRecord]) -> RebuildResult:
@@ -79,7 +68,7 @@ def rebuild_session(records: list[CheckpointRecord]) -> RebuildResult:
             )
             for call_id in pending_calls
         )
-        if entries and _is_results_entry(entries[-1]):
+        if entries and is_tool_results_entry(entries[-1]):
             merged = entries[-1].blocks + synthetic
             entries[-1] = HistoryEntry(
                 role="user", blocks=merged, recorded_at=entries[-1].recorded_at
@@ -131,7 +120,7 @@ def rebuild_session(records: list[CheckpointRecord]) -> RebuildResult:
                 and not assistant_in_run
                 and len(entries) > run_start
                 and entries[-1].role == "user"
-                and not _is_results_entry(entries[-1])
+                and not is_tool_results_entry(entries[-1])
             ):
                 # FR-007: a cancelled run that produced no assistant response
                 # must not strand its triggering input.

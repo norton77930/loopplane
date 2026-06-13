@@ -9,6 +9,7 @@ and replayed events are never re-observed.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from opentelemetry import metrics as otel_metrics
@@ -42,8 +43,10 @@ class ObservabilitySink:
         *,
         tracer_provider: otel_trace.TracerProvider | None = None,
         meter_provider: otel_metrics.MeterProvider | None = None,
+        clock: Callable[[], int] = time.time_ns,
     ) -> None:
         self._inner = inner
+        self._clock = clock
         tracer_provider = tracer_provider or otel_trace.get_tracer_provider()
         meter_provider = meter_provider or otel_metrics.get_meter_provider()
         self._tracer = tracer_provider.get_tracer("loopplane")
@@ -66,7 +69,7 @@ class ObservabilitySink:
         if event.replay:
             return
         state = self._sessions.setdefault(event.session_id, _SessionTrace())
-        now_ns = time.time_ns()
+        now_ns = self._clock()
 
         if isinstance(event, UserInputEvent):
             if state.run_span is None:
@@ -75,8 +78,10 @@ class ObservabilitySink:
                 )
                 state.turn_started_ns = now_ns
         elif isinstance(event, TurnCompletedEvent):
-            self._close_turn(state, now_ns)
+            # Read the turn's start before _close_turn resets it to now, so
+            # the turn and model-call spans carry a real duration (FR-101).
             started = state.turn_started_ns or now_ns
+            self._close_turn(state, now_ns)
             turn = self._tracer.start_span(
                 "loopplane.turn",
                 context=(

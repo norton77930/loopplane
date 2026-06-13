@@ -48,7 +48,12 @@ from loopplane.events.envelope import (
 from loopplane.events.sequencer import EventSequencer
 from loopplane.gateway.gateway import ToolGateway
 from loopplane.loop.assembly import AugmentationProvider, PromptAssembler
-from loopplane.loop.history import HistoryEntry, HistoryHook, SessionHistory
+from loopplane.loop.history import (
+    HistoryEntry,
+    HistoryHook,
+    SessionHistory,
+    is_tool_results_entry,
+)
 from loopplane.loop.loop import AgentLoop
 from loopplane.memory.provider import MemoryAugmentation
 from loopplane.memory.store import MemoryStore
@@ -272,14 +277,11 @@ class RuntimeController:
     ) -> HistoryHook:
         async def hook(entry: HistoryEntry) -> None:
             await recorder.record_entry(entry)
-            if ledger is None or entry.role != "user":
+            if ledger is None or not is_tool_results_entry(entry):
                 return
-            results = [
-                block for block in entry.blocks if isinstance(block, ToolResultBlock)
-            ]
-            if not results or len(results) != len(entry.blocks):
-                return
-            for block in results:
+            for block in entry.blocks:
+                if not isinstance(block, ToolResultBlock):
+                    continue
                 for decision in await ledger.track(block.call_id, list(block.outputs)):
                     await recorder.record_replacement(
                         artifact_reference=decision.artifact_reference,
@@ -326,11 +328,15 @@ class RuntimeController:
         """
         session = self._require(session_id)
         session.attached = True
+        # Allocate the bracket's opening sequence before the body so emitted
+        # sequences stay monotonic in delivery order (FR-015 / envelope).
+        started_sequence = session.sequencer.next_sequence()
         body = self._replay_events(session)
+        completed_sequence = session.sequencer.next_sequence()
         await session.sink(
             ReplayStartedEvent(
                 session_id=session_id,
-                sequence=session.sequencer.next_sequence(),
+                sequence=started_sequence,
                 occurred_at=datetime.now(UTC),
                 replay=True,
                 payload=ReplayStartedPayload(count=len(body)),
@@ -341,7 +347,7 @@ class RuntimeController:
         await session.sink(
             ReplayCompletedEvent(
                 session_id=session_id,
-                sequence=session.sequencer.next_sequence(),
+                sequence=completed_sequence,
                 occurred_at=datetime.now(UTC),
                 replay=True,
                 payload=ReplayCompletedPayload(count=len(body)),

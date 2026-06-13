@@ -85,10 +85,12 @@ class ToolGateway:
         self,
         *,
         decide: PolicyDecider | None = None,
-        call_timeout_seconds: float | None = DEFAULT_CALL_TIMEOUT_SECONDS,
+        call_timeout_seconds: float = DEFAULT_CALL_TIMEOUT_SECONDS,
         output_limit_bytes: int = DEFAULT_OUTPUT_LIMIT_BYTES,
         artifact_handoff: ArtifactHandoff | None = None,
     ) -> None:
+        # The per-call time limit is always enforced; pass a large value for
+        # an effectively unbounded call rather than disabling it outright.
         self._registry: dict[str, _RegisteredTool] = {}
         self._decide: PolicyDecider = decide if decide is not None else allow_all
         self._call_timeout_seconds = call_timeout_seconds

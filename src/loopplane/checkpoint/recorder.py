@@ -28,7 +28,7 @@ from loopplane.events.envelope import (
     RuntimeEvent,
     TerminationReason,
 )
-from loopplane.loop.history import HistoryEntry
+from loopplane.loop.history import HistoryEntry, is_tool_results_entry
 from loopplane.model.content import ToolResultBlock
 
 
@@ -85,11 +85,10 @@ class SessionRecorder:
                 )
             )
             return
-        results = [
-            block for block in entry.blocks if isinstance(block, ToolResultBlock)
-        ]
-        if results and len(results) == len(entry.blocks):
-            for block in results:
+        if is_tool_results_entry(entry):
+            for block in entry.blocks:
+                if not isinstance(block, ToolResultBlock):
+                    continue
                 await self._store.append(
                     ToolResultRecord(
                         session_id=self._session_id,

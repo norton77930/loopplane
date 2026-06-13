@@ -35,17 +35,19 @@ def merge_layers(
     """Merge configuration layers ordered broadest first; later (more
     specific) layers override by server name. Returns the effective configs
     and the problems found (one per disabled entry).
+
+    A malformed entry disables only itself: it is reported and skipped, and a
+    valid same-named definition from a broader layer is left in place rather
+    than being discarded.
     """
-    effective: dict[str, MCPServerConfig | None] = {}
+    effective: dict[str, MCPServerConfig] = {}
     problems: list[str] = []
     for layer in layers:
         for name, raw in layer.items():
             try:
                 effective[name] = MCPServerConfig(name=name, **dict(raw))
             except (ValidationError, TypeError) as exc:
-                effective[name] = None
                 problems.append(
-                    f"server entry {name!r} is malformed and disabled: {exc}"
+                    f"server entry {name!r} is malformed and skipped: {exc}"
                 )
-    configs = [config for config in effective.values() if config is not None]
-    return configs, problems
+    return list(effective.values()), problems

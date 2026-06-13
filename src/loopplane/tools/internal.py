@@ -130,6 +130,10 @@ def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+class _PathOutsideScopeError(ValueError):
+    """The requested path resolves outside the run's working scope."""
+
+
 class InternalToolAdapter:
     def __init__(self, *, memory_store: MemoryStore | None = None) -> None:
         # (session_id, resolved path) -> content digest at the last read.
@@ -160,16 +164,28 @@ class InternalToolAdapter:
         self._reads.clear()
 
     def _resolve(self, context: RunContext, raw: str) -> Path:
-        path = Path(raw)
-        if not path.is_absolute():
-            path = context.working_scope / path
-        return path.resolve()
+        """Resolve a tool-supplied path, confined to the run's working scope.
+
+        Relative paths are joined to the scope; absolute paths and `..`
+        escapes that land outside the scope are rejected, so the baseline
+        file tools cannot read or write arbitrary locations on the host.
+        """
+        scope = context.working_scope.resolve()
+        candidate = Path(raw)
+        target = (candidate if candidate.is_absolute() else scope / candidate).resolve()
+        if not target.is_relative_to(scope):
+            raise _PathOutsideScopeError(f"{raw} resolves outside the working scope")
+        return target
 
     async def _read_file(
         self, call_input: dict[str, object], context: RunContext
     ) -> AsyncIterator[AdapterOutput]:
         raw = str(call_input["path"])
-        target = self._resolve(context, raw)
+        try:
+            target = self._resolve(context, raw)
+        except _PathOutsideScopeError as exc:
+            yield ErrorOutput(category=ErrorCategory.VALIDATION, message=str(exc))
+            return
         try:
             data = target.read_bytes()
         except OSError as exc:
@@ -183,7 +199,11 @@ class InternalToolAdapter:
     ) -> AsyncIterator[AdapterOutput]:
         raw = str(call_input["path"])
         content = str(call_input["content"])
-        target = self._resolve(context, raw)
+        try:
+            target = self._resolve(context, raw)
+        except _PathOutsideScopeError as exc:
+            yield ErrorOutput(category=ErrorCategory.VALIDATION, message=str(exc))
+            return
         key = (context.session_id, str(target))
         if target.exists():
             # The stale-write guard (FR-034); new-file creation is exempt.
@@ -225,7 +245,11 @@ class InternalToolAdapter:
     ) -> AsyncIterator[AdapterOutput]:
         pattern = str(call_input["pattern"])
         raw = str(call_input.get("path", "."))
-        root = self._resolve(context, raw)
+        try:
+            root = self._resolve(context, raw)
+        except _PathOutsideScopeError as exc:
+            yield ErrorOutput(category=ErrorCategory.VALIDATION, message=str(exc))
+            return
         if not root.is_dir():
             yield ErrorOutput(message=f"not a directory: {raw}")
             return

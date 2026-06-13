@@ -46,7 +46,9 @@ class SkillAdvertiser:
                 continue
             line = _render(skill)
             if spent + len(line) > self._budget:
-                break
+                # Skip what does not fit this turn and keep trying smaller
+                # skills; an oversized skill must not starve the rest.
+                continue
             lines.append(line)
             spent += len(line)
             self._advertised.add(skill.name)

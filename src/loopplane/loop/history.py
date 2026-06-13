@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
-from loopplane.model.content import ContentBlock
+from loopplane.model.content import ContentBlock, ToolResultBlock
 
 
 class HistoryEntry(BaseModel):
@@ -25,6 +25,18 @@ class HistoryEntry(BaseModel):
 
 
 HistoryHook = Callable[[HistoryEntry], Awaitable[None]]
+
+
+def is_tool_results_entry(entry: HistoryEntry) -> bool:
+    """A user entry carrying only tool-result blocks (a turn's tool outputs),
+    as distinct from a verbatim user message. The single source of truth for
+    this classification across compaction, recording, and resume.
+    """
+    return (
+        entry.role == "user"
+        and len(entry.blocks) > 0
+        and all(isinstance(block, ToolResultBlock) for block in entry.blocks)
+    )
 
 
 class SessionHistory:
