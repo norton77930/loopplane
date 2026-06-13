@@ -161,12 +161,13 @@ deferred to [`/speckit.tasks`](./tasks.md).
 
 | Phase | Delivers | Validation gate | Rollback |
 |---|---|---|---|
-| KA — Entry, source, conversation (US1) | `entry.py` (`RecalledEntry`, `RecallSource`), `conversation.py`, package skeleton + `__init__` | `test_recall_core.py` + `test_recall_us1.py` green (SC-001/002/003) | Revert package; nothing depends on it |
-| KB — Artifact recall (US2) | `artifacts.py` (`ArtifactReader`, `artifact_recall`) | `test_recall_us2.py` green; public-safe metadata only (SC-007) | Revert KB |
-| KC — Memory-entry recall (US3) | `memory.py` (`memory_entry_recall` over `select_entries`) | `test_recall_us3.py` green (SC-002) | Revert KC |
-| KD — Budget + injection (US4) | `budget.py` (`RetrievalBudget`, `apply_budget`), `injection.py` (`build_recall_input`) | `test_recall_us4.py` green; 0 over-budget, explicit truncation (SC-004/009) | Revert KD |
-| KE — Knowledge index (US5) | `knowledge.py` (`KnowledgeIndex`, `InMemoryKnowledgeIndex`, `knowledge_recall`) | `test_recall_us5.py` green; fail-safe index (SC-005) | Revert KE |
-| KF — Example, docs, boundary | `examples/recall_quickstart.py`, `docs/memory-recall.md`, `test_recall_boundary.py` + public-safety `PHASE7_TARGETS` | boundary + non-mutation + determinism green; example runs; scan clean (SC-003/006/008) | Revert per item |
+| KA — Foundational: entry + budget + injection seam | `entry.py` (`RecalledEntry`, `RecallSource`, `default_query`), `budget.py` (`RetrievalBudget`, `apply_budget`), `injection.py` (`assemble_recall`, `build_recall_input`) + package skeleton + `__init__` — **blocks all stories** | `test_recall_core.py` green | Revert package; nothing depends on it |
+| KB — Conversation recall (US1) 🎯 MVP | `conversation.py` (`conversation_recall`) | `test_recall_us1.py` green (SC-001/002/003) | Revert KB |
+| KC — Artifact recall (US2) | `artifacts.py` (`ArtifactReader`, `artifact_recall`) | `test_recall_us2.py` green; public-safe metadata only (SC-007) | Revert KC |
+| KD — Memory-entry recall (US3) | `memory.py` (`memory_entry_recall` over `select_entries`) | `test_recall_us3.py` green (SC-002) | Revert KD |
+| KE — Compose + cross-source de-dup (US4) | `injection.py` de-duplication by identifier + budget composition across sources | `test_recall_us4.py` green; 0 over-budget, explicit truncation (SC-004/009) | Revert KE |
+| KF — Knowledge index (US5) | `knowledge.py` (`KnowledgeIndex`, `InMemoryKnowledgeIndex`, `knowledge_recall`) | `test_recall_us5.py` green; fail-safe index (SC-005) | Revert KF |
+| KG — Example, docs, boundary | `examples/recall_quickstart.py`, `docs/memory-recall.md`, `test_recall_boundary.py` + public-safety `PHASE7_TARGETS` | boundary + non-mutation + determinism green; example runs; scan clean (SC-003/006/008) | Revert per item |
 
 ## Risk & Rollback Strategy
 
@@ -182,7 +183,7 @@ deferred to [`/speckit.tasks`](./tasks.md).
 | Scope creep into embeddings / semantic / remote / RAG | Out-of-scope list + reserved extension points (FR-090–FR-095); Constitution III review gate; only deterministic, offline recall ships |
 
 **Rollback posture**: `loopplane.recall` is purely **additive** over Phases 1 & 3 — small, task-scoped
-commits, each phase (KA–KF) independently revertible. The layer owns no state and no storage, so reverting
+commits, each phase (KA–KG) independently revertible. The layer owns no state and no storage, so reverting
 any or all leaves the loop, scheduler, packs, review, and runtime behavior untouched.
 
 ## Constitution Check
@@ -200,7 +201,7 @@ any or all leaves the loop, scheduler, packs, review, and runtime behavior untou
 | VII | Public-Safe Documentation | PASS | No secrets/paths/private names in any artifact; recalled entries are public-safe; artifact recall surfaces only references + metadata (FR-021, NFR-002); scan extended with PHASE7 targets (SC-006/007) |
 | VIII | No SDK Replacement | PASS | No retrieval/RAG framework introduced; pure stdlib composition over LoopPlane's own public surfaces |
 | IX | Reference, Not Clone | PASS | Recall/knowledge concepts re-derived public-safe from the spec and the public surfaces; no raw reference excerpts |
-| X | Testable Evolution | PASS | Each phase (KA–KF) has required tests, a validation gate, and a rollback note; the package is additive and revertible; determinism + fail-safe + non-mutation first-class |
+| X | Testable Evolution | PASS | Each phase (KA–KG) has required tests, a validation gate, and a rollback note; the package is additive and revertible; determinism + fail-safe + non-mutation first-class |
 
 **Post-design re-check**: PASS — the entity model, contracts, and boundary introduce no violation and no
 Phase-1/2/3 modification. The layer owns no mutable runtime state; the only stateful object
