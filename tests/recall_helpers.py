@@ -18,6 +18,7 @@ from loopplane.engineering import (
     ValidationResult,
 )
 from loopplane.memory import MemoryEntry
+from loopplane.recall import KnowledgeEntry
 
 
 def scripted_state(
@@ -95,3 +96,19 @@ def memory_entry(
     body: str = "",
 ) -> MemoryEntry:
     return MemoryEntry(type=entry_type, name=name, description=description, body=body)
+
+
+class ScriptedKnowledgeIndex:
+    """An in-memory ``KnowledgeIndex`` double that returns its seeded entries (or
+    raises, to exercise the fail-safe path)."""
+
+    def __init__(
+        self, entries: Sequence[KnowledgeEntry] = (), *, raising: bool = False
+    ) -> None:
+        self._entries = tuple(entries)
+        self._raising = raising
+
+    def lookup(self, query: str, *, limit: int) -> Sequence[KnowledgeEntry]:
+        if self._raising:
+            raise RuntimeError("knowledge index boom")
+        return list(self._entries)[:limit]
