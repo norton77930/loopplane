@@ -32,8 +32,8 @@ modified.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Create the `loopplane.scheduling` package skeleton: `src/loopplane/scheduling/__init__.py` with a module docstring and an empty `__all__` placeholder.
-- [ ] T002 [P] Add deterministic scheduling test helpers in `tests/scheduling_helpers.py`: a `SchedulerEventRecorder` sink, a `scripted_predicate(*values)` (returns booleans per poll), and a thin `pass_loop_definition(...)` builder that reuses the Phase-3 scripted host/validator helpers from `tests/loop_helpers.py`.
+- [X] T001 Create the `loopplane.scheduling` package skeleton: `src/loopplane/scheduling/__init__.py` with a module docstring and an empty `__all__` placeholder.
+- [X] T002 [P] Add deterministic scheduling test helpers in `tests/scheduling_helpers.py`: a `SchedulerEventRecorder` sink, a `scripted_predicate(*values)` (returns booleans per poll), and a thin `pass_loop_definition(...)` builder that reuses the Phase-3 scripted host/validator helpers from `tests/loop_helpers.py`.
 
 ---
 
@@ -43,14 +43,14 @@ modified.
 
 **⚠️ CRITICAL**: Blocks US1–US5.
 
-- [ ] T003 [P] Write unit tests in `tests/unit/test_scheduling_core.py` (MUST FAIL first): `VirtualClock` advance/set; a backward clock move is ignored for due calculations (no negative or double fire — spec Edge Case); registration validation (duplicate/empty id, non-positive interval, condition without predicate); interval due math; missed-run math (skip/catch_up_once/coalesce run counts + next_due); `reconstruct_states` round-trip.
-- [ ] T004 [P] Implement `src/loopplane/scheduling/clock.py`: `Clock` Protocol, `VirtualClock`, `RealClock` (FR-010–FR-012).
-- [ ] T005 [P] Implement `src/loopplane/scheduling/policy.py`: `MissedRunPolicy`, `ConditionMode`, and `SchedulerError` (FR-060, FR-041, FR-004).
-- [ ] T006 [P] Implement `src/loopplane/scheduling/events.py`: `SCHEDULER_SCHEMA_VERSION`, `SchedulerEventType` (the nine types), frozen `SchedulerEvent`, and `SchedulerEventSink` (FR-080–FR-081).
-- [ ] T007 Implement `src/loopplane/scheduling/state.py`: `LoopRunRef`, the mutable `TriggerState` (reference-only fields), and `reconstruct_states(events)` (depends on T006) (FR-050–FR-052, SC-006).
-- [ ] T008 Implement `src/loopplane/scheduling/registry.py`: `TriggerRegistration` (frozen) + `validate_registration` raising `SchedulerError` (depends on T005) (FR-001, FR-004, FR-033).
-- [ ] T009 Populate `src/loopplane/scheduling/__init__.py` exports for the foundational types.
-- [ ] T010 Run `pytest tests/unit/test_scheduling_core.py` → green (gate for SA).
+- [X] T003 [P] Write unit tests in `tests/unit/test_scheduling_core.py` (MUST FAIL first): `VirtualClock` advance/set; a backward clock move is ignored for due calculations (no negative or double fire — spec Edge Case); registration validation (duplicate/empty id, non-positive interval, condition without predicate); interval due math; missed-run math (skip/catch_up_once/coalesce run counts + next_due); `reconstruct_states` round-trip.
+- [X] T004 [P] Implement `src/loopplane/scheduling/clock.py`: `Clock` Protocol, `VirtualClock`, `RealClock` (FR-010–FR-012).
+- [X] T005 [P] Implement `src/loopplane/scheduling/policy.py`: `MissedRunPolicy`, `ConditionMode`, and `SchedulerError` (FR-060, FR-041, FR-004).
+- [X] T006 [P] Implement `src/loopplane/scheduling/events.py`: `SCHEDULER_SCHEMA_VERSION`, `SchedulerEventType` (the nine types), frozen `SchedulerEvent`, and `SchedulerEventSink` (FR-080–FR-081).
+- [X] T007 Implement `src/loopplane/scheduling/state.py`: `LoopRunRef`, the mutable `TriggerState` (reference-only fields), and `reconstruct_states(events)` (depends on T006) (FR-050–FR-052, SC-006).
+- [X] T008 Implement `src/loopplane/scheduling/registry.py`: `TriggerRegistration` (frozen) + `validate_registration` raising `SchedulerError` (depends on T005) (FR-001, FR-004, FR-033).
+- [X] T009 Populate `src/loopplane/scheduling/__init__.py` exports for the foundational types.
+- [X] T010 Run `pytest tests/unit/test_scheduling_core.py` → green (gate for SA).
 
 **Checkpoint**: Foundations ready — scheduler work can begin.
 
@@ -65,10 +65,10 @@ exactly one Scheduled Loop Run through `run_loop`, records it in Trigger State, 
 one `run_loop` was invoked, Trigger State records one fire with the clock's time, and the outcome is the
 loop's terminal outcome.
 
-- [ ] T011 [P] [US1] Write integration tests in `tests/integration/test_scheduler_us1.py` (MUST FAIL first): `register_manual` + `start(id)` ⇒ one Scheduled Loop Run via `run_loop`; Trigger State records fire count + last-fired from the Clock; unknown/duplicate id ⇒ `SchedulerError` with no run started; a registered loop whose `run_loop` pauses for human review records the paused outcome in Trigger State (`last_run_ref.paused`) and still counts as exactly one fire (catch-up is tick-based, not outcome-based — spec Edge Case); a boundary audit that the run started only through `run_loop` (US1 scenarios 1–4; SC-001, SC-002).
-- [ ] T012 [US1] Implement `src/loopplane/scheduling/scheduler.py`: `Scheduler(clock, *, on_event=None)`, `register_manual`, `unregister`, `start(id)` (fires `await run_loop(definition, ...)`), `trigger_state`, the Scheduler Event emit helper, and the re-entrancy guard (depends on Phase 2) (FR-001–FR-004, FR-020–FR-021, FR-072).
-- [ ] T013 [US1] Export `Scheduler` (and clock/policy/event/state symbols) from `src/loopplane/scheduling/__init__.py`.
-- [ ] T014 [US1] Run `pytest tests/integration/test_scheduler_us1.py` → green (boundary audit + state).
+- [X] T011 [P] [US1] Write integration tests in `tests/integration/test_scheduler_us1.py` (MUST FAIL first): `register_manual` + `start(id)` ⇒ one Scheduled Loop Run via `run_loop`; Trigger State records fire count + last-fired from the Clock; unknown/duplicate id ⇒ `SchedulerError` with no run started; a registered loop whose `run_loop` pauses for human review records the paused outcome in Trigger State (`last_run_ref.paused`) and still counts as exactly one fire (catch-up is tick-based, not outcome-based — spec Edge Case); a boundary audit that the run started only through `run_loop` (US1 scenarios 1–4; SC-001, SC-002).
+- [X] T012 [US1] Implement `src/loopplane/scheduling/scheduler.py`: `Scheduler(clock, *, on_event=None)`, `register_manual`, `unregister`, `start(id)` (fires `await run_loop(definition, ...)`), `trigger_state`, the Scheduler Event emit helper, and the re-entrancy guard (depends on Phase 2) (FR-001–FR-004, FR-020–FR-021, FR-072).
+- [X] T013 [US1] Export `Scheduler` (and clock/policy/event/state symbols) from `src/loopplane/scheduling/__init__.py`.
+- [X] T014 [US1] Run `pytest tests/integration/test_scheduler_us1.py` → green (boundary audit + state).
 
 **Checkpoint**: MVP — a registered loop starts on demand through `run_loop`.
 
