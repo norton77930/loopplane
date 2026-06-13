@@ -24,6 +24,7 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.13",
     "mcp>=1",
+    "opentelemetry-sdk>=1",
 ]
 
 [tool.ruff]

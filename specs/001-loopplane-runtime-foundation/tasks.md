@@ -260,17 +260,17 @@ behavior; scan exported telemetry for planted sentinels.
 
 ### Tests for User Story 5 (write first; confirm they fail)
 
-- [ ] T046 [P] [US5] Contract tests in `tests/contract/test_observability.py`: disabled ⇒
+- [X] T046 [P] [US5] Contract tests in `tests/contract/test_observability.py`: disabled ⇒
       event-sequence equality and no overhead path; enabled ⇒ nested run/turn/call spans
       with durations; sentinel content absent from all spans/metrics; error *type* only;
       policy denials excluded from execution-failure metrics (FR-100–FR-104; SC-004)
 
 ### Implementation for User Story 5
 
-- [ ] T047 [US5] Implement the observability overlay — lazy-imported optional extra,
+- [X] T047 [US5] Implement the observability overlay — lazy-imported optional extra,
       env-gated exporter, spans and low-cardinality metrics fed from runtime events — in
       `src/loopplane/observability/` (FR-100–FR-104; research R5)
-- [ ] T048 [US5] Integration test: trace shape for a tool-using run (acceptance 5.2) in
+- [X] T048 [US5] Integration test: trace shape for a tool-using run (acceptance 5.2) in
       `tests/integration/test_us5_trace.py`
 
 **Checkpoint**: all five user stories pass independently and together.
