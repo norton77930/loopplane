@@ -37,9 +37,9 @@ projected to `{role, block_count}`, never raw `ContentBlock` text (FR-016, NFR-0
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Create the `loopplane.webapi` package skeleton: `src/loopplane/webapi/__init__.py` with a module docstring and an empty `__all__` placeholder.
-- [ ] T002 Add the transport dependency in `pyproject.toml`: a new `[project.optional-dependencies] web = ["fastapi>=0.115"]` extra, and add `fastapi>=0.115` + `httpx>=0.27` to `[dependency-groups] dev` (mirroring the `mcp` / `otel` pattern); install them locally (`pip install "fastapi>=0.115" "httpx>=0.27"`) so the suite runs.
-- [ ] T003 [P] Add webapi test helpers in `tests/webapi_helpers.py`: a public-safe deterministic fake model (reuse the repo's existing fake-model pattern from the host/loop examples), a `build_test_host(*, tools=())` returning a `LoopPlaneHost`, `allow_all` / `deny_all` / `raising` authenticators, and a `make_client(app)` building a Starlette `TestClient`; guard the module with `pytest.importorskip("fastapi")`.
+- [X] T001 Create the `loopplane.webapi` package skeleton: `src/loopplane/webapi/__init__.py` with a module docstring and an empty `__all__` placeholder.
+- [X] T002 Add the transport dependency in `pyproject.toml`: a new `[project.optional-dependencies] web = ["fastapi>=0.111"]` extra, and add `fastapi>=0.111` + `httpx>=0.27` to `[dependency-groups] dev` (mirroring the `mcp` / `otel` pattern). Note: `fastapi` 0.111 + `httpx` 0.28 are already present in the environment, so the floor matches what is installed (no feature beyond 0.111 is used).
+- [X] T003 [P] Add webapi test helpers in `tests/webapi_helpers.py`: a public-safe deterministic fake model (reusing the host suite's `ScriptedModel` pattern), a `build_test_host(working_scope, *, model=None, tools=(ECHO_TOOL,), approval=None)` returning a `LoopPlaneHost`, `allow_all` / `deny_all` / `accept_valid` / `raising` authenticators, and a `make_client(app)` building a Starlette `TestClient`; guard the module with `pytest.importorskip("fastapi")`.
 
 ---
 
