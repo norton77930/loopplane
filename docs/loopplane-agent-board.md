@@ -91,7 +91,7 @@ git history) — not invented.
 | **009-loopplane-sandbox-policy-governance** | `specs/009-loopplane-sandbox-policy-governance` | **Verified** | Stronger execution safety and governance: sandbox execution, path policy, permission policy, budget policy, quota policy, cost governance, safe failure behavior. | 001 | None — implemented & verified on `main` (`loopplane.governance`). |
 | **010-loopplane-observability-debug-console** | `specs/010-loopplane-observability-debug-console` | **Verified** | Make runs and loops inspectable: trace viewer data contract, event replay, debug timeline, run diagnostics, loop diagnostics, metadata-only observability. No full frontend unless separately specified. | 001, 003 | None — implemented & verified on `main` (`loopplane.inspect`). |
 | **011-loopplane-web-api-host** | `specs/011-loopplane-web-api-host` | **Verified** | Expose LoopPlane through a web/API host: FastAPI or equivalent host, REST endpoints, SSE or WebSocket streaming, auth boundary, session APIs, host-level integration tests. | 002 | None — implemented & verified on `main` (`loopplane.webapi`). |
-| **012-loopplane-desktop-or-studio-host** | _(not created)_ | **Not started** | Local desktop or studio host: local app host, sidecar process, local session manager, developer console, optional UI shell. No private legacy UI copy. | 002 | `/speckit.specify`. |
+| **012-loopplane-desktop-or-studio-host** | `specs/012-loopplane-desktop-or-studio-host` | **Verified** | Local desktop or studio host: local app host, sidecar process, local session manager, developer console, optional UI shell. No private legacy UI copy. | 002 | None — implemented & verified on `main` (`loopplane.studio`). |
 | **013-loopplane-multi-agent-orchestration** | _(not created)_ | **Not started** | Subagents, coordinator, and delegation: agent registry, subagent execution, coordinator, delegation policy, child run references, aggregated events, aggregated artifacts. | 003 | `/speckit.specify`. |
 | **014-loopplane-release-packaging-docs** | _(not created)_ | **Not started** | Public release quality: packaging, examples, docs, quickstart, API reference, changelog, public-safe cleanup, CI readiness. | all prior | `/speckit.specify`. |
 
@@ -195,7 +195,19 @@ git history) — not invented.
   in-process `TestClient` cannot read an infinite SSE stream (so the interactive-approval round-trip
   is covered at the Session level by the Phase-2 host suite + US2 framing). ruff + mypy(strict)
   clean; full suite **530 passed** → **Verified**.
-- **012–014** — No `specs/` directory and no source → **Not started**.
+- **012** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; source
+  `src/loopplane/studio/` (5 modules) + `examples/studio_quickstart.py` +
+  `docs/desktop-studio-host.md`. Tasks **28/28 complete**; 18 studio tests pass (core unit + US1–US5
+  integration + import/no-tool/no-process boundary + metadata-only + public-safety); the layer is an
+  additive **local** presentation over the public Host Application Interface (`loopplane.host`) —
+  a developer-console core, a held-open session manager, and an in-process sidecar contract. It adds
+  **no third-party dependency** (boundary is `loopplane.host` + `anyio` only), executes **no tool**
+  (Constitution V), and re-emits **no live bus** (Constitution VI; its only event path is a discard
+  sink). Views are metadata-only; the interactive approval round-trip runs **in-process** (no
+  transport, so unit 011's buffering-client limitation does not apply); GUI / process spawn / network
+  are reserved. ruff + mypy(strict) clean; full suite **548 passed** → **Verified**.
+- **013–014** — No `specs/` directory and no source → **Not started**.
 
 ---
 
@@ -203,11 +215,11 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **012-loopplane-desktop-or-studio-host** |
-| Active feature directory | _(not created — `/speckit.specify` will create `specs/012-loopplane-desktop-or-studio-host`)_ |
+| Active unit | **013-loopplane-multi-agent-orchestration** |
+| Active feature directory | _(not created — `/speckit.specify` will create `specs/013-loopplane-multi-agent-orchestration`)_ |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main`, no dedicated feature branch required (see §7 Branch Strategy) |
-| Current Spec Kit step | **Specify** (011 is **Verified**; 012 has no `specs/` directory yet) |
-| Depends on | 002 |
+| Current Spec Kit step | **Specify** (012 is **Verified**; 013 has no `specs/` directory yet) |
+| Depends on | 003 |
 | Next command | **`/speckit.specify`** |
 | Stop condition status | None active. Branch strategy is **main-only** — a missing feature branch is *not* a stop condition (see §7 / §9). |
 

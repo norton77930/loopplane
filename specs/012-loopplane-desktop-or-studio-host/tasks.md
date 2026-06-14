@@ -136,12 +136,12 @@ command after stop → `ErrorView(not-available)`.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T023 [P] Write contract tests in `tests/contract/test_studio_boundary.py`: an import-boundary audit (every `src/loopplane/studio/*.py` imports only `loopplane.host` / `anyio` / stdlib); a text scan finding no `loopplane.events` / `loopplane.controller` / `loopplane.gateway` / `loopplane.dispatcher` / `loopplane.loop` / `RuntimeController` / `EventEmitter` / `serialize_event` / `subprocess` / `socket` / sibling-package token; a metadata-only view assertion; a conflict/not-available fail-safe assertion (NFR-001/002/003, FR-051, SC-003/005).
-- [ ] T024 [P] Extend `tests/contract/test_public_safety.py` with `PHASE12_TARGETS` (`src/loopplane/studio`, `examples/studio_quickstart.py`, `docs/desktop-studio-host.md`, `specs/012-loopplane-desktop-or-studio-host`) and a `test_phase12_studio_files_are_public_safe` scan.
-- [ ] T025 [P] Create `examples/studio_quickstart.py`: a public-safe, in-process runnable that builds a host with the fake model, opens a `StudioHost`, drives a run + lists/inspects sessions, printing only public-safe view models (per [quickstart.md](./quickstart.md)).
-- [ ] T026 [P] Create `docs/desktop-studio-host.md`: a public-safe guide — the console commands → view models, the local session manager, the in-process sidecar lifecycle, embedding via `StudioHost`, and the reserved extension points (GUI / process spawn / network).
-- [ ] T027 Finalize `src/loopplane/studio/__init__.py` public `__all__`; run `ruff format` + `ruff check` + `mypy` (strict) → clean.
-- [ ] T028 Run the full suite `pytest --basetemp=".pytmp"` → green; run `python examples/studio_quickstart.py`; confirm the public-safety scan is green (SC-003/005); update the board status to **Verified**.
+- [X] T023 [P] Write contract tests in `tests/contract/test_studio_boundary.py`: an import-boundary audit (every `src/loopplane/studio/*.py` imports only `loopplane.host` / `anyio` / stdlib); a text scan finding no `loopplane.events` / `loopplane.controller` / `loopplane.gateway` / `loopplane.dispatcher` / `loopplane.loop` / `RuntimeController` / `EventEmitter` / `serialize_event` / `subprocess` / `socket` / sibling-package token; a metadata-only view assertion; a conflict/not-available fail-safe assertion (NFR-001/002/003, FR-051, SC-003/005).
+- [X] T024 [P] Extend `tests/contract/test_public_safety.py` with `PHASE12_TARGETS` (`src/loopplane/studio`, `examples/studio_quickstart.py`, `docs/desktop-studio-host.md`, `specs/012-loopplane-desktop-or-studio-host`) and a `test_phase12_studio_files_are_public_safe` scan.
+- [X] T025 [P] Create `examples/studio_quickstart.py`: a public-safe, in-process runnable that builds a host with the fake model, opens a `StudioHost`, drives a run + lists/inspects sessions, printing only public-safe view models (per [quickstart.md](./quickstart.md)).
+- [X] T026 [P] Create `docs/desktop-studio-host.md`: a public-safe guide — the console commands → view models, the local session manager, the in-process sidecar lifecycle, embedding via `StudioHost`, and the reserved extension points (GUI / process spawn / network).
+- [X] T027 Finalize `src/loopplane/studio/__init__.py` public `__all__`; run `ruff format` + `ruff check` + `mypy` (strict) → clean.
+- [X] T028 Run the full suite `pytest --basetemp=".pytmp"` → green; run `python examples/studio_quickstart.py`; confirm the public-safety scan is green (SC-003/005); update the board status to **Verified**.
 
 ---
 

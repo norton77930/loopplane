@@ -480,3 +480,43 @@ def test_phase11_webapi_files_are_public_safe() -> None:
     assert not violations, "Phase-11 public-safety scan found:\n" + "\n".join(
         violations
     )
+
+
+# Phase-12 desktop/studio host files are covered explicitly so they are scanned
+# even before they are committed (T024; SC-003, SC-005).
+PHASE12_TARGETS = [
+    REPO_ROOT / "src" / "loopplane" / "studio",
+    REPO_ROOT / "examples" / "studio_quickstart.py",
+    REPO_ROOT / "docs" / "desktop-studio-host.md",
+    REPO_ROOT / "specs" / "012-loopplane-desktop-or-studio-host",
+]
+
+
+def test_phase12_studio_files_are_public_safe() -> None:
+    compiled = {
+        label: re.compile(pattern) for label, pattern in BUILTIN_PATTERNS.items()
+    }
+
+    targets: list[Path] = []
+    for target in PHASE12_TARGETS:
+        if target.is_dir():
+            targets.extend(sorted(target.rglob("*.py")))
+            targets.extend(sorted(target.rglob("*.md")))
+        elif target.is_file():
+            targets.append(target)
+    assert targets, "expected Phase-12 desktop/studio host files to scan"
+
+    violations: list[str] = []
+    for path in targets:
+        text = _read_text(path)
+        if text is None:
+            continue
+        relative = path.relative_to(REPO_ROOT)
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for label, regex in compiled.items():
+                if regex.search(line):
+                    violations.append(f"{relative}:{lineno}: {label}")
+
+    assert not violations, "Phase-12 public-safety scan found:\n" + "\n".join(
+        violations
+    )
