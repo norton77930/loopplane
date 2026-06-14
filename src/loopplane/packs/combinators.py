@@ -8,7 +8,7 @@ score into a gating decision, preserving the Phase-3 non-gating rule.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Sequence
 from typing import TYPE_CHECKING
 
 from loopplane.engineering import EvaluationResult, ValidationResult
@@ -36,8 +36,12 @@ def _most_cautious(statuses: Sequence[str]) -> ValidationStatus:
     return chosen  # type: ignore[return-value]
 
 
-async def _resolve(value: object) -> ValidationResult:
-    return value if isinstance(value, ValidationResult) else await value  # type: ignore[no-any-return, misc]
+async def _resolve(
+    value: ValidationResult | Awaitable[ValidationResult],
+) -> ValidationResult:
+    if isinstance(value, ValidationResult):
+        return value
+    return await value
 
 
 def all_of(*validators: Validator) -> Validator:
