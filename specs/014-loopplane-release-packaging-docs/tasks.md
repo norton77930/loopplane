@@ -34,8 +34,8 @@ and the new `tests/contract/` modules. Every committed file is public-safe (Cons
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 [P] Add `tests/release_helpers.py`: small shared helpers for the contract tests — load `pyproject.toml` via `tomllib`; discover the `loopplane` packages that declare `__all__` (import each `src/loopplane/**/__init__.py` package and read its `__all__`); list `docs/*.md` and `examples/*.py`. No product code.
-- [ ] T002 Ensure `.gitignore` ignores build artifacts (`dist/`, `build/`, `*.egg-info/`) so a local `uv build` never commits a distribution (verify present; append only what is missing).
+- [X] T001 [P] Add `tests/release_helpers.py`: small shared helpers for the contract tests — load `pyproject.toml` via `tomllib`; discover the `loopplane` packages that declare `__all__` (AST over each `src/loopplane/**/__init__.py`, import-free); list `docs/*.md` and `examples/*.py`. No product code.
+- [X] T002 Ensure `.gitignore` ignores build artifacts (`/dist/` already present; added `/build/` + `*.egg-info/`) so a local `uv build` never commits a distribution.
 
 **Checkpoint**: shared test helpers ready; build output is git-ignored.
 
@@ -49,10 +49,10 @@ builds (sdist + wheel) offline, installs, types, and reports one version.
 **Independent Test**: `test_packaging.py` green; `uv build` produces an sdist + wheel offline with
 `loopplane/py.typed` in the wheel.
 
-- [ ] T003 [P] [US1] Write `tests/contract/test_packaging.py` (MUST FAIL first): assert metadata completeness (`name`, `description`, `readme`, `requires-python`, `authors`, `keywords`, `classifiers`, `[project.urls]`); **no** literal `version` under `[project]`; `dynamic` includes `"version"`; `[tool.hatch.version].path` == `src/loopplane/__init__.py`; `loopplane.__version__` is a non-empty version string; the runtime `dependencies` set is unchanged (`anyio`/`pydantic`/`jsonschema`) and the optional-extras keys (`mcp`/`otel`/`web`) are preserved; `src/loopplane/py.typed` exists (FR-001–FR-004; SC-001/006).
-- [ ] T004 [US1] Update `pyproject.toml`: add public-safe `authors = [{name = "LoopPlane contributors"}]` (no PII), `keywords`, trove `classifiers` (Development Status, Intended Audience, `Programming Language :: Python :: 3.12`, `Typing :: Typed`; no `License ::` yet), and `[project.urls]` (public repo home); switch `[project]` to `dynamic = ["version"]`, remove the literal `version`, add `[tool.hatch.version] path = "src/loopplane/__init__.py"`; add `[tool.hatch.build.targets.wheel] packages = ["src/loopplane"]` (+ `force-include`/`artifacts` for `py.typed` if needed). **No new runtime dependency** (research D1/D2/D7).
-- [ ] T005 [P] [US1] Add `src/loopplane/py.typed` (empty PEP 561 marker) (FR-003; research D3).
-- [ ] T006 [US1] Run `pytest tests/contract/test_packaging.py --basetemp=".pytmp"` → green; run `uv build` → an sdist + wheel are produced offline and the wheel contains `loopplane/py.typed` (if `uv`/the build frontend is unavailable locally, the config test is the gate and the build is verified in CI — record the caveat) (SC-001).
+- [X] T003 [P] [US1] Write `tests/contract/test_packaging.py` (5 tests): metadata completeness (`name`, `description`, `readme`, `requires-python`, `authors`, `keywords`, `classifiers`, `[project.urls]`); **no** literal `version` under `[project]`; `dynamic` includes `"version"`; `[tool.hatch.version].path` == `src/loopplane/__init__.py`; `loopplane.__version__` is a non-empty version string; the runtime `dependencies` set is unchanged (`anyio`/`pydantic`/`jsonschema`) and the optional-extras keys (`mcp`/`otel`/`web`) are preserved; `src/loopplane/py.typed` exists; every public subpackage imports (FR-001–FR-004; SC-001/006).
+- [X] T004 [US1] Updated `pyproject.toml`: added public-safe `authors = [{name = "LoopPlane contributors"}]` (no PII), `keywords`, trove `classifiers` (Development Status :: 4 - Beta, Intended Audience, `Programming Language :: Python :: 3.12`, `Typing :: Typed`; no `License ::` yet), `[project.urls]` (public repo home); switched `[project]` to `dynamic = ["version"]`, removed the literal `version`, added `[tool.hatch.version] path = "src/loopplane/__init__.py"` and `[tool.hatch.build.targets.wheel] packages = ["src/loopplane"]`. **No new runtime dependency** (research D1/D2/D7).
+- [X] T005 [P] [US1] Add `src/loopplane/py.typed` (empty PEP 561 marker) (FR-003; research D3).
+- [X] T006 [US1] `pytest tests/contract/test_packaging.py` → **5 passed**; `uv build` → `dist/loopplane-0.1.0.tar.gz` + `loopplane-0.1.0-py3-none-any.whl` built offline; the wheel name **0.1.0** (with no `[project] version`) confirms the single source; the wheel ships `loopplane/py.typed` + all subpackages (138 entries) (SC-001).
 
 **Checkpoint**: MVP — the distribution builds, types, and reports one version.
 
