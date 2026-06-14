@@ -90,7 +90,7 @@ git history) — not invented.
 | **008-loopplane-tool-gateway-advanced** | `specs/008-loopplane-tool-gateway-advanced` | **Verified** | Expand the tool ecosystem beyond the foundation: MCP tool discovery, remote tool registry, plugin bundle, tool package metadata, tool capability manifest, tool versioning, tool diagnostics. | 001 | None — implemented & verified on `main` (`loopplane.toolkit`). |
 | **009-loopplane-sandbox-policy-governance** | `specs/009-loopplane-sandbox-policy-governance` | **Verified** | Stronger execution safety and governance: sandbox execution, path policy, permission policy, budget policy, quota policy, cost governance, safe failure behavior. | 001 | None — implemented & verified on `main` (`loopplane.governance`). |
 | **010-loopplane-observability-debug-console** | `specs/010-loopplane-observability-debug-console` | **Verified** | Make runs and loops inspectable: trace viewer data contract, event replay, debug timeline, run diagnostics, loop diagnostics, metadata-only observability. No full frontend unless separately specified. | 001, 003 | None — implemented & verified on `main` (`loopplane.inspect`). |
-| **011-loopplane-web-api-host** | _(not created)_ | **Not started** | Expose LoopPlane through a web/API host: FastAPI or equivalent host, REST endpoints, SSE or WebSocket streaming, auth boundary, session APIs, host-level integration tests. | 002 | `/speckit.specify`. |
+| **011-loopplane-web-api-host** | `specs/011-loopplane-web-api-host` | **Verified** | Expose LoopPlane through a web/API host: FastAPI or equivalent host, REST endpoints, SSE or WebSocket streaming, auth boundary, session APIs, host-level integration tests. | 002 | None — implemented & verified on `main` (`loopplane.webapi`). |
 | **012-loopplane-desktop-or-studio-host** | _(not created)_ | **Not started** | Local desktop or studio host: local app host, sidecar process, local session manager, developer console, optional UI shell. No private legacy UI copy. | 002 | `/speckit.specify`. |
 | **013-loopplane-multi-agent-orchestration** | _(not created)_ | **Not started** | Subagents, coordinator, and delegation: agent registry, subagent execution, coordinator, delegation policy, child run references, aggregated events, aggregated artifacts. | 003 | `/speckit.specify`. |
 | **014-loopplane-release-packaging-docs** | _(not created)_ | **Not started** | Public release quality: packaging, examples, docs, quickstart, API reference, changelog, public-safe cleanup, CI readiness. | all prior | `/speckit.specify`. |
@@ -181,7 +181,21 @@ git history) — not invented.
   (Constitution VI), and surfaces only metadata (ids / types / sequences / counts / public-safe
   reasons). A `/speckit.analyze` pass (0 critical/high) added `base.py` to the plan source tree.
   ruff + mypy(strict) clean; full suite **497 passed** → **Verified**.
-- **011–014** — No `specs/` directory and no source → **Not started**.
+- **011** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; source
+  `src/loopplane/webapi/` (6 modules) + `examples/webapi_quickstart.py` +
+  `docs/web-api-host.md`. Tasks **29/29 complete**; ~25 webapi tests pass (core unit + US1–US5
+  integration + import/no-tool/no-reemit boundary + metadata-only + default-deny + public-safety);
+  the layer is an additive transport over the public Host Application Interface (`loopplane.host`) —
+  it executes **no tool** (Constitution V) and consumes the normalized event stream as a host
+  consumer, **never re-emitting the live bus** (Constitution VI). Response bodies are metadata-only;
+  the SSE stream forwards `serialize_event` verbatim; auth is a pluggable default-deny boundary. A
+  new optional `web` extra introduces FastAPI (a transport, not the runtime core — Principle VIII not
+  engaged); `pytest-timeout` was added as a hang safety net after diagnosing that the buffering
+  in-process `TestClient` cannot read an infinite SSE stream (so the interactive-approval round-trip
+  is covered at the Session level by the Phase-2 host suite + US2 framing). ruff + mypy(strict)
+  clean; full suite **530 passed** → **Verified**.
+- **012–014** — No `specs/` directory and no source → **Not started**.
 
 ---
 
@@ -189,10 +203,10 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **011-loopplane-web-api-host** |
-| Active feature directory | _(not created — `/speckit.specify` will create `specs/011-loopplane-web-api-host`)_ |
+| Active unit | **012-loopplane-desktop-or-studio-host** |
+| Active feature directory | _(not created — `/speckit.specify` will create `specs/012-loopplane-desktop-or-studio-host`)_ |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main`, no dedicated feature branch required (see §7 Branch Strategy) |
-| Current Spec Kit step | **Specify** (010 is **Verified**; 011 has no `specs/` directory yet) |
+| Current Spec Kit step | **Specify** (011 is **Verified**; 012 has no `specs/` directory yet) |
 | Depends on | 002 |
 | Next command | **`/speckit.specify`** |
 | Stop condition status | None active. Branch strategy is **main-only** — a missing feature branch is *not* a stop condition (see §7 / §9). |
