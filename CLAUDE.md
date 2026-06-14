@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at
-specs/013-loopplane-multi-agent-orchestration/plan.md
+specs/014-loopplane-release-packaging-docs/plan.md
 <!-- SPECKIT END -->
