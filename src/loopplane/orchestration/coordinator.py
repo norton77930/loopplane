@@ -8,9 +8,10 @@ live event sink) (Constitution V & VI).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-from loopplane.engineering import LoopOutcome, RunReference
+from loopplane.engineering import LoopDefinition, LoopOutcome, RunReference, run_loop
 from loopplane.orchestration.registry import AgentRegistry
 
 
@@ -39,3 +40,38 @@ class Coordinator:
 
     def __init__(self, registry: AgentRegistry) -> None:
         self._registry = registry
+
+    async def run(self, selection: Sequence[str]) -> tuple[SubagentResult, ...]:
+        """Run exactly the selected subagents (deduped, each once) in
+        **registration order**, then any unknown names as not-found results.
+        Each subagent is driven through the public ``run_loop`` (FR-010, FR-011,
+        FR-003)."""
+
+        selected = list(dict.fromkeys(selection))
+        results: list[SubagentResult] = []
+        for name in self._registry.names():
+            if name not in selected:
+                continue
+            subagent = self._registry.get(name)
+            if subagent is None:  # defensive — registered names always resolve
+                continue
+            results.append(await self._run_subagent(name, subagent.definition))
+        for name in selected:
+            if name not in self._registry:
+                results.append(
+                    SubagentResult(
+                        subagent=name, reference=None, outcome=None, failure="not found"
+                    )
+                )
+        return tuple(results)
+
+    async def _run_subagent(
+        self, name: str, definition: LoopDefinition
+    ) -> SubagentResult:
+        outcome = await run_loop(definition)
+        reference = ChildRunReference(
+            subagent=name, loop_id=outcome.loop_id, run_refs=outcome.state.run_refs
+        )
+        return SubagentResult(
+            subagent=name, reference=reference, outcome=outcome, failure=None
+        )

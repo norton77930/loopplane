@@ -63,9 +63,9 @@ returns a child run reference + outcome.
 **Independent Test**: register a subagent, `await coord.run(["a"])` → a `SubagentResult` with a
 `ChildRunReference` + `LoopOutcome`; `run(["ghost"])` → a `failure="not found"` result.
 
-- [ ] T008 [P] [US1] Write integration tests in `tests/integration/test_orchestration_us1.py` (MUST FAIL first; `pytest.mark.anyio`): register a scripted subagent; `await Coordinator(registry).run(["a"])` returns one `SubagentResult` with a `ChildRunReference(subagent="a", loop_id, run_refs)` and a `LoopOutcome`; `run(["ghost"])` → a `SubagentResult(failure="not found", outcome=None)`; no crash (US1 scenarios 1–3; SC-001, FR-002/FR-003).
-- [ ] T009 [US1] Implement `Coordinator.run(selection)` in `src/loopplane/orchestration/coordinator.py`: for each selected name in **registration order**, look it up (unknown → a not-found result), drive `await run_loop(subagent.definition)`, and build a `SubagentResult` with a `ChildRunReference` from the `LoopOutcome` (loop_id + `state.run_refs`) (FR-002, FR-003, FR-010, FR-011).
-- [ ] T010 [US1] Run `pytest tests/integration/test_orchestration_us1.py --basetemp=".pytmp"` → green.
+- [X] T008 [P] [US1] Write integration tests in `tests/integration/test_orchestration_us1.py` (`pytest.mark.anyio`): register a scripted subagent; `await Coordinator(registry).run(["a"])` returns one `SubagentResult` with a `ChildRunReference(subagent="a", loop_id, run_refs)` and a `loop_completed` `LoopOutcome`; `run(["ghost"])` → a `SubagentResult(failure="not found", outcome=None, reference=None)`; no crash (US1 scenarios 1–3; SC-001, FR-002/FR-003).
+- [X] T009 [US1] Implement `Coordinator.run(selection)` in `src/loopplane/orchestration/coordinator.py`: dedupe the selection; run the known subagents in **registration order** via `await run_loop(subagent.definition)`, building a `SubagentResult` with a `ChildRunReference` (loop_id + `state.run_refs`); append unknown names as not-found results (FR-002, FR-003, FR-010, FR-011).
+- [X] T010 [US1] Run `pytest tests/integration/test_orchestration_us1.py --basetemp=".pytmp"` → green (2 passed; full suite 553).
 
 **Checkpoint**: MVP — a registered subagent runs and returns a child reference + outcome.
 
