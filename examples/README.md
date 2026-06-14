@@ -20,5 +20,6 @@ provider credentials, no network. Run any one with `python examples/<name>.py`.
 | `examples/orchestration_quickstart.py` | Register subagents, coordinate, aggregate (unit 013). |
 | `examples/hooks_quickstart.py` | Observe and gate the agent with lifecycle hooks (unit 015). |
 | `examples/plugins_quickstart.py` | Discover, enable, and load a manifest-bundle plugin (unit 016). |
+| `examples/cli_quickstart.py` | Drive the `loopplane` CLI core programmatically (unit 017). |
 
 New to LoopPlane? Start with [Getting started](../docs/getting-started.md).

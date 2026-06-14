@@ -96,7 +96,7 @@ git history) — not invented.
 | **014-loopplane-release-packaging-docs** | `specs/014-loopplane-release-packaging-docs` | **Verified** | Public release quality: packaging, examples, docs, quickstart, API reference, changelog, public-safe cleanup, CI readiness. | all prior | None — implemented & verified on `main` (packaging + docs + CI; **v0.1.0 release shipped**). |
 | **015-loopplane-hook-system** | `specs/015-loopplane-hook-system` | **Verified** | Lifecycle hook system: a hook registry plus eleven lifecycle points (pre/post tool use, prompt submit, session start/end, subagent start/stop, file changed, model stop) that let host and plugin code observe — and, at the two gating points, gate or modify — agent behavior without forking the runtime. In-process; honors the single Tool Gateway (V) and Runtime Event Bus (VI) boundaries; hooks are a distinct concept from normalized events (synchronous, may gate/modify vs. fire-and-forget stream). | 001, 003 | None — implemented & verified on `main` (`loopplane.hooks`). |
 | **016-loopplane-plugin-system** | `specs/016-loopplane-plugin-system` | **Verified** | Plugin manifest bundles: a public-safe `plugin.json` that packages skills + namespaced MCP servers + hooks into a discoverable, host-loadable unit; enable-list gating with zero default behavior change; loads through the existing skills/MCP/hook seams with no new runtime coupling. Reuses 001 skills, 008 toolkit, and 015 hooks. | 001, 008, 015 | None — implemented & verified on `main` (`loopplane.plugins`). |
-| **017-loopplane-cli-host** | `specs/017-loopplane-cli-host` | **Not started** | Interactive CLI host: a thin terminal host over the Host Application Interface (`loopplane.host`) — REPL/chat loop, run/session commands, normalized-event rendering, and an optional credential-gated real model provider behind an extra. Executes **no tool** itself (V) and consumes the normalized event stream (VI). Adds a console entry point; the runtime core is unchanged. | 002 | Pending — blocked on 002 (done); sequenced after 016. |
+| **017-loopplane-cli-host** | `specs/017-loopplane-cli-host` | **Verified** | Interactive CLI host: a thin terminal host over the Host Application Interface (`loopplane.host`) — REPL/chat loop, run/session commands, normalized-event rendering, and an optional credential-gated real model provider behind a seam. Executes **no tool** itself (V) and consumes the normalized event stream (VI). Adds a console entry point; the runtime core is unchanged. | 002 | None — implemented & verified on `main` (`loopplane.cli`; `loopplane` console entry point). |
 | **018-loopplane-web-frontend** | `specs/018-loopplane-web-frontend` | **Not started** | Web frontend: a from-scratch single-page UI over the 011 web/API host (REST + SSE) — chat/run view, event timeline, approvals/questions, session list. **No private legacy UI copy** (VII); written fresh; the JS toolchain is isolated under `apps/` with its own CI gate. | 011 | Pending — blocked on 011 (done); sequenced after 017. |
 | **019-loopplane-desktop-gui** | `specs/019-loopplane-desktop-gui` | **Not started** | Desktop GUI shell: a local desktop application over the 012 studio sidecar contract — a packaged shell embedding the 018 frontend, driving an in-process/sidecar host with no server. **No private legacy UI copy** (VII); reuses 018; packaging + launch only, runtime unchanged. | 012, 018 | Pending — blocked on 012 (done) and 018. |
 
@@ -279,6 +279,22 @@ git history) — not invented.
   `loopplane` import is `loopplane.hooks` (boundary test); inert with an empty
   enable-list (zero regressions). ruff + mypy(strict) clean; full suite
   **654 passed** → **Verified**.
+- **017** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; source
+  `src/loopplane/cli/` (4 modules: render / providers / session / app + `__init__`)
+  + a `[project.scripts] loopplane = "loopplane.cli:main"` console entry point +
+  `examples/cli_quickstart.py` + `docs/cli.md`. Tasks **21/21 complete**; **18 CLI
+  tests pass** (render + providers unit; US1–US5 integration; import-boundary +
+  no-runtime-internal). A thin host over `loopplane.host` — `chat` / `run` /
+  `sessions` / `resume`, an `EventRenderer` over the normalized event stream
+  (metadata-only — tool name + outcome, never raw I/O), and credential-free by
+  default (a built-in stateless demo `ModelBoundary`); a real model is the opt-in
+  `LOOPPLANE_MODEL="module:function"` builder seam (concrete network provider out of
+  scope, manually validated like 001). Executes **no tool** (V) and consumes the
+  normalized stream (VI); imports only `loopplane.host`/`model`/`events`
+  (boundary test). The only packaging change is the entry point; `py.typed` + every
+  subpackage still ship. The `loopplane run` command was smoke-run. ruff +
+  mypy(strict) clean; full suite **672 passed** → **Verified**.
 
 > **🏁 v0.1.0 release shipped; roadmap extended.** Units **000–014 are all `Verified`** on `main`,
 > the project is licensed under **MIT**, and every release-readiness gate (see
@@ -286,8 +302,9 @@ git history) — not invented.
 > authorized extending the roadmap with five post-release feature units — **015 hook-system →
 > 016 plugin-system → 017 cli-host → 018 web-frontend → 019 desktop-gui** — to be built with the
 > same Spec Kit flow and autopilot rules. The autopilot advances the lowest-numbered unit that is
-> not yet `Verified` and whose dependencies are all `Verified`. **016-loopplane-plugin-system is now
-> `Verified`** (654 tests); the next unit is **017-loopplane-cli-host** (depends on 002).
+> not yet `Verified` and whose dependencies are all `Verified`. **017-loopplane-cli-host is now
+> `Verified`** (672 tests); the next unit is **018-loopplane-web-frontend** (depends on 011; a
+> from-scratch JS/React build — its implement step needs a Node toolchain).
 
 ---
 
@@ -295,13 +312,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **017-loopplane-cli-host** (015/016 `Verified`; 000–014 `Verified`; v0.1.0 shipped) |
-| Active feature directory | `specs/017-loopplane-cli-host` (to be created by `/speckit.specify`) |
+| Active unit | **018-loopplane-web-frontend** (015/016/017 `Verified`; 000–014 `Verified`; v0.1.0 shipped) |
+| Active feature directory | `specs/018-loopplane-web-frontend` (to be created by `/speckit.specify`) |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main` (see §7 Branch Strategy) |
 | Current Spec Kit step | **Specify.** No `spec.md` yet for the active feature → run `/speckit.specify` (§6 step 6). |
-| Depends on | 002 (`Verified`) |
-| Next command | **`/speckit.specify`** for the CLI-host feature, then continue clarify/checklist → plan → tasks → analyze → implement → final review. |
-| Stop condition status | None active — proceed under autopilot; stop only on the §9 hard-stop conditions. |
+| Depends on | 011 (`Verified`) |
+| Next command | **`/speckit.specify`** for the web-frontend feature, then continue clarify/checklist → plan → tasks → analyze → implement → final review. **Note**: 018 is a from-scratch JS/React app; the implement step needs a Node toolchain (per the board's release-readiness, JS tooling is isolated under `apps/` with its own CI gate). If Node is unavailable in this environment, implement is a §9.4-style hard stop — pause and report. |
+| Stop condition status | None active for specify/plan/tasks — proceed; the 018 implement step may hard-stop if no Node toolchain is present. |
 
 ---
 

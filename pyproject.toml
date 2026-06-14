@@ -37,6 +37,9 @@ mcp = ["mcp>=1"]
 otel = ["opentelemetry-api>=1"]
 web = ["fastapi>=0.111"]
 
+[project.scripts]
+loopplane = "loopplane.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/norton77930/loopplane"
 Repository = "https://github.com/norton77930/loopplane"

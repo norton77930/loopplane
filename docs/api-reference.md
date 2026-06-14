@@ -567,3 +567,18 @@ servers, and hooks for the existing seams. Inert by default.
 - `PluginLoadResult` — the collected contribution set plus diagnostics.
 - `PluginInfo` — a read-only, metadata-only plugin listing entry.
 - `list_plugins` — a public-safe listing of discovered plugins.
+
+### `loopplane.cli` (unit 017)
+
+A thin terminal host over `loopplane.host`: the `loopplane` console command and its
+testable, credential-free core.
+
+- `main` — the `loopplane` console entry point.
+- `dispatch` — parse argv and run a command; returns an exit code.
+- `make_parser` — the argument parser for the CLI commands.
+- `build_host` — build a host over the selected model (optionally with a store).
+- `run_once` — run one prompt and render it to a stream.
+- `chat_loop` — run input lines as turns until EOF/quit.
+- `EventRenderer` — an event sink that renders a run, metadata-safe.
+- `select_model` — choose the demo model or an env-configured provider.
+- `DemoModel` — the built-in, credential-free demo model.
