@@ -80,4 +80,4 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 # A generous per-test timeout (thread method = cross-platform) so a stuck test
 # fails fast instead of hanging the suite / CI.
-addopts = "--timeout=60 --timeout-method=thread"
+addopts = "--timeout=60 --timeout-method=thread --basetemp=tmp/pytest"
