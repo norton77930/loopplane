@@ -78,9 +78,9 @@ returns a child run reference + outcome.
 **Independent Test**: register several subagents, `await coord.run([...])` → one result per selection in
 registration order, each run once; repeat → identical.
 
-- [ ] T011 [P] [US2] Write integration tests in `tests/integration/test_orchestration_us2.py` (MUST FAIL first): register several subagents; `await coord.run(selection)` returns one `SubagentResult` per selected name in **registration order**, each subagent run exactly once; the same selection run twice yields identical results; an unknown name in the selection yields a not-found result while the known subagents still run (US2 scenarios 1–3; SC-002/006, FR-010, FR-011).
-- [ ] T012 [US2] Confirm/refine `Coordinator.run` orders results by registration order (independent of the selection argument order) and runs each selected subagent exactly once in `coordinator.py` (FR-011, NFR-004).
-- [ ] T013 [US2] Run `pytest tests/integration/test_orchestration_us2.py --basetemp=".pytmp"` → green.
+- [X] T011 [P] [US2] Write integration tests in `tests/integration/test_orchestration_us2.py`: register several subagents; `await coord.run(selection)` returns one `SubagentResult` per selected name in **registration order** (independent of selection order), each run once (a duplicate is de-duped); the same selection run twice yields identical results; an unknown name yields a not-found result while the known subagents still run (US2 scenarios 1–3; SC-002/006, FR-010, FR-011).
+- [X] T012 [US2] Confirmed: `Coordinator.run` (US1) already orders results by registration order independent of the selection argument order and de-dupes so each subagent runs exactly once — the US2 tests verify it; no code change needed (FR-011, NFR-004).
+- [X] T013 [US2] Run `pytest tests/integration/test_orchestration_us2.py --basetemp=".pytmp"` → green (3 passed; full suite 556).
 
 **Checkpoint**: US1 + US2 — run a single subagent and coordinate a set.
 
