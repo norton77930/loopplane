@@ -94,9 +94,9 @@ ordered by sequence — metadata-only.
 **Independent Test**: coordinate subagents that emit scripted loop events; assert the aggregated view is
 grouped by subagent and ordered by sequence, with metadata only.
 
-- [ ] T014 [P] [US3] Write integration tests in `tests/integration/test_orchestration_us3.py` (MUST FAIL first): `aggregate_events(results)` returns `AggregatedEvent(subagent, type, sequence)` records grouped by subagent (registration order) and ordered by `sequence` within; identical on repeat; **no** `LoopEvent.payload` / content in any record; a result with no outcome contributes nothing (US3 scenarios 1–3; SC-002/003, FR-020, FR-021).
-- [ ] T015 [US3] Implement `src/loopplane/orchestration/aggregate.py`: the frozen `AggregatedEvent` and `aggregate_events(results)` projecting each `LoopOutcome.events` to `(subagent, type, sequence)` in result order (FR-020, FR-021).
-- [ ] T016 [US3] Export the aggregation symbols; run `pytest tests/integration/test_orchestration_us3.py --basetemp=".pytmp"` → green.
+- [X] T014 [P] [US3] Write integration tests in `tests/integration/test_orchestration_us3.py`: `aggregate_events(results)` returns `AggregatedEvent(subagent, type, sequence)` records grouped by subagent (registration order, contiguous groups) and ordered by `sequence` within; identical on repeat; **no** payload/content field (`vars(e) == {subagent, type, sequence}`); a result with no outcome contributes nothing (US3 scenarios 1–3; SC-002/003, FR-020, FR-021).
+- [X] T015 [US3] Implement `src/loopplane/orchestration/aggregate.py`: the frozen `AggregatedEvent` and `aggregate_events(results)` projecting each `LoopOutcome.events` to `(subagent, type, sequence)` in result order (events already sequence-ordered) (FR-020, FR-021).
+- [X] T016 [US3] Export the aggregation symbols; run `pytest tests/integration/test_orchestration_us3.py --basetemp=".pytmp"` → green (3 passed; full suite 559).
 
 **Checkpoint**: US1–US3 — coordinate + aggregated event view.
 
