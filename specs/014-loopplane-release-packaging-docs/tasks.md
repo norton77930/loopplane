@@ -82,12 +82,12 @@ consistent with the files that ship.
 **Independent Test**: `test_docs_examples_index.py` green — the docs index links every `docs/*.md`, the
 examples index lists every `examples/*.py`, no missing/dangling entry, README links resolve.
 
-- [ ] T010 [P] [US3] Write `tests/contract/test_docs_examples_index.py` (MUST FAIL first): the set of guides linked from `docs/README.md` **==** the `docs/*.md` set (minus the index itself); the set of examples listed in `examples/README.md` **==** the `examples/*.py` set; every link/entry targets a file that exists (no dangling) and none is missing; `README.md` contains a quickstart link (→ `docs/getting-started.md`) and a docs link (→ `docs/README.md`) that both resolve (FR-020–FR-022; SC-005).
-- [ ] T011 [P] [US3] Create `docs/README.md` (docs index): link every per-layer guide present under `docs/` (the existing layer guides + `api-reference.md` + `getting-started.md`); `release-readiness.md` is added in US5 (T022).
-- [ ] T012 [P] [US3] Create `examples/README.md` (examples index): every `examples/*.py` with a one-line description and a `python examples/<name>.py` run command.
-- [ ] T013 [P] [US3] Create `docs/getting-started.md`: install (`uv sync` / `pip install loopplane`), run the smallest end-to-end example (reference `examples/host_quickstart.py` / `examples/loop_quickstart.py`), document the local quality-gate commands (ruff format --check / ruff check / mypy / pytest), and link out to the per-layer guides and examples.
-- [ ] T014 [P] [US3] Rewrite `README.md` to release quality: overview, install, a quickstart link (→ `docs/getting-started.md`), a layer map (001–013), a docs link (→ `docs/README.md`), and a **License** section naming the deferred license gate. Public-safe.
-- [ ] T015 [US3] Run `pytest tests/contract/test_docs_examples_index.py --basetemp=".pytmp"` → green.
+- [X] T010 [P] [US3] Write `tests/contract/test_docs_examples_index.py` (3 tests): the sibling-`.md` links in `docs/README.md` **==** the `docs/*.md` set (minus the index itself); the `examples/*.py` paths in `examples/README.md` **==** the `examples/*.py` set; `README.md` links `docs/getting-started.md` + `docs/README.md` and both files exist (no missing/dangling) (FR-020–FR-022; SC-005).
+- [X] T011 [P] [US3] Create `docs/README.md` (docs index): links all 17 sibling docs (4 getting-started/runtime + 11 layer guides + the API reference + the roadmap board); `release-readiness.md` is added in US5 (T022).
+- [X] T012 [P] [US3] Create `examples/README.md` (examples index): all 13 `examples/*.py` with a one-line description and the `python examples/<name>.py` run command, in unit order.
+- [X] T013 [P] [US3] Create `docs/getting-started.md`: install (from source; `uv sync` for dev), the smallest run (`examples/host_quickstart.py`), the local quality-gate commands, and links to the runtime/host guides + API reference + docs index. (Complements the existing `quickstart.md`/`embedding-host.md`; no duplication.)
+- [X] T014 [P] [US3] Rewrote `README.md` to release quality: overview, install, a quickstart link (→ `docs/getting-started.md`), a layer map (001–013), docs links (→ `docs/README.md`, API reference, examples), a Development gates section, and a **License** section naming the deferred license gate. Public-safe.
+- [X] T015 [US3] Run `pytest tests/contract/test_docs_examples_index.py` → **3 passed**; full suite **582 passed**.
 
 **Checkpoint**: US1–US3 — installable, typed, documented, navigable.
 
