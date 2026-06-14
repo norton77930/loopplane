@@ -80,9 +80,9 @@ command composes. **⚠️ Blocks US1–US5.**
 **Independent Test**: open a session (it appears in `list_sessions`), select it, close it; an unknown id
 → `ErrorView(not-found)`.
 
-- [ ] T011 [P] [US2] Write integration tests in `tests/integration/test_studio_us2.py` (MUST FAIL first): `await studio.open_session()` → a `session_id` tracked by `studio.list_sessions()`; `studio.select(unknown)` → `ErrorView(not-found)`; `await studio.cancel(session_id)` closes it and frees the host; a second open while active → `ErrorView(conflict)` (US2 scenarios 1–3; FR-010/FR-011, FR-003).
-- [ ] T012 [US2] Implement `src/loopplane/studio/sessions.py` (`SessionEntry` + `run_session`: a task-group-held `async with host.session(on_event=_discard, on_approval=...)` keyed by `session_id`, a `close` event, conflict signalled to the opener) and the `StudioHost` open / list / select / close commands in `console.py` (FR-010, FR-011, FR-003).
-- [ ] T013 [US2] Run `pytest tests/integration/test_studio_us2.py --basetemp=".pytmp"` → green.
+- [X] T011 [P] [US2] Write integration tests in `tests/integration/test_studio_us2.py`: `await studio.open_session()` → a `session_id` tracked by `studio.list_sessions()`; `studio.select(unknown)` → `ErrorView(not-found)`; `await studio.cancel(session_id)` closes it and frees the host; a second open while active → `ErrorView(conflict)` (US2 scenarios 1–3; FR-010/FR-011, FR-003).
+- [X] T012 [US2] Implement `src/loopplane/studio/sessions.py` (`SessionEntry` + `run_session`: a task-group-held `async with host.session(sink, on_approval=...)` keyed by `session_id`, a `close` event, conflict signalled to the opener via `box['error']`; `OnApproval`/`Sink` typed over `object` to avoid a `loopplane.events` import) and the `StudioHost` open / list / select / cancel commands in `console.py` (FR-010, FR-011, FR-003).
+- [X] T013 [US2] Run `pytest tests/integration/test_studio_us2.py --basetemp=".pytmp"` → green (2 passed; full suite 538).
 
 **Checkpoint**: US1 + US2 — run and a local session manager.
 

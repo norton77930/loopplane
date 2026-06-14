@@ -16,7 +16,8 @@ import anyio
 from anyio.abc import TaskGroup
 
 from loopplane.host import LoopPlaneHost
-from loopplane.studio.views import ErrorView, RunResultView
+from loopplane.studio.sessions import OnApproval, SessionEntry, run_session
+from loopplane.studio.views import ErrorView, RunResultView, SessionSummaryView
 
 
 async def _discard(event: object) -> None:
@@ -34,6 +35,7 @@ class StudioHost:
         self._host = host
         self._stack: AsyncExitStack | None = None
         self._task_group: TaskGroup | None = None
+        self._sessions: dict[str, SessionEntry] = {}
 
     async def __aenter__(self) -> StudioHost:
         self._stack = AsyncExitStack()
@@ -69,3 +71,49 @@ class StudioHost:
         except RuntimeError:
             return ErrorView(kind="conflict", detail="a run is already active")
         return RunResultView.from_outcome(outcome)
+
+    async def open_session(
+        self, *, on_approval: OnApproval | None = None
+    ) -> str | ErrorView:
+        """Open an interactive session, held open in the task group; returns its
+        public session id, or a conflict view if a run/session is already active
+        (FR-010, FR-003)."""
+
+        if self._task_group is None:
+            return ErrorView(kind="not-available", detail="not started")
+        ready = anyio.Event()
+        box: dict[str, str] = {}
+        self._task_group.start_soon(
+            run_session, self._host, self._sessions, ready, box, _discard, on_approval
+        )
+        await ready.wait()
+        if box.get("error"):
+            return ErrorView(kind="conflict", detail="a run is already active")
+        return box["sid"]
+
+    def list_sessions(self) -> tuple[SessionSummaryView, ...]:
+        """Public-safe summaries of the host's known sessions (FR-010)."""
+
+        return tuple(
+            SessionSummaryView.from_summary(summary)
+            for summary in self._host.list_sessions()
+        )
+
+    def select(self, session_id: str) -> str | ErrorView:
+        """Confirm a held session by id; an unknown id → a not-found view
+        (FR-011)."""
+
+        if session_id not in self._sessions:
+            return ErrorView(kind="not-found", detail="not found")
+        return session_id
+
+    async def cancel(self, session_id: str) -> ErrorView | None:
+        """Cancel and close a held session (never hangs); an unknown id → a
+        not-found view (FR-011, FR-022)."""
+
+        entry = self._sessions.get(session_id)
+        if entry is None:
+            return ErrorView(kind="not-found", detail="not found")
+        entry.session.cancel()
+        entry.close.set()
+        return None
