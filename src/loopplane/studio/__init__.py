@@ -11,6 +11,7 @@ process spawning — those are reserved extension points.
 from __future__ import annotations
 
 from loopplane.studio.console import StudioHost
+from loopplane.studio.sidecar import InProcessSidecar, SidecarHost
 from loopplane.studio.views import (
     ErrorView,
     HistoryEntryView,
@@ -22,8 +23,10 @@ from loopplane.studio.views import (
 __all__ = [
     "ErrorView",
     "HistoryEntryView",
+    "InProcessSidecar",
     "OutcomeView",
     "RunResultView",
     "SessionSummaryView",
+    "SidecarHost",
     "StudioHost",
 ]

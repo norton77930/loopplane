@@ -126,9 +126,9 @@ the sessions list; an unknown id → `ErrorView(not-found)`.
 **Independent Test**: start an in-process sidecar, drive a run through it, stop it (idempotent); a
 command after stop → `ErrorView(not-available)`.
 
-- [ ] T020 [P] [US5] Write integration tests in `tests/integration/test_studio_us5.py` (MUST FAIL first): `InProcessSidecar(host)`; `await sidecar.start()` then `await sidecar.studio.run("...")` works; `await sidecar.stop()` twice is idempotent and orphans no run; a command after stop → `ErrorView(kind="not-available")` (US5 scenarios 1–3; FR-040/FR-041, SC-006).
-- [ ] T021 [US5] Implement `src/loopplane/studio/sidecar.py`: the `SidecarHost` Protocol (`studio` / `start` / `stop`) and `InProcessSidecar` wrapping a `LoopPlaneHost` + `StudioHost`; `start` opens the studio, `stop` is idempotent and joins the task group; a command after stop returns `ErrorView(not-available)` (FR-040, FR-041).
-- [ ] T022 [US5] Run `pytest tests/integration/test_studio_us5.py --basetemp=".pytmp"` → green.
+- [X] T020 [P] [US5] Write integration tests in `tests/integration/test_studio_us5.py`: `InProcessSidecar(host)` satisfies the `SidecarHost` runtime-checkable Protocol; a command **before start** → `ErrorView(not-available)`; `await sidecar.start()` then `await sidecar.run("...")` works (`sidecar.studio` is live); `await sidecar.stop()` twice is idempotent (`sidecar.studio` is `None`) and orphans no run; a command **after stop** → `ErrorView(kind="not-available")` (US5 scenarios 1–3; FR-040/FR-041, SC-006).
+- [X] T021 [US5] Implement `src/loopplane/studio/sidecar.py`: the `@runtime_checkable SidecarHost` Protocol (`studio` / `start` / `stop` / `run`) and `InProcessSidecar` wrapping a `LoopPlaneHost` + `StudioHost`; `start` opens the studio (manual `__aenter__`), `stop` is idempotent and joins the task group (`__aexit__`); `run` returns `ErrorView(not-available)` when not started (FR-040, FR-041).
+- [X] T022 [US5] Run `pytest tests/integration/test_studio_us5.py --basetemp=".pytmp"` → green (1 passed; full suite 543).
 
 **Checkpoint**: All user stories are independently functional.
 
