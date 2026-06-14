@@ -93,7 +93,7 @@ git history) — not invented.
 | **011-loopplane-web-api-host** | `specs/011-loopplane-web-api-host` | **Verified** | Expose LoopPlane through a web/API host: FastAPI or equivalent host, REST endpoints, SSE or WebSocket streaming, auth boundary, session APIs, host-level integration tests. | 002 | None — implemented & verified on `main` (`loopplane.webapi`). |
 | **012-loopplane-desktop-or-studio-host** | `specs/012-loopplane-desktop-or-studio-host` | **Verified** | Local desktop or studio host: local app host, sidecar process, local session manager, developer console, optional UI shell. No private legacy UI copy. | 002 | None — implemented & verified on `main` (`loopplane.studio`). |
 | **013-loopplane-multi-agent-orchestration** | `specs/013-loopplane-multi-agent-orchestration` | **Verified** | Subagents, coordinator, and delegation: agent registry, subagent execution, coordinator, delegation policy, child run references, aggregated events, aggregated artifacts. | 003 | None — implemented & verified on `main` (`loopplane.orchestration`). |
-| **014-loopplane-release-packaging-docs** | _(not created)_ | **Not started** | Public release quality: packaging, examples, docs, quickstart, API reference, changelog, public-safe cleanup, CI readiness. | all prior | `/speckit.specify`. |
+| **014-loopplane-release-packaging-docs** | `specs/014-loopplane-release-packaging-docs` | **Verified** | Public release quality: packaging, examples, docs, quickstart, API reference, changelog, public-safe cleanup, CI readiness. | all prior | None — implemented & verified on `main` (packaging + docs + CI; **roadmap complete**). |
 
 **Status evidence (for audit):**
 
@@ -221,7 +221,29 @@ git history) — not invented.
   delegation policy, and an empty selection are each contained (a fixed public-safe `"failed"` /
   `"not found"` marker, never raw exception detail). ruff + mypy(strict) clean; full suite
   **571 passed** → **Verified**.
-- **014** — No `specs/` directory and no source → **Not started**.
+- **014** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`. A packaging +
+  documentation + verification overlay over the existing tree — **no new package**:
+  `pyproject.toml` (complete metadata + a single-source `dynamic` version from
+  `src/loopplane/__init__.py` + wheel `packages` shipping `py.typed`), a PEP 561
+  `src/loopplane/py.typed` marker, `docs/api-reference.md`, `README.md` /
+  `docs/getting-started.md` / `docs/README.md` / `examples/README.md`, `CHANGELOG.md`,
+  `docs/release-readiness.md`, and a CI `uv build` step. Tasks **27/27 complete**;
+  17 release contract tests pass (single-source version + shipped `py.typed`; a
+  per-package `__all__` bijection that keeps the API reference drift-proof across all
+  **25 public packages**; docs/examples index ↔ file-tree consistency; CI gate +
+  no-secret; changelog structure + coverage; the PHASE14 public-safety scan).
+  **Strictly additive / non-breaking** — no layer public API (`__all__`) or runtime
+  behavior changed, and **no new runtime dependency** (the only code additions are the
+  version single-sourcing and the `py.typed` marker). `uv build` produces an sdist +
+  wheel offline (version **0.1.0** from the single source; `py.typed` + every
+  subpackage shipped). The software **license** is the one **deferred maintainer gate**
+  (a release-readiness checklist item). ruff + mypy(strict) clean; full suite
+  **588 passed** → **Verified**.
+
+> **🏁 Roadmap complete.** Units **000–014 are all `Verified`** on `main`. The autopilot
+> has no further unit to advance. The one open pre-release action is a maintainer
+> decision — add a `LICENSE` file (see [`docs/release-readiness.md`](./release-readiness.md)).
 
 ---
 
@@ -229,13 +251,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **014-loopplane-release-packaging-docs** |
-| Active feature directory | _(not created — `/speckit.specify` will create `specs/014-loopplane-release-packaging-docs`)_ |
-| Current branch | `main` — **main-only autopilot**; all units progress on `main`, no dedicated feature branch required (see §7 Branch Strategy) |
-| Current Spec Kit step | **Specify** (013 is **Verified**; 014 has no `specs/` directory yet) |
-| Depends on | all prior |
-| Next command | **`/speckit.specify`** |
-| Stop condition status | None active. Branch strategy is **main-only** — a missing feature branch is *not* a stop condition (see §7 / §9). |
+| Active unit | **None — roadmap complete (000–014 all `Verified`)** |
+| Active feature directory | `specs/014-loopplane-release-packaging-docs` (the last unit, Verified) |
+| Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
+| Current Spec Kit step | **None — all units shipped.** The roadmap (000–014) is complete. |
+| Depends on | — |
+| Next command | **None.** The only remaining pre-release action is a maintainer decision: add a `LICENSE` (see [`docs/release-readiness.md`](./release-readiness.md)). |
+| Stop condition status | Roadmap complete — the autopilot has no further unit to advance, so it stops cleanly. |
 
 ---
 

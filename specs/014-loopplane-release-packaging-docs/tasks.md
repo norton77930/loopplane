@@ -129,9 +129,9 @@ repo-wide public-safety scan + `PHASE14` are 0 findings.
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T025 [P] Run `ruff format` + `ruff check` (src + tests) + `mypy` (strict, src) → clean.
-- [ ] T026 Run the full suite `pytest --basetemp=".pytmp"` → green (every prior layer + the new 014 contract tests, confirming no runtime behavior changed); run the `uv build` smoke (sdist + wheel; `loopplane/py.typed` present) or record the local-frontend caveat (verified in CI).
-- [ ] T027 Confirm the repo-wide public-safety scan is green; update `docs/loopplane-agent-board.md` — set **014 → Verified** with a §3 evidence paragraph, and mark the roadmap (000–014) **complete**.
+- [X] T025 [P] Ran `ruff format --check .` (279 files formatted) + `ruff check` (src + tests, all passed) + `mypy` (strict, 134 source files, no issues) → clean.
+- [X] T026 Full suite `pytest --basetemp=".pytmp"` → **588 passed** (every prior layer + the 17 new 014 contract tests, confirming no runtime behavior changed); `uv build` smoke → sdist + wheel, version **0.1.0** (single source), `loopplane/py.typed` shipped (138 wheel entries).
+- [X] T027 Repo-wide public-safety scan green (14 public-safety tests pass, incl. PHASE14); updated `docs/loopplane-agent-board.md` — **014 → Verified** with a §3 evidence paragraph, §4 active feature → **roadmap complete**, and a 🏁 roadmap-complete banner (000–014 all Verified).
 
 ---
 
