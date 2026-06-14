@@ -25,6 +25,15 @@ from loopplane.events.emitter import EventEmitter
 from loopplane.gateway.sizing import measure_outputs, reduce_outputs
 from loopplane.gateway.spi import AdapterOutput, ErrorOutput, ToolAdapter
 from loopplane.gateway.validation import validate_input
+from loopplane.hooks.decisions import ToolGateDeny, ToolGateModify
+from loopplane.hooks.dispatcher import HookDispatcher
+from loopplane.hooks.points import (
+    AfterToolFailurePayload,
+    AfterToolUsePayload,
+    BeforeToolUsePayload,
+    FileChangedPayload,
+    LifecyclePoint,
+)
 from loopplane.model.boundary import ToolCallRequest, ToolDescriptor
 from loopplane.model.content import OutputBlock, TextBlock, ToolResultBlock
 
@@ -88,6 +97,7 @@ class ToolGateway:
         call_timeout_seconds: float = DEFAULT_CALL_TIMEOUT_SECONDS,
         output_limit_bytes: int = DEFAULT_OUTPUT_LIMIT_BYTES,
         artifact_handoff: ArtifactHandoff | None = None,
+        hooks: HookDispatcher | None = None,
     ) -> None:
         # The per-call time limit is always enforced; pass a large value for
         # an effectively unbounded call rather than disabling it outright.
@@ -96,6 +106,9 @@ class ToolGateway:
         self._call_timeout_seconds = call_timeout_seconds
         self._output_limit_bytes = output_limit_bytes
         self._artifact_handoff = artifact_handoff
+        # Optional lifecycle hooks (feature 015). Absent by default: when None,
+        # every stage below runs its existing path with no added work (FR-011).
+        self._hooks = hooks
 
     def register(self, descriptor: ToolDescriptor, handler: ToolHandler) -> None:
         self._add(descriptor, _HandlerAdapter(descriptor, handler))
@@ -215,6 +228,38 @@ class ToolGateway:
                 ),
             ), elapsed()
 
+        # Stage 3b: before-tool hooks (feature 015) — fire only on the allow path,
+        # after approval, so a hook can deny or modify but never widen what
+        # approval allowed (FR-009, FR-012). A deny reuses the policy-denial path;
+        # a modify replaces the inputs and is re-validated before execution.
+        effective_input = dict(call.input)
+        if self._hooks is not None:
+            decision = await self._hooks.decide_tool(
+                BeforeToolUsePayload(
+                    session_id=context.session_id,
+                    call_id=call.call_id,
+                    tool_name=call.tool_name,
+                    input=dict(effective_input),
+                )
+            )
+            if isinstance(decision, ToolGateDeny):
+                return self._failure(
+                    call,
+                    NormalizedError(
+                        category=ErrorCategory.POLICY_DENIAL, reason=decision.reason
+                    ),
+                ), elapsed()
+            if isinstance(decision, ToolGateModify):
+                problem = validate_input(tool.descriptor.input_schema, decision.input)
+                if problem is not None:
+                    return self._failure(
+                        call,
+                        NormalizedError(
+                            category=ErrorCategory.VALIDATION, reason=problem
+                        ),
+                    ), elapsed()
+                effective_input = dict(decision.input)
+
         # Stages 4–6: execute under the per-call time limit; normalize every
         # failure (FR-024, FR-025).
         outputs: list[OutputBlock] = []
@@ -223,7 +268,7 @@ class ToolGateway:
         try:
             with anyio.move_on_after(self._call_timeout_seconds) as scope:
                 async for output in tool.adapter.invoke(
-                    call.tool_name, dict(call.input), context
+                    call.tool_name, dict(effective_input), context
                 ):
                     if isinstance(output, ErrorOutput):
                         error = NormalizedError(
@@ -252,6 +297,17 @@ class ToolGateway:
                 "warning", "gateway", f"{call.tool_name} exceeded its time limit"
             )
         if error is not None:
+            if self._hooks is not None:
+                await self._hooks.fire(
+                    LifecyclePoint.after_tool_failure,
+                    AfterToolFailurePayload(
+                        session_id=context.session_id,
+                        call_id=call.call_id,
+                        tool_name=call.tool_name,
+                        error_category=error.category.value,
+                        reason=error.reason,
+                    ),
+                )
             return self._failure(call, error, outputs), elapsed()
 
         # Stage 7: size-manage (FR-026). With artifact storage attached the
@@ -272,6 +328,32 @@ class ToolGateway:
             outputs=outputs,
             artifact_reference=artifact_reference,
         )
+        if self._hooks is not None:
+            await self._hooks.fire(
+                LifecyclePoint.after_tool_use,
+                AfterToolUsePayload(
+                    session_id=context.session_id,
+                    call_id=call.call_id,
+                    tool_name=call.tool_name,
+                    duration_seconds=elapsed(),
+                ),
+            )
+            # file-changed: a successful non-read-only tool that names a path
+            # (FR-013). Read-only tools and tools without a path never fire it.
+            if not tool.descriptor.read_only:
+                changed = effective_input.get("path") or effective_input.get(
+                    "file_path"
+                )
+                if isinstance(changed, str) and changed:
+                    await self._hooks.fire(
+                        LifecyclePoint.file_changed,
+                        FileChangedPayload(
+                            session_id=context.session_id,
+                            call_id=call.call_id,
+                            tool_name=call.tool_name,
+                            path=changed,
+                        ),
+                    )
         return result, elapsed()
 
     @staticmethod

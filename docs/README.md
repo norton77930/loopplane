@@ -23,6 +23,7 @@ the [API reference](./api-reference.md).
 - [Web / API host](./web-api-host.md) — the web/API host transport (unit 011).
 - [Desktop / studio host](./desktop-studio-host.md) — the local desktop/studio host (unit 012).
 - [Multi-agent orchestration](./multi-agent-orchestration.md) — subagents, coordinator, delegation (unit 013).
+- [Lifecycle hooks](./hooks.md) — observe and gate the agent at lifecycle points (unit 015).
 
 ## Reference
 

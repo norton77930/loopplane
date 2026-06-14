@@ -12,6 +12,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from loopplane.engineering import LoopDefinition, LoopOutcome, RunReference, run_loop
+from loopplane.hooks.dispatcher import HookDispatcher
+from loopplane.hooks.points import (
+    LifecyclePoint,
+    SubagentStartPayload,
+    SubagentStopPayload,
+)
 from loopplane.orchestration.registry import AgentRegistry
 
 # A delegation policy selects which registered subagents the coordinator runs.
@@ -41,8 +47,12 @@ class SubagentResult:
 class Coordinator:
     """Runs selected subagents from a registry and returns their results."""
 
-    def __init__(self, registry: AgentRegistry) -> None:
+    def __init__(
+        self, registry: AgentRegistry, *, hooks: HookDispatcher | None = None
+    ) -> None:
         self._registry = registry
+        # Optional lifecycle hooks (feature 015); absent by default (FR-011).
+        self._hooks = hooks
 
     async def run(self, selection: Sequence[str]) -> tuple[SubagentResult, ...]:
         """Run exactly the selected subagents (deduped, each once) in
@@ -84,15 +94,29 @@ class Coordinator:
         # A subagent whose loop run raises is captured per subagent (a fixed,
         # public-safe marker — never the raw exception detail) so the coordinator
         # still completes with the other subagents' results (FR-041, NFR-005/006).
+        if self._hooks is not None:
+            await self._hooks.fire(
+                LifecyclePoint.subagent_start,
+                SubagentStartPayload(session_id="", subagent=name, agent_type=name),
+            )
         try:
             outcome = await run_loop(definition)
         except Exception:
+            await self._fire_subagent_stop(name, "failed")
             return SubagentResult(
                 subagent=name, reference=None, outcome=None, failure="failed"
             )
+        await self._fire_subagent_stop(name, "success")
         reference = ChildRunReference(
             subagent=name, loop_id=outcome.loop_id, run_refs=outcome.state.run_refs
         )
         return SubagentResult(
             subagent=name, reference=reference, outcome=outcome, failure=None
         )
+
+    async def _fire_subagent_stop(self, name: str, outcome: str) -> None:
+        if self._hooks is not None:
+            await self._hooks.fire(
+                LifecyclePoint.subagent_stop,
+                SubagentStopPayload(session_id="", subagent=name, outcome=outcome),
+            )

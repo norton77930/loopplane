@@ -18,6 +18,13 @@ import anyio.lowlevel
 from loopplane.context import RunContext
 from loopplane.events.emitter import EventEmitter
 from loopplane.gateway.gateway import ToolGateway
+from loopplane.hooks.decisions import PromptAnnotate, PromptBlock
+from loopplane.hooks.dispatcher import HookDispatcher
+from loopplane.hooks.points import (
+    LifecyclePoint,
+    ModelStopPayload,
+    UserPromptSubmitPayload,
+)
 from loopplane.loop.assembly import PromptAssembler
 from loopplane.loop.compaction import compact_history
 from loopplane.loop.history import SessionHistory
@@ -67,12 +74,15 @@ class AgentLoop:
         emitter: EventEmitter,
         history: SessionHistory,
         assembler: PromptAssembler | None = None,
+        hooks: HookDispatcher | None = None,
     ) -> None:
         self._model = model
         self._gateway = gateway
         self._emitter = emitter
         self._history = history
         self._assembler = assembler
+        # Optional lifecycle hooks (feature 015); absent by default (FR-011).
+        self._hooks = hooks
 
     async def run(
         self, input_blocks: Sequence[ContentBlock], context: RunContext
@@ -90,6 +100,22 @@ class AgentLoop:
         if context.turn_budget is not None and context.turn_budget <= 0:
             await self._emitter.run_terminated("turn-budget-exhausted", 0)
             return
+
+        # user-prompt-submit hook (feature 015): fire before the prompt is
+        # recorded or sent. A block ends the run without a model call — the prompt
+        # never enters history — and surfaces its public-safe reason as a
+        # diagnostic; an annotation augments the prompt the model receives (FR-007).
+        if self._hooks is not None:
+            decision = await self._hooks.decide_prompt(
+                UserPromptSubmitPayload(session_id=context.session_id, text=prompt)
+            )
+            if isinstance(decision, PromptBlock):
+                await self._emitter.diagnostic("warning", "hooks", decision.reason)
+                await self._emitter.run_terminated("cancelled", 0)
+                return
+            if isinstance(decision, PromptAnnotate):
+                input_blocks = [*input_blocks, TextBlock(text=decision.text)]
+                prompt = f"{prompt}\n{decision.text}"
 
         await self._history.append("user", input_blocks)
         await self._emitter.user_input(input_blocks)
@@ -158,6 +184,14 @@ class AgentLoop:
                 await self._history.append("assistant", assistant_blocks)
 
             if not outcome.calls:
+                if self._hooks is not None:
+                    await self._hooks.fire(
+                        LifecyclePoint.model_stop,
+                        ModelStopPayload(
+                            session_id=context.session_id,
+                            turns_taken=turns_completed,
+                        ),
+                    )
                 await self._emitter.run_terminated(
                     "natural-completion", turns_completed
                 )

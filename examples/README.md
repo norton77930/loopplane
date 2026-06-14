@@ -18,5 +18,6 @@ provider credentials, no network. Run any one with `python examples/<name>.py`.
 | `examples/webapi_quickstart.py` | The web/API host transport (unit 011). |
 | `examples/studio_quickstart.py` | The local desktop/studio host (unit 012). |
 | `examples/orchestration_quickstart.py` | Register subagents, coordinate, aggregate (unit 013). |
+| `examples/hooks_quickstart.py` | Observe and gate the agent with lifecycle hooks (unit 015). |
 
 New to LoopPlane? Start with [Getting started](../docs/getting-started.md).

@@ -523,3 +523,33 @@ Multi-agent orchestration: run several loops as subagents and combine results.
 - `AggregatedEvent` — one aggregated, metadata-only event.
 - `aggregate_artifacts` — aggregate subagents' artifact references.
 - `AggregatedArtifact` — one aggregated, metadata-only artifact reference.
+
+### `loopplane.hooks` (unit 015)
+
+Lifecycle hooks: observe — and, at the gating points, gate or modify — the agent
+at well-defined lifecycle moments. Additive and inert by default.
+
+- `LifecyclePoint` — the eleven lifecycle points.
+- `is_gating` — whether a point accepts a gating decision.
+- `HookRegistry` — register, unregister, and clear callbacks per point.
+- `HookCallback` — the type of a hook callback (sync or async).
+- `HookDispatcher` — fires points and resolves gating decisions.
+- `BeforeToolUsePayload` — the before-tool-use payload.
+- `AfterToolUsePayload` — the after-tool-use payload.
+- `AfterToolFailurePayload` — the after-tool-failure payload.
+- `FileChangedPayload` — the file-changed payload.
+- `UserPromptSubmitPayload` — the user-prompt-submit payload.
+- `SessionStartPayload` — the session-start payload.
+- `SessionEndPayload` — the session-end payload.
+- `ProcessSetupPayload` — the process-setup payload.
+- `SubagentStartPayload` — the subagent-start payload.
+- `SubagentStopPayload` — the subagent-stop payload.
+- `ModelStopPayload` — the model-stop payload.
+- `ToolGateAllow` — allow a tool call unchanged.
+- `ToolGateDeny` — deny a tool call with a public-safe reason.
+- `ToolGateModify` — replace a tool call's inputs.
+- `ToolGateDecision` — the before-tool-use decision type.
+- `PromptAllow` — allow a prompt unchanged.
+- `PromptBlock` — block a prompt with a public-safe reason.
+- `PromptAnnotate` — augment a prompt with extra context.
+- `PromptDecision` — the user-prompt-submit decision type.

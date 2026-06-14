@@ -9,6 +9,7 @@ stream. Without stores, sessions are purely in-memory (the US1/US2 posture).
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -47,6 +48,13 @@ from loopplane.events.envelope import (
 )
 from loopplane.events.sequencer import EventSequencer
 from loopplane.gateway.gateway import ToolGateway
+from loopplane.hooks.dispatcher import HookDispatcher
+from loopplane.hooks.points import (
+    LifecyclePoint,
+    ProcessSetupPayload,
+    SessionEndPayload,
+    SessionStartPayload,
+)
 from loopplane.loop.assembly import AugmentationProvider, PromptAssembler
 from loopplane.loop.history import (
     HistoryEntry,
@@ -90,6 +98,7 @@ class _Session:
     ledger: ReplacementLedger | None = None
     attached: bool = False
     driving: bool = False
+    started: bool = False
 
 
 class RuntimeController:
@@ -107,10 +116,16 @@ class RuntimeController:
         skill_prompt_budget_chars: int = DEFAULT_PROMPT_BUDGET_CHARS,
         enable_assembly: bool | None = None,
         assembly_keep_last: int = 4,
+        hooks: HookDispatcher | None = None,
     ) -> None:
         self._model = model
         self._gateway = gateway
         self._event_sink = event_sink
+        # Optional lifecycle hooks (feature 015); absent by default (FR-011).
+        # process_setup fires at most once per controller lifetime.
+        self._hooks = hooks
+        self._setup_fired = False
+        self._background: set[asyncio.Task[None]] = set()
         self._checkpoint = checkpoint_store
         self._artifacts = artifact_store
         self._replacement_budget = replacement_budget_bytes
@@ -265,6 +280,7 @@ class RuntimeController:
                 emitter=emitter,
                 history=history,
                 assembler=assembler,
+                hooks=self._hooks,
             ),
             broker=InteractionBroker(emitter=emitter),
             approval_memory={},
@@ -305,6 +321,20 @@ class RuntimeController:
             raise RuntimeError(f"a run is already active for session: {session_id}")
         session.driving = True
         session.state = "active"
+        if self._hooks is not None:
+            if not self._setup_fired:
+                self._setup_fired = True
+                await self._hooks.fire(
+                    LifecyclePoint.process_setup, ProcessSetupPayload()
+                )
+            if not session.started:
+                session.started = True
+                await self._hooks.fire(
+                    LifecyclePoint.session_start,
+                    SessionStartPayload(
+                        session_id=session.session_id, label=session.label
+                    ),
+                )
         context = RunContext(
             session_id=session_id,
             working_scope=session.working_scope,
@@ -446,6 +476,7 @@ class RuntimeController:
         session.cancellation.set()
         if session.state != "terminated":
             session.state = "suspended"
+            self._fire_session_end(session, "suspended")
 
     def list_sessions(self) -> list[SessionSummary]:
         """Identity and recency, newest first (FR-085)."""
@@ -478,6 +509,26 @@ class RuntimeController:
         session = self._require(session_id)
         session.cancellation.set()
         session.state = "terminated"
+        self._fire_session_end(session, "terminated")
+
+    def _fire_session_end(self, session: _Session, state: str) -> None:
+        # session_end is observational (feature 015). terminate/detach are part
+        # of the synchronous public surface, so the end hooks fire-and-forget on
+        # the running loop; a retained task reference avoids premature GC.
+        if self._hooks is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = loop.create_task(
+            self._hooks.fire(
+                LifecyclePoint.session_end,
+                SessionEndPayload(session_id=session.session_id, state=state),
+            )
+        )
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
 
     async def emit_diagnostic(
         self,

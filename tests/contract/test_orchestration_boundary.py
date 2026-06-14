@@ -30,6 +30,11 @@ ORCH_DIR = REPO_ROOT / "src" / "loopplane" / "orchestration"
 ALLOWED_PREFIXES = (
     "loopplane.engineering",
     "loopplane.orchestration",
+    # Feature 015: the coordinator may fire subagent lifecycle hooks through the
+    # foundational, dependency-free hook layer. This preserves the boundary's
+    # intent (still no tool execution and no live-bus re-emit — enforced by
+    # PROHIBITED_TOKENS below); hooks observe only.
+    "loopplane.hooks",
 )
 # Non-import runtime-internal / re-emit symbols this layer must never reach.
 # (loopplane.* internal/host/sibling *imports* are enforced authoritatively by

@@ -91,8 +91,40 @@ async call path, so no new threads or event loops are introduced (anyio-only).
 
 **Decision**: the `HookRegistry` is owned by the `RuntimeController` (one per
 runtime). The controller builds a `HookDispatcher` from the registry and passes it
-into each session's Gateway/Loop and into the Coordinator. Hosts register hooks on
-the registry before driving a session; the plugin system (unit 016) will register
-through the same registry. Registration mutations take effect on the next firing of
-a point and never mutate an in-flight firing (FR-018) — the dispatcher snapshots
-the callback list per fire.
+into each session's Gateway/Loop. The `Coordinator` (unit 013), which a host builds
+directly, accepts the same dispatcher. Hosts register hooks on the registry before
+driving a session; the plugin system (unit 016) will register through the same
+registry. Registration mutations take effect on the next firing of a point and
+never mutate an in-flight firing (FR-018) — the dispatcher snapshots the callback
+list per fire.
+
+## R9 — Orchestration boundary extension (Constitution IV)
+
+The unit-013 orchestration boundary contract (`test_orchestration_boundary.py`)
+admitted imports only from `loopplane.engineering`/`loopplane.orchestration`. To
+fire `subagent_start`/`subagent_stop`, the `Coordinator` now also imports the
+foundational, dependency-free `loopplane.hooks` layer. **Decision**: extend the
+boundary's import allow-list to admit `loopplane.hooks`. This is a documented
+boundary-definition change (Principle IV): the boundary's intent is preserved — the
+coordinator still executes no tool and re-emits no live bus (the
+`PROHIBITED_TOKENS` guard for `RuntimeController`/`EventEmitter`/`serialize_event`
+is unchanged), and hooks observe only. The decision mirrors the runtime core
+(001 gateway/loop/controller), which composes `loopplane.hooks` the same way.
+
+## R10 — session_end on a synchronous teardown API
+
+`RuntimeController.terminate`/`detach` are part of the synchronous public surface
+(units 001/002); making them async would be a breaking contract change (avoided —
+stop §9.5). `session_end` is observational, so the controller fires it
+fire-and-forget on the running event loop (a retained task reference avoids
+premature GC); with no running loop it is skipped. `session_start` and
+`process_setup` fire from the async `drive` path (process_setup at most once).
+
+## R11 — prompt block without a new termination reason
+
+A blocked prompt must end the run without a model call, but the runtime's
+`TerminationReason` is a closed set (001 envelope). **Decision**: a block reuses the
+existing `"cancelled"` termination (with zero turns, fired before the prompt enters
+history so history stays clean) and surfaces the block's public-safe reason through
+the existing `diagnostic` event — no new termination reason, so the 001 envelope
+contract is untouched.
