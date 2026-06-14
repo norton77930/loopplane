@@ -45,11 +45,11 @@ modified; no dependency is added.
 **Purpose**: The agent registry and the coordinator's child-reference / result value types every story
 composes. **⚠️ Blocks US1–US5.**
 
-- [ ] T003 [P] Write unit tests in `tests/unit/test_orchestration_core.py` (MUST FAIL first): `AgentRegistry.register` registers a named subagent and `names()` is registration-ordered; a duplicate name → `DuplicateSubagentError`; `get(unknown)` → `None`; the `ChildRunReference` / `SubagentResult` / `AggregatedEvent` / `AggregatedArtifact` value types carry only their declared metadata fields (FR-001, FR-021, FR-031).
-- [ ] T004 [P] Implement `src/loopplane/orchestration/registry.py`: `Subagent` (name + `LoopDefinition`), `AgentRegistry` (`register` / `get` / `names` / `__contains__`), and `DuplicateSubagentError` (FR-001-FR-003; [data-model.md](./data-model.md)).
-- [ ] T005 Implement `src/loopplane/orchestration/coordinator.py` value types: frozen `ChildRunReference` (subagent / loop_id / run_refs) and `SubagentResult` (subagent / reference / outcome / failure), plus a `Coordinator(registry)` skeleton (FR-002, FR-010).
-- [ ] T006 Finalize `src/loopplane/orchestration/__init__.py` exports (`AgentRegistry`, `Subagent`, `DuplicateSubagentError`, `Coordinator`, `ChildRunReference`, `SubagentResult`).
-- [ ] T007 Run `pytest tests/unit/test_orchestration_core.py --basetemp=".pytmp"` → green (gate for Foundational).
+- [X] T003 [P] Write unit tests in `tests/unit/test_orchestration_core.py`: `AgentRegistry.register` registers a named subagent and `names()` is registration-ordered; a duplicate name → `DuplicateSubagentError`; `get(unknown)` → `None`; `__contains__`; the `ChildRunReference` / `SubagentResult` value types carry only their declared metadata fields. (The `AggregatedEvent` / `AggregatedArtifact` metadata-only assertions land with US3/US4 + the boundary test, since those types are created then.)
+- [X] T004 [P] Implement `src/loopplane/orchestration/registry.py`: `Subagent` (name + `LoopDefinition`), `AgentRegistry` (`register` / `get` / `names` / `__contains__`), and `DuplicateSubagentError` (FR-001-FR-003; [data-model.md](./data-model.md)).
+- [X] T005 Implement `src/loopplane/orchestration/coordinator.py` value types: frozen `ChildRunReference` (subagent / loop_id / run_refs) and `SubagentResult` (subagent / reference / outcome / failure), plus a `Coordinator(registry)` skeleton (FR-002, FR-010).
+- [X] T006 Finalize `src/loopplane/orchestration/__init__.py` exports (`AgentRegistry`, `Subagent`, `DuplicateSubagentError`, `Coordinator`, `ChildRunReference`, `SubagentResult`).
+- [X] T007 Run `pytest tests/unit/test_orchestration_core.py --basetemp=".pytmp"` → green (gate for Foundational; 3 passed).
 
 **Checkpoint**: The registry and the coordinator result types are ready.
 

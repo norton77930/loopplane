@@ -11,4 +11,22 @@ tool itself and consumes each subagent's recorded loop events as a consumer
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from loopplane.orchestration.coordinator import (
+    ChildRunReference,
+    Coordinator,
+    SubagentResult,
+)
+from loopplane.orchestration.registry import (
+    AgentRegistry,
+    DuplicateSubagentError,
+    Subagent,
+)
+
+__all__ = [
+    "AgentRegistry",
+    "ChildRunReference",
+    "Coordinator",
+    "DuplicateSubagentError",
+    "Subagent",
+    "SubagentResult",
+]
