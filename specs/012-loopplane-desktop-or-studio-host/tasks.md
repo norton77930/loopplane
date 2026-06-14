@@ -111,9 +111,9 @@ explicit negative result.
 **Independent Test**: after a run, request the history-metadata view (no content), the outcome view, and
 the sessions list; an unknown id → `ErrorView(not-found)`.
 
-- [ ] T017 [P] [US4] Write integration tests in `tests/integration/test_studio_us4.py` (MUST FAIL first): after a run on a storage-backed host, `studio.history_view(id)` → `HistoryEntryView`s with **no** block text; `studio.list_sessions()` → `SessionSummaryView`s; an unknown session → `ErrorView(not-found)` (US4 scenarios 1–3; SC-003, FR-030).
-- [ ] T018 [US4] Implement `StudioHost.history_view(session_id)` and confirm `list_sessions` in `console.py`: project `host.history_snapshot` / `host.list_sessions` to metadata-only views, mapping `KeyError` → `ErrorView(not-found)` (FR-030).
-- [ ] T019 [US4] Run `pytest tests/integration/test_studio_us4.py --basetemp=".pytmp"` → green.
+- [X] T017 [P] [US4] Write integration tests in `tests/integration/test_studio_us4.py`: after a run on a storage-backed host, `studio.history_view(id)` → `HistoryEntryView`s with **no** block text; `studio.list_sessions()` → `SessionSummaryView`s (`{session_id, label}`) including the run's session; an unknown session history → `ErrorView(not-found)` (US4 scenarios 1–3; SC-003, FR-030).
+- [X] T018 [US4] Implement `StudioHost.history_view(session_id)` in `console.py` (and `list_sessions` from US2): project `host.history_snapshot` / `host.list_sessions` to metadata-only views, mapping `KeyError` → `ErrorView(not-found)` (FR-030).
+- [X] T019 [US4] Run `pytest tests/integration/test_studio_us4.py --basetemp=".pytmp"` → green (2 passed; full suite 542).
 
 **Checkpoint**: US1–US4 — run, session manager, interactive, and inspection.
 

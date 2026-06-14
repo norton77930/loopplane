@@ -19,7 +19,12 @@ from anyio.abc import TaskGroup
 
 from loopplane.host import LoopPlaneHost
 from loopplane.studio.sessions import OnApproval, SessionEntry, run_session
-from loopplane.studio.views import ErrorView, RunResultView, SessionSummaryView
+from loopplane.studio.views import (
+    ErrorView,
+    HistoryEntryView,
+    RunResultView,
+    SessionSummaryView,
+)
 
 
 async def _discard(event: object) -> None:
@@ -160,3 +165,17 @@ class StudioHost:
         if entry is None:
             return ErrorView(kind="not-found", detail="not found")
         return entry.session.answer_question(request_id, answers)
+
+    def history_view(self, session_id: str) -> tuple[HistoryEntryView, ...] | ErrorView:
+        """A metadata-only history snapshot for a session — roles + block counts,
+        never the conversation content; an unknown session → a not-found view
+        (FR-030)."""
+
+        try:
+            entries = self._host.history_snapshot(session_id)
+        except KeyError:
+            return ErrorView(kind="not-found", detail="not found")
+        return tuple(
+            HistoryEntryView(role=entry.role, block_count=len(entry.blocks))
+            for entry in entries
+        )
