@@ -18,11 +18,10 @@ from the committed tree, offline, and most are enforced by a contract test.
   (`tests/contract/test_api_reference.py`, `tests/contract/test_docs_examples_index.py`)
 - [ ] **Changelog current** — `CHANGELOG.md` records the release under its version.
   (`tests/contract/test_changelog.py`)
-- [ ] **LICENSE present** — *maintainer decision, deferred.* Choose a license, add a
-  `LICENSE` file at the repository root, set `license = {file = "LICENSE"}` (or the
-  SPDX identifier) in `pyproject.toml`, and add the matching `License ::` trove
-  classifier. The build does not require this, so it is the one gate this unit
-  leaves open for the maintainer.
+- [x] **LICENSE present** — the project is licensed under **MIT**: a `LICENSE` file
+  is at the repository root, `pyproject.toml` declares `license = "MIT"` with
+  `license-files = ["LICENSE"]` (PEP 639; the wheel carries `License-Expression: MIT`),
+  and the README's License section links it. (`tests/contract/test_packaging.py`)
 
 ## Out of scope (reserved)
 

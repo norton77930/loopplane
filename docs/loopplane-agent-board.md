@@ -237,13 +237,13 @@ git history) — not invented.
   behavior changed, and **no new runtime dependency** (the only code additions are the
   version single-sourcing and the `py.typed` marker). `uv build` produces an sdist +
   wheel offline (version **0.1.0** from the single source; `py.typed` + every
-  subpackage shipped). The software **license** is the one **deferred maintainer gate**
-  (a release-readiness checklist item). ruff + mypy(strict) clean; full suite
-  **588 passed** → **Verified**.
+  subpackage shipped). The project is licensed under **MIT** (a `LICENSE` file +
+  `license = "MIT"` in `pyproject.toml`; the wheel carries `License-Expression: MIT`).
+  ruff + mypy(strict) clean; full suite **589 passed** → **Verified**.
 
-> **🏁 Roadmap complete.** Units **000–014 are all `Verified`** on `main`. The autopilot
-> has no further unit to advance. The one open pre-release action is a maintainer
-> decision — add a `LICENSE` file (see [`docs/release-readiness.md`](./release-readiness.md)).
+> **🏁 Roadmap complete.** Units **000–014 are all `Verified`** on `main`, and the project
+> is licensed under **MIT**. The autopilot has no further unit to advance; every
+> release-readiness gate (see [`docs/release-readiness.md`](./release-readiness.md)) is met.
 
 ---
 
@@ -256,7 +256,7 @@ git history) — not invented.
 | Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
 | Current Spec Kit step | **None — all units shipped.** The roadmap (000–014) is complete. |
 | Depends on | — |
-| Next command | **None.** The only remaining pre-release action is a maintainer decision: add a `LICENSE` (see [`docs/release-readiness.md`](./release-readiness.md)). |
+| Next command | **None.** All release-readiness gates are met (project licensed under **MIT**); the repo is release-ready. Publishing to a package index remains a reserved, maintainer-initiated step. |
 | Stop condition status | Roadmap complete — the autopilot has no further unit to advance, so it stops cleanly. |
 
 ---

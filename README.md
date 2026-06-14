@@ -77,5 +77,4 @@ normalized event bus — and every committed file is public-safe.
 
 ## License
 
-The project license is being finalized; a `LICENSE` file will be added before a
-tagged release. Until then, all rights are reserved by the authors.
+LoopPlane is released under the [MIT License](LICENSE).

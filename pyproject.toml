@@ -6,6 +6,8 @@ build-backend = "hatchling.build"
 name = "loopplane"
 description = "Embeddable agent harness runtime: agent loop, tool gateway, normalized events, checkpointing."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dynamic = ["version"]
 authors = [{ name = "LoopPlane contributors" }]

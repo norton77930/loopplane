@@ -9,7 +9,12 @@ import importlib
 import re
 
 import loopplane
-from tests.release_helpers import LOOPLANE, load_pyproject, public_packages
+from tests.release_helpers import (
+    LOOPLANE,
+    REPO_ROOT,
+    load_pyproject,
+    public_packages,
+)
 
 _VERSION_RE = re.compile(r"^\d+\.\d+")
 
@@ -63,3 +68,10 @@ def test_py_typed_marker_is_present_and_shipped() -> None:
 def test_every_public_subpackage_is_importable() -> None:
     for dotted in public_packages():
         importlib.import_module(dotted)
+
+
+def test_license_is_declared() -> None:
+    project = _project()
+    assert project.get("license") == "MIT", project.get("license")
+    assert project.get("license-files") == ["LICENSE"], project.get("license-files")
+    assert (REPO_ROOT / "LICENSE").is_file(), "LICENSE file missing"
