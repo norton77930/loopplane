@@ -8,7 +8,7 @@ workflow:
     Human-readable descriptor for autonomous /loop execution of the LoopPlane roadmap.
     This file is documentation, not an engine-executed Spec Kit workflow. The authoritative
     control document is docs/loopplane-agent-board.md; the per-run operating instruction is
-    .claude/loop.md. This descriptor records the roadmap units (000-014), the Spec Kit step
+    .claude/loop.md. This descriptor records the roadmap units (000-019), the Spec Kit step
     order, validation gates, commit/push policy, hard stop conditions, the Dynamic Workflow
     policy, and the handoff rules between units.
 
@@ -25,7 +25,7 @@ branch_strategy:
   commit_after_each_safe_stage: true
   push_after_each_safe_commit: true
   description: >
-    Autopilot runs directly on main. All roadmap units (000-014) progress on main; no dedicated
+    Autopilot runs directly on main. All roadmap units (000-019) progress on main; no dedicated
     feature branch is created or required, and autopilot must NOT stop merely because a unit lacks
     a feature branch. Autopilot does not create, switch, or merge branches; a human may introduce
     branches manually. Destructive git operations and merge conflicts remain hard stop conditions.
@@ -123,6 +123,33 @@ roadmap_units:
       - "012-loopplane-desktop-or-studio-host"
       - "013-loopplane-multi-agent-orchestration"
     purpose: "Public release quality: packaging, examples, docs, quickstart, API reference, changelog, public-safe cleanup, CI readiness."
+  # --- Post-release feature units (added 2026-06-15, maintainer-authorized roadmap extension). ---
+  # Statuses here are descriptive; the authoritative live status is docs/loopplane-agent-board.md §3.
+  - id: "015-loopplane-hook-system"
+    feature_directory: "specs/015-loopplane-hook-system"
+    status: "Spec in progress"
+    depends_on: ["001-loopplane-runtime-foundation", "003-loopplane-loop-engineering-layer"]
+    purpose: "Lifecycle hook system: a hook registry plus lifecycle events (pre/post tool use, prompt submit, session start/end, subagent start/stop, file changed, stop) that let host and plugin code observe — and, where contracted, gate or modify — agent behavior without forking the runtime. In-process; honors the single Tool Gateway (V) and Runtime Event Bus (VI) boundaries; hooks are distinct from normalized events (synchronous, may gate/modify vs. fire-and-forget stream)."
+  - id: "016-loopplane-plugin-system"
+    feature_directory: "specs/016-loopplane-plugin-system"
+    status: "Not started"
+    depends_on: ["001-loopplane-runtime-foundation", "008-loopplane-tool-gateway-advanced", "015-loopplane-hook-system"]
+    purpose: "Plugin manifest bundles: a public-safe plugin.json that packages skills + namespaced MCP servers + hooks into a discoverable, host-loadable unit; enable-list gating with zero default behavior change; loads through the existing skills/MCP/hook seams with no new runtime coupling. Reuses 001 skills, 008 toolkit, 015 hooks."
+  - id: "017-loopplane-cli-host"
+    feature_directory: "specs/017-loopplane-cli-host"
+    status: "Not started"
+    depends_on: ["002-loopplane-host-interface"]
+    purpose: "Interactive CLI host: a thin terminal host over the Host Application Interface (loopplane.host) — REPL/chat loop, run/session commands, normalized-event rendering, and an optional credential-gated real model provider behind an extra. Executes no tool itself (V) and consumes the normalized event stream (VI). Adds a console entry point; the runtime core is unchanged. Sequenced after 016."
+  - id: "018-loopplane-web-frontend"
+    feature_directory: "specs/018-loopplane-web-frontend"
+    status: "Not started"
+    depends_on: ["011-loopplane-web-api-host"]
+    purpose: "Web frontend: a from-scratch single-page UI over the 011 web/API host (REST + SSE) — chat/run view, event timeline, approvals/questions, session list. No private legacy UI copy (Constitution VII); written fresh; the JS toolchain is isolated under apps/ with its own CI gate. Sequenced after 017."
+  - id: "019-loopplane-desktop-gui"
+    feature_directory: "specs/019-loopplane-desktop-gui"
+    status: "Not started"
+    depends_on: ["012-loopplane-desktop-or-studio-host", "018-loopplane-web-frontend"]
+    purpose: "Desktop GUI shell: a local desktop application over the 012 studio sidecar contract — a packaged shell embedding the 018 frontend, driving an in-process/sidecar host with no server. No private legacy UI copy (Constitution VII); reuses 018; packaging + launch only, runtime unchanged."
 
 # Spec Kit step order applied per unit. Autopilot executes the next incomplete step from repo state.
 spec_kit_step_order:
@@ -225,4 +252,4 @@ handoff_rules:
   within_unit: "Advance one Spec Kit step at a time using board §6; under autopilot, chain steps until a human gate or a hard stop condition."
   unit_complete: "A unit is done when all tasks are complete, tests pass, the public-safety scan passes, and final review sets the board status to Verified."
   advance: "Only after the current unit is Verified, continue to the next unit. Update docs/loopplane-agent-board.md status before advancing."
-  branch: "Main-only autopilot: continue directly on main for every unit (000-014). Do NOT create, switch, or merge branches, and do NOT stop for a missing feature branch. Destructive git remains a hard stop."
+  branch: "Main-only autopilot: continue directly on main for every unit (000-019). Do NOT create, switch, or merge branches, and do NOT stop for a missing feature branch. Destructive git remains a hard stop."

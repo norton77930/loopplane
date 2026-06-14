@@ -2,7 +2,7 @@
 
 > **🛰 Roadmap Autopilot control document for `/loop` and `/loop 1m`.**
 > Read this file **first** at the start of every `/loop` run. It is the single source of truth that
-> lets `/loop` advance the **entire LoopPlane roadmap (units 000–014) autonomously** — choosing the
+> lets `/loop` advance the **entire LoopPlane roadmap (units 000–019) autonomously** — choosing the
 > active unit, the current Spec Kit step, and the next command from repository state, **without the
 > user manually prompting each step**. It governs *how the loop chooses and sequences work*; it
 > contains no product code.
@@ -93,7 +93,12 @@ git history) — not invented.
 | **011-loopplane-web-api-host** | `specs/011-loopplane-web-api-host` | **Verified** | Expose LoopPlane through a web/API host: FastAPI or equivalent host, REST endpoints, SSE or WebSocket streaming, auth boundary, session APIs, host-level integration tests. | 002 | None — implemented & verified on `main` (`loopplane.webapi`). |
 | **012-loopplane-desktop-or-studio-host** | `specs/012-loopplane-desktop-or-studio-host` | **Verified** | Local desktop or studio host: local app host, sidecar process, local session manager, developer console, optional UI shell. No private legacy UI copy. | 002 | None — implemented & verified on `main` (`loopplane.studio`). |
 | **013-loopplane-multi-agent-orchestration** | `specs/013-loopplane-multi-agent-orchestration` | **Verified** | Subagents, coordinator, and delegation: agent registry, subagent execution, coordinator, delegation policy, child run references, aggregated events, aggregated artifacts. | 003 | None — implemented & verified on `main` (`loopplane.orchestration`). |
-| **014-loopplane-release-packaging-docs** | `specs/014-loopplane-release-packaging-docs` | **Verified** | Public release quality: packaging, examples, docs, quickstart, API reference, changelog, public-safe cleanup, CI readiness. | all prior | None — implemented & verified on `main` (packaging + docs + CI; **roadmap complete**). |
+| **014-loopplane-release-packaging-docs** | `specs/014-loopplane-release-packaging-docs` | **Verified** | Public release quality: packaging, examples, docs, quickstart, API reference, changelog, public-safe cleanup, CI readiness. | all prior | None — implemented & verified on `main` (packaging + docs + CI; **v0.1.0 release shipped**). |
+| **015-loopplane-hook-system** | `specs/015-loopplane-hook-system` | **Spec in progress** | Lifecycle hook system: a hook registry plus lifecycle events (pre/post tool use, prompt submit, session start/end, subagent start/stop, file changed, stop) that let host and plugin code observe — and, where contracted, gate or modify — agent behavior without forking the runtime. In-process; honors the single Tool Gateway (V) and Runtime Event Bus (VI) boundaries; hooks are a distinct concept from normalized events (synchronous, may gate/modify vs. fire-and-forget stream). | 001, 003 | **Active — run `/speckit.specify`.** |
+| **016-loopplane-plugin-system** | `specs/016-loopplane-plugin-system` | **Not started** | Plugin manifest bundles: a public-safe `plugin.json` that packages skills + namespaced MCP servers + hooks into a discoverable, host-loadable unit; enable-list gating with zero default behavior change; loads through the existing skills/MCP/hook seams with no new runtime coupling. Reuses 001 skills, 008 toolkit, and 015 hooks. | 001, 008, 015 | Pending — blocked on 015. |
+| **017-loopplane-cli-host** | `specs/017-loopplane-cli-host` | **Not started** | Interactive CLI host: a thin terminal host over the Host Application Interface (`loopplane.host`) — REPL/chat loop, run/session commands, normalized-event rendering, and an optional credential-gated real model provider behind an extra. Executes **no tool** itself (V) and consumes the normalized event stream (VI). Adds a console entry point; the runtime core is unchanged. | 002 | Pending — blocked on 002 (done); sequenced after 016. |
+| **018-loopplane-web-frontend** | `specs/018-loopplane-web-frontend` | **Not started** | Web frontend: a from-scratch single-page UI over the 011 web/API host (REST + SSE) — chat/run view, event timeline, approvals/questions, session list. **No private legacy UI copy** (VII); written fresh; the JS toolchain is isolated under `apps/` with its own CI gate. | 011 | Pending — blocked on 011 (done); sequenced after 017. |
+| **019-loopplane-desktop-gui** | `specs/019-loopplane-desktop-gui` | **Not started** | Desktop GUI shell: a local desktop application over the 012 studio sidecar contract — a packaged shell embedding the 018 frontend, driving an in-process/sidecar host with no server. **No private legacy UI copy** (VII); reuses 018; packaging + launch only, runtime unchanged. | 012, 018 | Pending — blocked on 012 (done) and 018. |
 
 **Status evidence (for audit):**
 
@@ -241,9 +246,13 @@ git history) — not invented.
   `license = "MIT"` in `pyproject.toml`; the wheel carries `License-Expression: MIT`).
   ruff + mypy(strict) clean; full suite **589 passed** → **Verified**.
 
-> **🏁 Roadmap complete.** Units **000–014 are all `Verified`** on `main`, and the project
-> is licensed under **MIT**. The autopilot has no further unit to advance; every
-> release-readiness gate (see [`docs/release-readiness.md`](./release-readiness.md)) is met.
+> **🏁 v0.1.0 release shipped; roadmap extended.** Units **000–014 are all `Verified`** on `main`,
+> the project is licensed under **MIT**, and every release-readiness gate (see
+> [`docs/release-readiness.md`](./release-readiness.md)) is met. On **2026-06-15** the maintainer
+> authorized extending the roadmap with five post-release feature units — **015 hook-system →
+> 016 plugin-system → 017 cli-host → 018 web-frontend → 019 desktop-gui** — to be built with the
+> same Spec Kit flow and autopilot rules. The autopilot now advances the lowest-numbered unit that
+> is not yet `Verified` and whose dependencies are all `Verified`: currently **015-loopplane-hook-system**.
 
 ---
 
@@ -251,13 +260,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **None — roadmap complete (000–014 all `Verified`)** |
-| Active feature directory | `specs/014-loopplane-release-packaging-docs` (the last unit, Verified) |
-| Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **None — all units shipped.** The roadmap (000–014) is complete. |
-| Depends on | — |
-| Next command | **None.** All release-readiness gates are met (project licensed under **MIT**); the repo is release-ready. Publishing to a package index remains a reserved, maintainer-initiated step. |
-| Stop condition status | Roadmap complete — the autopilot has no further unit to advance, so it stops cleanly. |
+| Active unit | **015-loopplane-hook-system** (units 000–014 all `Verified`; v0.1.0 shipped) |
+| Active feature directory | `specs/015-loopplane-hook-system` (to be created by `/speckit.specify`) |
+| Current branch | `main` — **main-only autopilot**; all units progress on `main` (see §7 Branch Strategy) |
+| Current Spec Kit step | **Specify.** No `spec.md` yet for the active feature → run `/speckit.specify` (§6 step 6). |
+| Depends on | 001, 003 (both `Verified`) |
+| Next command | **`/speckit.specify`** for the hook-system feature, then continue clarify/checklist → plan → tasks → analyze → implement → final review. |
+| Stop condition status | None active — proceed under autopilot; stop only on the §9 hard-stop conditions. |
 
 ---
 
@@ -316,7 +325,7 @@ Autopilot may:
 7. Move to the next roadmap unit when the current unit is **Verified**.
 8. Stop only on hard stop conditions (Section 9).
 
-**Branch strategy — main-only.** Autopilot runs directly on `main`. All roadmap units (000–014)
+**Branch strategy — main-only.** Autopilot runs directly on `main`. All roadmap units (000–019)
 progress on `main`; no dedicated feature branch is created or required, and autopilot must **not**
 stop merely because a unit lacks a feature branch. After each safe stage it makes a small scoped
 commit and pushes (Sections 10–11). A human may introduce branches manually; autopilot itself does
