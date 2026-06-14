@@ -100,9 +100,9 @@ examples index lists every `examples/*.py`, no missing/dangling entry, README li
 **Independent Test**: `test_ci_gates.py` green — the workflow runs format-check + lint + strict types +
 tests + an offline build, no secret.
 
-- [ ] T016 [P] [US4] Write `tests/contract/test_ci_gates.py` (MUST FAIL first if the build step is absent): read `.github/workflows/ci.yml`; assert it runs ruff `format --check`, ruff `check`, `mypy`, `pytest`, and an offline `uv build`; assert no secret token pattern is referenced (FR-030/FR-031; SC-003).
-- [ ] T017 [US4] Update `.github/workflows/ci.yml`: add an offline `uv build` step (build the sdist + wheel; **no upload**) after the gates; confirm the four canonical gates remain. No secret.
-- [ ] T018 [US4] Run `pytest tests/contract/test_ci_gates.py --basetemp=".pytmp"` → green.
+- [X] T016 [P] [US4] Write `tests/contract/test_ci_gates.py` (2 tests): read `.github/workflows/ci.yml`; assert it runs ruff `format --check`, ruff `check`, `mypy`, `pytest`, and `uv build`; assert no `secrets.` reference (FR-030/FR-031; SC-003).
+- [X] T017 [US4] Updated `.github/workflows/ci.yml`: added a `Build distribution` step (`uv build`; no upload) after the Tests step; the four canonical gates remain (Lint/Format check/Type check/Tests on ubuntu + windows, py3.12). No secret.
+- [X] T018 [US4] Run `pytest tests/contract/test_ci_gates.py` → **2 passed**; full suite **584 passed**. (`uv build` already verified locally in US1.)
 
 **Checkpoint**: US1–US4 — gates encoded and reproducible.
 
