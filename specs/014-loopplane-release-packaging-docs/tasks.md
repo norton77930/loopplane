@@ -116,12 +116,12 @@ audit.
 **Independent Test**: `test_changelog.py` green; the docs index includes `release-readiness.md`; the
 repo-wide public-safety scan + `PHASE14` are 0 findings.
 
-- [ ] T019 [P] [US5] Write `tests/contract/test_changelog.py` (MUST FAIL first): assert `CHANGELOG.md` has the `# Changelog` heading and a `## [0.1.0]` release with an `### Added` section that references the released units/layers (001–013), and contains no private reference; assert `docs/release-readiness.md` enumerates the release gates (FR-041/FR-042; SC-005).
-- [ ] T020 [P] [US5] Create `CHANGELOG.md` (Keep a Changelog): a `0.1.0` release whose `### Added` summarizes the shipped layers (units 001–013) at a high level. Public-safe (research D8).
-- [ ] T021 [P] [US5] Create `docs/release-readiness.md`: a checklist enumerating the release gates — distribution builds; quality gates green; public-safety audit clean; **`LICENSE` present** (the deferred maintainer gate, with the steps to wire it); changelog current.
-- [ ] T022 [US5] Update `docs/README.md` to link `release-readiness.md` (keep the docs index consistent now that it exists).
-- [ ] T023 [P] [US5] Extend `tests/contract/test_public_safety.py` with `PHASE14_TARGETS` (`README.md`, `CHANGELOG.md`, `docs/api-reference.md`, `docs/getting-started.md`, `docs/README.md`, `docs/release-readiness.md`, `examples/README.md`, `specs/014-loopplane-release-packaging-docs`) and a `test_phase14_release_files_are_public_safe` scan.
-- [ ] T024 [US5] Run `pytest tests/contract/test_changelog.py tests/contract/test_docs_examples_index.py tests/contract/test_public_safety.py --basetemp=".pytmp"` → green.
+- [X] T019 [P] [US5] Write `tests/contract/test_changelog.py` (3 tests): `CHANGELOG.md` has the `# Changelog` heading + a `## [0.1.0]` release with an `### Added` section; it mentions every unit 001–013; `docs/release-readiness.md` enumerates the release gates (build / gate / public-safety / license / changelog) (FR-041/FR-042; SC-005).
+- [X] T020 [P] [US5] Create `CHANGELOG.md` (Keep a Changelog): a `0.1.0` (Unreleased) release whose `### Added` summarizes the shipped layers (units 001–013) at a high level, plus 014. Public-safe (research D8).
+- [X] T021 [P] [US5] Create `docs/release-readiness.md`: a checklist enumerating the release gates — distribution builds; quality gates green; public-safety audit clean; docs consistent; changelog current; **`LICENSE` present** (the deferred maintainer gate, with the steps to wire it).
+- [X] T022 [US5] Updated `docs/README.md` to link `release-readiness.md` (docs index stays consistent — now 18 sibling docs).
+- [X] T023 [P] [US5] Extended `tests/contract/test_public_safety.py` with `PHASE14_TARGETS` (`README.md`, `CHANGELOG.md`, `pyproject.toml`, `.github/workflows/ci.yml`, the four new `docs/*.md`, `examples/README.md`, `specs/014-…`) and `test_phase14_release_files_are_public_safe`.
+- [X] T024 [US5] Run `pytest test_changelog + test_docs_examples_index + test_public_safety` → **20 passed**; full suite **588 passed**.
 
 **Checkpoint**: All user stories independently functional; release artifacts complete.
 

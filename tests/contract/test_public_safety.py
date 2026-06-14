@@ -560,3 +560,49 @@ def test_phase13_orchestration_files_are_public_safe() -> None:
     assert not violations, "Phase-13 public-safety scan found:\n" + "\n".join(
         violations
     )
+
+
+# Phase-14 release packaging & docs files are covered explicitly so they are
+# scanned even before they are committed (T023; SC-004, NFR-004).
+PHASE14_TARGETS = [
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "CHANGELOG.md",
+    REPO_ROOT / "pyproject.toml",
+    REPO_ROOT / ".github" / "workflows" / "ci.yml",
+    REPO_ROOT / "docs" / "api-reference.md",
+    REPO_ROOT / "docs" / "getting-started.md",
+    REPO_ROOT / "docs" / "README.md",
+    REPO_ROOT / "docs" / "release-readiness.md",
+    REPO_ROOT / "examples" / "README.md",
+    REPO_ROOT / "specs" / "014-loopplane-release-packaging-docs",
+]
+
+
+def test_phase14_release_files_are_public_safe() -> None:
+    compiled = {
+        label: re.compile(pattern) for label, pattern in BUILTIN_PATTERNS.items()
+    }
+
+    targets: list[Path] = []
+    for target in PHASE14_TARGETS:
+        if target.is_dir():
+            targets.extend(sorted(target.rglob("*.py")))
+            targets.extend(sorted(target.rglob("*.md")))
+        elif target.is_file():
+            targets.append(target)
+    assert targets, "expected Phase-14 release files to scan"
+
+    violations: list[str] = []
+    for path in targets:
+        text = _read_text(path)
+        if text is None:
+            continue
+        relative = path.relative_to(REPO_ROOT)
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for label, regex in compiled.items():
+                if regex.search(line):
+                    violations.append(f"{relative}:{lineno}: {label}")
+
+    assert not violations, "Phase-14 public-safety scan found:\n" + "\n".join(
+        violations
+    )

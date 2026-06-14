@@ -31,5 +31,6 @@ the [API reference](./api-reference.md).
 ## Project
 
 - [Roadmap autopilot board](./loopplane-agent-board.md) — the roadmap control document.
+- [Release readiness](./release-readiness.md) — the pre-release gate checklist.
 
 Runnable examples are catalogued in the [examples index](../examples/README.md).
