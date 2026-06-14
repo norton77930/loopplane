@@ -65,9 +65,9 @@ command composes. **⚠️ Blocks US1–US5.**
 **Independent Test**: `await studio.run(...)` → a `RunResultView` (metadata-only); a concurrent run →
 `ErrorView(conflict)`; an empty prompt → `ErrorView(invalid)`.
 
-- [ ] T008 [P] [US1] Write integration tests in `tests/integration/test_studio_us1.py` (MUST FAIL first; `pytest.mark.anyio`): `async with StudioHost(host)`, `await studio.run("...")` returns a `RunResultView` (session_id, public-safe termination_reason, integer turns_taken, metadata `history` of `{role, block_count}` with **no** block text); an empty prompt → `ErrorView(kind="invalid")`; a `RuntimeError` from a stub host → `ErrorView(kind="conflict")` (US1 scenarios 1–3; SC-001, FR-001–FR-003).
-- [ ] T009 [US1] Implement `StudioHost.run(prompt)` in `src/loopplane/studio/console.py`: validate the prompt, drive `host.run(prompt, _discard)`, project `RunOutcome` → `RunResultView`, map a sequential-run `RuntimeError` → `ErrorView(conflict)` (FR-001–FR-003).
-- [ ] T010 [US1] Run `pytest tests/integration/test_studio_us1.py --basetemp=".pytmp"` → green.
+- [X] T008 [P] [US1] Write integration tests in `tests/integration/test_studio_us1.py` (`pytest.mark.anyio`): `async with StudioHost(host)`, `await studio.run("...")` returns a `RunResultView` (session_id, termination_reason, integer turns_taken, metadata `history` of `{role, block_count}` — asserts the run's own content does not leak into the view); an empty prompt → `ErrorView(kind="invalid")`; a `RuntimeError` from a stub host → `ErrorView(kind="conflict")` (US1 scenarios 1–3; SC-001, FR-001–FR-003).
+- [X] T009 [US1] Implement `StudioHost.run(prompt)` in `src/loopplane/studio/console.py`: validate the prompt, drive `host.run(prompt, _discard)`, project `RunOutcome` → `RunResultView`, map a sequential-run `RuntimeError` → `ErrorView(conflict)` (FR-001–FR-003).
+- [X] T010 [US1] Run `pytest tests/integration/test_studio_us1.py --basetemp=".pytmp"` → green (3 passed; full suite 536).
 
 **Checkpoint**: MVP — a developer drives a run from the console and gets a metadata-only view.
 

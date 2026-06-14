@@ -16,6 +16,7 @@ import anyio
 from anyio.abc import TaskGroup
 
 from loopplane.host import LoopPlaneHost
+from loopplane.studio.views import ErrorView, RunResultView
 
 
 async def _discard(event: object) -> None:
@@ -54,3 +55,17 @@ class StudioHost:
             await self._stack.aclose()
         self._task_group = None
         self._stack = None
+
+    async def run(self, prompt: str) -> RunResultView | ErrorView:
+        """Drive one run on the embedded host and return its metadata-only view.
+
+        An empty prompt → an ``invalid`` view; a sequential-run conflict → a
+        ``conflict`` view (FR-001-FR-003)."""
+
+        if not prompt:
+            return ErrorView(kind="invalid", detail="invalid request")
+        try:
+            outcome = await self._host.run(prompt, _discard)
+        except RuntimeError:
+            return ErrorView(kind="conflict", detail="a run is already active")
+        return RunResultView.from_outcome(outcome)
