@@ -129,9 +129,9 @@ fail-safe, no credential echo.
 **Independent Test**: a missing / rejected / **raising**-verifier credential → `401`; a valid credential →
 admitted; a no-authenticator app denies all; no response echoes the credential.
 
-- [ ] T021 [P] [US5] Write integration tests in `tests/integration/test_webapi_us5.py` (MUST FAIL first): across a representative route, a request with **no** credential → `401`; a credential the verifier rejects → `401`; a verifier that **raises** → `401` (not `500`); a valid credential → admitted; an app built with **no** `authenticator` denies every request; no `401` body echoes the supplied credential (US5 scenarios 1–3; SC-004, FR-013–FR-015, NFR-005).
-- [ ] T022 [US5] Ensure every route in `src/loopplane/webapi/app.py` enforces the auth dependency and harden any edge surfaced by the tests (uniform `401` envelope, deny-on-raise); no route bypasses the boundary (FR-013–FR-015).
-- [ ] T023 [US5] Run `pytest tests/integration/test_webapi_us5.py --basetemp=".pytmp"` → green.
+- [X] T021 [P] [US5] Write integration tests in `tests/integration/test_webapi_us5.py`: with **no** authenticator every route group (run / session / inspection) → `401`; with a verifier, a missing or wrong credential → `401`, a raising verifier → `401` (not `500`), a valid credential → admitted; the `401` body is `{"detail": "unauthorized"}` and never echoes the credential (US5 scenarios 1–3; SC-004, FR-013–FR-015, NFR-005).
+- [X] T022 [US5] Every route is guarded by the single router-level auth dependency (`APIRouter(dependencies=[Depends(make_auth_dependency(auth))])`); the US5 tests confirm run/session/inspection routes all enforce it with a uniform `401` envelope and deny-on-raise — no per-route change needed (FR-013–FR-015).
+- [X] T023 [US5] Run `pytest tests/integration/test_webapi_us5.py --basetemp=".pytmp"` → green (4 passed; full suite 525).
 
 **Checkpoint**: All user stories are independently functional behind a fail-safe auth boundary.
 
