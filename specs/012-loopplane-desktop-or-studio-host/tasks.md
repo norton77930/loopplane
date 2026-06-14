@@ -96,9 +96,9 @@ command composes. **⚠️ Blocks US1–US5.**
 approval → it is answered and the run reaches its outcome; cancel never hangs; an unknown id → an
 explicit negative result.
 
-- [ ] T014 [P] [US3] Write integration tests in `tests/integration/test_studio_us3.py` (MUST FAIL first): open a session with `on_approval=auto_approve`; `await studio.submit(id, prompt)` over `tool_then_text_model` + `ApprovalPolicy(ask={"echo"})` reaches an `OutcomeView(termination_reason="natural-completion")` (the approval was answered in-process); `studio.answer_approval(id, "ghost", allow=True)` → `False`; an unknown session → `ErrorView(not-found)`; `await studio.cancel(id)` never hangs (US3 scenarios 1–3; FR-020–FR-022).
-- [ ] T015 [US3] Implement `StudioHost` submit / answer_approval / answer_question / cancel in `console.py` over the held `Session`; `open_session(on_approval=None)` threads the handler into `host.session` (FR-020–FR-022).
-- [ ] T016 [US3] Run `pytest tests/integration/test_studio_us3.py --basetemp=".pytmp"` → green.
+- [X] T014 [P] [US3] Write integration tests in `tests/integration/test_studio_us3.py`: open a session with `on_approval=auto_approve`; `await studio.submit(id, prompt)` over `tool_then_text_model` + `ApprovalPolicy(ask={"echo"})` reaches a `RunResultView(termination_reason="natural-completion")` (the approval answered **in-process** by the injected handler); `studio.answer_approval/answer_question(id, "ghost", ...)` → `False`; an unknown session → `ErrorView(not-found)` (submit + answer). "Cancel never hangs on a pending approval" is delegated to `Session.cancel()` (Phase-2 host suite) + US2's registry close (US3 scenarios 1–3; FR-020–FR-022).
+- [X] T015 [US3] Implement `StudioHost` submit / answer_approval / answer_question in `console.py` over the held `Session`; `open_session(on_approval=...)` threads the handler into `host.session` (`cancel` was implemented in US2) (FR-020–FR-022).
+- [X] T016 [US3] Run `pytest tests/integration/test_studio_us3.py --basetemp=".pytmp"` → green (2 passed; full suite 540).
 
 **Checkpoint**: US1–US3 — run, session manager, and an in-process interactive session.
 

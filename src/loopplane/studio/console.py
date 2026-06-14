@@ -9,8 +9,10 @@ its only event path is a discard sink (Constitution V & VI).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from contextlib import AsyncExitStack
 from types import TracebackType
+from typing import Literal
 
 import anyio
 from anyio.abc import TaskGroup
@@ -117,3 +119,44 @@ class StudioHost:
         entry.session.cancel()
         entry.close.set()
         return None
+
+    async def submit(self, session_id: str, prompt: str) -> RunResultView | ErrorView:
+        """Submit input to a held session and return its outcome view; a pending
+        approval/question is answered by the session's injected handler or
+        out-of-band. An unknown session → a not-found view (FR-020)."""
+
+        entry = self._sessions.get(session_id)
+        if entry is None:
+            return ErrorView(kind="not-found", detail="not found")
+        outcome = await entry.session.submit(prompt)
+        return RunResultView.from_outcome(outcome)
+
+    def answer_approval(
+        self,
+        session_id: str,
+        request_id: str,
+        *,
+        allow: bool,
+        scope: Literal["once", "session"] = "once",
+        reason: str | None = None,
+    ) -> bool | ErrorView:
+        """Answer a pending approval out-of-band (false if the request id is
+        unknown); an unknown session → a not-found view (FR-021)."""
+
+        entry = self._sessions.get(session_id)
+        if entry is None:
+            return ErrorView(kind="not-found", detail="not found")
+        return entry.session.answer_approval(
+            request_id, allow=allow, scope=scope, reason=reason
+        )
+
+    def answer_question(
+        self, session_id: str, request_id: str, answers: Sequence[str]
+    ) -> bool | ErrorView:
+        """Answer a pending question out-of-band (false if the request id is
+        unknown); an unknown session → a not-found view (FR-021)."""
+
+        entry = self._sessions.get(session_id)
+        if entry is None:
+            return ErrorView(kind="not-found", detail="not found")
+        return entry.session.answer_question(request_id, answers)
