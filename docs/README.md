@@ -24,6 +24,7 @@ the [API reference](./api-reference.md).
 - [Desktop / studio host](./desktop-studio-host.md) — the local desktop/studio host (unit 012).
 - [Multi-agent orchestration](./multi-agent-orchestration.md) — subagents, coordinator, delegation (unit 013).
 - [Lifecycle hooks](./hooks.md) — observe and gate the agent at lifecycle points (unit 015).
+- [Plugins](./plugins.md) — manifest bundles packaging skills, MCP servers, and hooks (unit 016).
 
 ## Reference
 

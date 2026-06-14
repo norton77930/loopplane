@@ -553,3 +553,17 @@ at well-defined lifecycle moments. Additive and inert by default.
 - `PromptBlock` — block a prompt with a public-safe reason.
 - `PromptAnnotate` — augment a prompt with extra context.
 - `PromptDecision` — the user-prompt-submit decision type.
+
+### `loopplane.plugins` (unit 016)
+
+Manifest-bundle plugins: discover, gate by an enable-list, and collect skills, MCP
+servers, and hooks for the existing seams. Inert by default.
+
+- `discover` — discover plugins under host-supplied roots.
+- `DiscoveredPlugin` — one discovered candidate (manifest or a public-safe problem).
+- `PluginManifest` — the parsed, validated `plugin.json`.
+- `HookEntry` — a manifest hook declaration (`point` + importable `target`).
+- `load_plugins` — gate by an enable-list and collect contributions.
+- `PluginLoadResult` — the collected contribution set plus diagnostics.
+- `PluginInfo` — a read-only, metadata-only plugin listing entry.
+- `list_plugins` — a public-safe listing of discovered plugins.
