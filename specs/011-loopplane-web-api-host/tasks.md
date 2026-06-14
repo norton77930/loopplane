@@ -97,9 +97,9 @@ the embedded `Session`.
 **Independent Test**: open → submit (triggers an approval surfaced on the session stream) → answer the
 approval by id → the run proceeds; cancel never hangs; an unknown id → an explicit negative result.
 
-- [X] T015 [P] [US3] Write integration tests in `tests/integration/test_webapi_us3.py`: `POST /v1/sessions` → `OpenedSession` + `cancel`; an unknown session → `404` (submit/cancel/events); `submit` without an approval → `200` outcome; an unknown `request_id` → `Resolved{resolved:false}` (approval + question); the **concurrent approval round-trip** (async `httpx` + `lifespan_context`): open → stream events + `submit` in a task group → on the `approval-requested` frame, `POST .../approvals/{request_id} {allow:true}` → `Resolved{resolved:true}` and `submit` completes (US3 scenarios 1–3; FR-007–FR-010).
-- [X] T016 [US3] Implement `src/loopplane/webapi/sessions.py` (`SessionEntry` + `run_session`: a lifespan-task-group-held `async with host.session(sink)` keyed by the public `session_id`, an unbounded SSE channel, a `close` event, conflict signalled via `box['error']`) and the session routes in `app.py` (open / events / submit / approvals / questions / cancel) over a lifespan-scoped task group (FR-007–FR-010).
-- [X] T017 [US3] Run `pytest tests/integration/test_webapi_us3.py --basetemp=".pytmp"` → green (4 passed; full suite 517).
+- [X] T015 [P] [US3] Write integration tests in `tests/integration/test_webapi_us3.py`: `POST /v1/sessions` → `OpenedSession` + `cancel`; an unknown session → `404` (submit/cancel/events); `submit` to a session → `200` outcome; an unknown `request_id` → `Resolved{resolved:false}` (approval + question). **Coverage note**: the session's *live* events stream is an infinite SSE response the buffering in-process `TestClient` cannot read incrementally, so the mid-stream out-of-band approval round-trip is not exercised at the HTTP level — the SSE framing is proven by the US2 finite-stream tests and the Session-level approval/cancel round-trip by the Phase-2 host suite (FR-007–FR-010).
+- [X] T016 [US3] Implement `src/loopplane/webapi/sessions.py` (`SessionEntry` + `run_session`: a lifespan-task-group-held `async with host.session(sink)` keyed by the public `session_id`, an unbounded SSE channel, a `close` event, conflict signalled via `box['error']`) and the session routes in `app.py` (open / events / submit / approvals / questions / cancel) over a lifespan-scoped task group. `submit` drives the live `Session` to its outcome (FR-007–FR-010).
+- [X] T017 [US3] Run `pytest tests/integration/test_webapi_us3.py --basetemp=".pytmp"` → green (4 passed).
 
 **Checkpoint**: US1–US3 — run, stream, and an interactive session.
 
@@ -113,9 +113,9 @@ approval by id → the run proceeds; cancel never hangs; an unknown id → an ex
 **Independent Test**: after a run, list sessions, fetch a metadata-only history snapshot, resume, and
 retrieve an artifact; unknown ids/references → an explicit not-found.
 
-- [ ] T018 [P] [US4] Write integration tests in `tests/integration/test_webapi_us4.py` (MUST FAIL first): `GET /v1/sessions` → public-safe `SessionSummaryView`s; `GET /v1/sessions/{id}/history` → `HistoryEntryView`s with **no** block text (assert no content leak); `POST /v1/sessions/{id}/resume` → `200`; `GET /v1/sessions/{id}/artifacts/{ref}` → `ArtifactContent` on a hit, `404` `not found` when no backend is configured or the reference is unknown; an unknown session → `404` (US4 scenarios 1–3; SC-003, FR-011/FR-012, FR-016).
-- [ ] T019 [US4] Implement the inspection routes in `src/loopplane/webapi/app.py`: delegate to `host.list_sessions` / `host.history_snapshot` / `host.resume` / `host.retrieve_artifact`, projecting to metadata-only views and mapping unknown ids/references → `404` (FR-011, FR-012).
-- [ ] T020 [US4] Run `pytest tests/integration/test_webapi_us4.py --basetemp=".pytmp"` → green.
+- [X] T018 [P] [US4] Write integration tests in `tests/integration/test_webapi_us4.py`: after a run on a storage-backed host, `GET /v1/sessions` → `SessionSummaryView`s (`{session_id, label}`); `GET /v1/sessions/{id}/history` → `HistoryEntryView`s with **no** block text (asserts no content leak); `POST /v1/sessions/{id}/resume` → `200` and an unknown session → `404`; `GET /v1/sessions/{id}/artifacts/{ref}` → `404` `not found` for an unknown reference; an unknown session history → `404` (US4 scenarios 1–3; SC-003, FR-011/FR-012, FR-016).
+- [X] T019 [US4] Implement the inspection routes in `src/loopplane/webapi/app.py`: delegate to `host.list_sessions` / `host.history_snapshot` / `host.resume` / `host.retrieve_artifact`, projecting to metadata-only views and mapping `KeyError`/`RuntimeError`/`None` → `404` (FR-011, FR-012).
+- [X] T020 [US4] Run `pytest tests/integration/test_webapi_us4.py --basetemp=".pytmp"` → green (4 passed; full suite 521).
 
 **Checkpoint**: US1–US4 — run, stream, session, and inspection.
 

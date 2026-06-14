@@ -22,6 +22,7 @@ from loopplane.host import (  # noqa: E402
     ApprovalPolicy,
     LoopPlaneHost,
     RuntimeConfig,
+    StorageConfig,
     ToolSpec,
 )
 from loopplane.model import (  # noqa: E402
@@ -109,14 +110,25 @@ def build_test_host(
     model: ScriptedModel | None = None,
     tools: tuple[ToolSpec, ...] = (ECHO_TOOL,),
     approval: ApprovalPolicy | None = None,
+    storage: bool = False,
 ) -> LoopPlaneHost:
-    """A ``LoopPlaneHost`` over the fake model + echo tool, scoped to a tmp dir."""
+    """A ``LoopPlaneHost`` over the fake model + echo tool, scoped to a tmp dir.
 
+    With ``storage=True`` a durable checkpoint/artifact store is configured (so
+    list / history / resume have records to read).
+    """
+
+    store: StorageConfig | None = None
+    if storage:
+        root = working_scope / "store"
+        root.mkdir(parents=True, exist_ok=True)
+        store = StorageConfig(root=root)
     return LoopPlaneHost(
         RuntimeConfig(
             model=model or tool_then_text_model(),
             tools=tools,
             approval=approval,
+            storage=store,
         ),
         working_scope=working_scope,
     )

@@ -21,13 +21,16 @@ from loopplane.events import RuntimeEvent
 from loopplane.host import LoopPlaneHost
 from loopplane.webapi.auth import DENY_ALL, Authenticator, make_auth_dependency
 from loopplane.webapi.models import (
+    ArtifactContent,
     ErrorResponse,
+    HistoryEntryView,
     OpenedSession,
     QuestionAnswer,
     Resolved,
     RunRequest,
     RunResult,
     SessionAnswer,
+    SessionSummaryView,
 )
 from loopplane.webapi.sessions import SessionEntry, run_session
 from loopplane.webapi.streaming import run_event_stream
@@ -131,6 +134,9 @@ def create_app(
 
     @router.post("/sessions/{session_id}/submit")
     async def submit_to_session(session_id: str, body: RunRequest) -> RunResult:
+        # Drive the live session to its outcome. A pending approval/question is
+        # answered out-of-band by a concurrent request; a client that prefers to
+        # observe progress incrementally reads the session events stream (FR-007).
         entry = _require(session_id)
         outcome = await entry.session.submit(body.prompt)
         return RunResult.from_outcome(outcome)
@@ -159,6 +165,38 @@ def create_app(
         entry.session.cancel()
         entry.close.set()
         return Resolved(resolved=True)
+
+    # --- US4: inspection (read-only, metadata-only) -------------------------
+
+    @router.get("/sessions")
+    async def list_sessions() -> list[SessionSummaryView]:
+        return [SessionSummaryView.from_summary(s) for s in host.list_sessions()]
+
+    @router.get("/sessions/{session_id}/history")
+    async def session_history(session_id: str) -> list[HistoryEntryView]:
+        try:
+            entries = host.history_snapshot(session_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="not found") from None
+        return [
+            HistoryEntryView(role=entry.role, block_count=len(entry.blocks))
+            for entry in entries
+        ]
+
+    @router.post("/sessions/{session_id}/resume")
+    async def resume_session(session_id: str) -> Resolved:
+        try:
+            await host.resume(session_id)
+        except (KeyError, RuntimeError):
+            raise HTTPException(status_code=404, detail="not found") from None
+        return Resolved(resolved=True)
+
+    @router.get("/sessions/{session_id}/artifacts/{reference}")
+    async def get_artifact(session_id: str, reference: str) -> ArtifactContent:
+        content = host.retrieve_artifact(session_id, reference)
+        if content is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return ArtifactContent(reference=reference, content=content)
 
     app.include_router(router)
     return app
