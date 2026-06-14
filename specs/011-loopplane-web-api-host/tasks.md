@@ -81,9 +81,9 @@ outcome frame.
 **Independent Test**: Read the SSE stream while a run executes; assert each frame equals
 `serialize_event(event)` in recorded order; a mid-stream disconnect never crashes/hangs the run.
 
-- [ ] T012 [P] [US2] Write integration tests in `tests/integration/test_webapi_us2.py` (MUST FAIL first): `POST /v1/runs/events {prompt}` streams `text/event-stream`; each `data:` frame equals `serialize_event(event)` for the run's events in the **recorded order**, followed by an `event: outcome` frame; the order is identical on repeat (determinism); dropping the client mid-stream still terminates the run and records any consumer failure — no crash/hang (US2 scenarios 1–3; SC-002/005, FR-004–FR-006, NFR-004).
-- [ ] T013 [US2] Implement `src/loopplane/webapi/streaming.py` (the `StreamSink` over an `anyio` memory stream + SSE frame formatting via `serialize_event`, fail-safe on a broken channel) and the `POST /runs/events` route in `app.py` (drive `host.run` in a task group while the response generator drains the channel) (FR-004–FR-006).
-- [ ] T014 [US2] Run `pytest tests/integration/test_webapi_us2.py --basetemp=".pytmp"` → green.
+- [X] T012 [P] [US2] Write integration tests in `tests/integration/test_webapi_us2.py`: `POST /v1/runs/events {prompt}` streams `text/event-stream`; each `data:` frame is a `serialize_event` document (carries `type`/`sequence`) in **recorded order** (sequences ascending; first `user-input`, last `run-terminated`), followed by an `event: outcome` frame (the metadata-only `RunResult`); the type order is identical on repeat (determinism); disconnecting mid-stream never hangs/crashes — a fresh run still succeeds (US2 scenarios 1–3; SC-002/005, FR-004–FR-006, NFR-004).
+- [X] T013 [US2] Implement `src/loopplane/webapi/streaming.py` (`run_event_stream`: drives `host.run` on an **unbounded** `anyio` memory stream so a sink send never blocks the run, frames each event via `serialize_event`, suppresses broken/closed-channel errors so a gone client never crashes/hangs the run, then a final `outcome`/`error` frame) and the `POST /runs/events` route in `app.py` (a `StreamingResponse` draining the channel in a task group) (FR-004–FR-006).
+- [X] T014 [US2] Run `pytest tests/integration/test_webapi_us2.py --basetemp=".pytmp"` → green (3 passed; full suite 513).
 
 **Checkpoint**: US1 + US2 — run and a deterministic, fail-safe event stream.
 

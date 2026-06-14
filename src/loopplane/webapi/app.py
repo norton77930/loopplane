@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from loopplane.events import RuntimeEvent
 from loopplane.host import LoopPlaneHost
 from loopplane.webapi.auth import DENY_ALL, Authenticator, make_auth_dependency
 from loopplane.webapi.models import ErrorResponse, RunRequest, RunResult
+from loopplane.webapi.streaming import run_event_stream
 
 
 async def _discard(event: RuntimeEvent) -> None:
@@ -63,6 +64,13 @@ def create_app(
                 status_code=409, detail="a run is already active"
             ) from exc
         return RunResult.from_outcome(outcome)
+
+    @router.post("/runs/events")
+    async def post_run_events(body: RunRequest) -> StreamingResponse:
+        # Stream the run's normalized events as SSE in recorded order (US2).
+        return StreamingResponse(
+            run_event_stream(host, body.prompt), media_type="text/event-stream"
+        )
 
     app.include_router(router)
     return app

@@ -71,6 +71,15 @@ def text_model(text: str = "hello") -> ScriptedModel:
     )
 
 
+def multi_text_model(*texts: str) -> ScriptedModel:
+    """One text turn per argument — enough script for several sequential runs."""
+
+    return ScriptedModel(
+        script=[ScriptedTurn(increments=[TextIncrement(text=t)]) for t in texts],
+        context_capacity=100_000,
+    )
+
+
 def tool_then_text_model(tool_name: str = "echo") -> ScriptedModel:
     """A tool-calling turn followed by a closing text turn."""
 
