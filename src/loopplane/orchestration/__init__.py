@@ -20,6 +20,7 @@ from loopplane.orchestration.aggregate import (
 from loopplane.orchestration.coordinator import (
     ChildRunReference,
     Coordinator,
+    DelegationPolicy,
     SubagentResult,
 )
 from loopplane.orchestration.registry import (
@@ -34,6 +35,7 @@ __all__ = [
     "AggregatedEvent",
     "ChildRunReference",
     "Coordinator",
+    "DelegationPolicy",
     "DuplicateSubagentError",
     "Subagent",
     "SubagentResult",

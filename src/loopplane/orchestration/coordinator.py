@@ -8,11 +8,14 @@ live event sink) (Constitution V & VI).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from loopplane.engineering import LoopDefinition, LoopOutcome, RunReference, run_loop
 from loopplane.orchestration.registry import AgentRegistry
+
+# A delegation policy selects which registered subagents the coordinator runs.
+DelegationPolicy = Callable[[AgentRegistry], Sequence[str]]
 
 
 @dataclass(frozen=True)
@@ -65,10 +68,28 @@ class Coordinator:
                 )
         return tuple(results)
 
+    async def delegate(self, policy: DelegationPolicy) -> tuple[SubagentResult, ...]:
+        """Resolve a delegation policy to a selection, then run it. A raising
+        policy is contained — it yields an empty selection (FR-040, FR-041)."""
+
+        try:
+            selection = policy(self._registry)
+        except Exception:
+            selection = ()
+        return await self.run(selection)
+
     async def _run_subagent(
         self, name: str, definition: LoopDefinition
     ) -> SubagentResult:
-        outcome = await run_loop(definition)
+        # A subagent whose loop run raises is captured per subagent (a fixed,
+        # public-safe marker — never the raw exception detail) so the coordinator
+        # still completes with the other subagents' results (FR-041, NFR-005/006).
+        try:
+            outcome = await run_loop(definition)
+        except Exception:
+            return SubagentResult(
+                subagent=name, reference=None, outcome=None, failure="failed"
+            )
         reference = ChildRunReference(
             subagent=name, loop_id=outcome.loop_id, run_refs=outcome.state.run_refs
         )

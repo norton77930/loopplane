@@ -125,9 +125,9 @@ is contained.
 **Independent Test**: a delegation policy where one subagent's loop fails and one name is unknown; the
 coordinator completes, the failure is captured, and the healthy subagents still produce results.
 
-- [ ] T020 [P] [US5] Write integration tests in `tests/integration/test_orchestration_us5.py` (MUST FAIL first): `await coord.delegate(policy)` runs exactly the policy-selected subagents in registration order; a subagent whose loop run **fails** → a `SubagentResult(failure=...)` while the others still complete; a **raising** delegation policy → an empty result; an **empty** selection → an empty result tuple (US5 scenarios 1–3; SC-004, FR-040, FR-041).
-- [ ] T021 [US5] Implement `DelegationPolicy` + `Coordinator.delegate(policy)` and harden `Coordinator.run` fail-safe capture in `coordinator.py`: wrap each subagent's `run_loop` in a guard that captures a failure into `SubagentResult(failure=...)`; a raising policy → an empty selection (FR-040, FR-041, NFR-005).
-- [ ] T022 [US5] Run `pytest tests/integration/test_orchestration_us5.py --basetemp=".pytmp"` → green.
+- [X] T020 [P] [US5] Write integration tests in `tests/integration/test_orchestration_us5.py`: `await coord.delegate(policy)` runs exactly the policy-selected subagents in registration order; a subagent whose loop run **fails** (`run_loop` raises) → a `SubagentResult(failure="failed")` while the others still complete; a **raising** delegation policy → an empty result; an **empty** selection → an empty result tuple (US5 scenarios 1–3; SC-004, FR-040, FR-041).
+- [X] T021 [US5] Implement `DelegationPolicy` + `Coordinator.delegate(policy)` and harden `Coordinator._run_subagent` in `coordinator.py`: wrap `run_loop` in `try/except Exception` capturing a failure into `SubagentResult(failure="failed")` (a fixed public-safe marker, never raw exception detail); a raising policy → an empty selection (FR-040, FR-041, NFR-005/006).
+- [X] T022 [US5] Run `pytest tests/integration/test_orchestration_us5.py --basetemp=".pytmp"` → green (4 passed; full suite 566).
 
 **Checkpoint**: All user stories are independently functional.
 
