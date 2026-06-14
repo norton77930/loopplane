@@ -66,9 +66,9 @@ code so it cannot drift.
 **Independent Test**: `test_api_reference.py` green — every `loopplane` package with `__all__` is
 documented and each package's documented names **==** its `__all__`.
 
-- [ ] T007 [P] [US2] Write `tests/contract/test_api_reference.py` (MUST FAIL first): using `release_helpers`, discover the `loopplane` packages that declare `__all__`; parse `docs/api-reference.md` for the documented packages and their listed public names; assert the documented-package set **==** the discovered set, and per package the listed-name set **==** that package's `__all__` (bijection); assert the doc surfaces names + descriptions only (FR-010–FR-012; SC-002).
-- [ ] T008 [US2] Create `docs/api-reference.md`: for **every** `loopplane` package that declares `__all__` (the 12 roadmap layers + the Phase-1 foundation packages), a short intro and each public name with a one-line description, grouped (Runtime foundation / Host interface / Loop-engineering & layers). Generate the names from the actual `__all__` values; metadata-only (research D4).
-- [ ] T009 [US2] Run `pytest tests/contract/test_api_reference.py --basetemp=".pytmp"` → green (no drift; every layer represented).
+- [X] T007 [P] [US2] Write `tests/contract/test_api_reference.py` (3 tests): discover the `loopplane` packages that declare `__all__`; parse `docs/api-reference.md` (heading ``### `loopplane.x` `` + bullets ``- `Name` — …``); assert the documented-package set **==** the discovered set, per package the listed-name set **==** that package's `__all__` (bijection), and the doc has no fenced code block (metadata-only) (FR-010–FR-012; SC-002).
+- [X] T008 [US2] Create `docs/api-reference.md`: every `loopplane` package that declares `__all__` (25 — the 12 roadmap layers + 13 Phase-1 foundation packages), grouped (Runtime foundation / Host interface / Loop-engineering & layers), each public name with a one-line description. Names generated from the actual `__all__` values; metadata-only (research D4).
+- [X] T009 [US2] Run `pytest tests/contract/test_api_reference.py` → **3 passed** (no drift across all 25 packages; every layer represented).
 
 **Checkpoint**: US1 + a drift-proof public API reference.
 
