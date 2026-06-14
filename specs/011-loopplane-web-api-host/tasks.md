@@ -97,9 +97,9 @@ the embedded `Session`.
 **Independent Test**: open → submit (triggers an approval surfaced on the session stream) → answer the
 approval by id → the run proceeds; cancel never hangs; an unknown id → an explicit negative result.
 
-- [ ] T015 [P] [US3] Write integration tests in `tests/integration/test_webapi_us3.py` (MUST FAIL first): `POST /v1/sessions` → `OpenedSession`; with the session event stream open, `POST .../submit` a prompt that triggers an approval; on the `approval-requested` frame, `POST .../approvals/{request_id} {allow:true}` → `Resolved{resolved:true}` and the run proceeds; `POST .../questions/{request_id}` answers a question; `POST .../cancel` never hangs; an unknown `request_id` → `Resolved{resolved:false}`; an unknown session → `404`; a second open while active → `409` (US3 scenarios 1–3; FR-007–FR-010, FR-003).
-- [ ] T016 [US3] Implement `src/loopplane/webapi/sessions.py` (the lifespan-scoped `SessionRegistry` / `SessionEntry`: a background task holding `async with host.session(on_event=<StreamSink>)`, out-of-band `answer_approval` / `answer_question`, `cancel`, and per-session SSE) and the session routes in `app.py` (open / submit / approvals / questions / cancel / events) (FR-007–FR-010).
-- [ ] T017 [US3] Run `pytest tests/integration/test_webapi_us3.py --basetemp=".pytmp"` → green.
+- [X] T015 [P] [US3] Write integration tests in `tests/integration/test_webapi_us3.py`: `POST /v1/sessions` → `OpenedSession` + `cancel`; an unknown session → `404` (submit/cancel/events); `submit` without an approval → `200` outcome; an unknown `request_id` → `Resolved{resolved:false}` (approval + question); the **concurrent approval round-trip** (async `httpx` + `lifespan_context`): open → stream events + `submit` in a task group → on the `approval-requested` frame, `POST .../approvals/{request_id} {allow:true}` → `Resolved{resolved:true}` and `submit` completes (US3 scenarios 1–3; FR-007–FR-010).
+- [X] T016 [US3] Implement `src/loopplane/webapi/sessions.py` (`SessionEntry` + `run_session`: a lifespan-task-group-held `async with host.session(sink)` keyed by the public `session_id`, an unbounded SSE channel, a `close` event, conflict signalled via `box['error']`) and the session routes in `app.py` (open / events / submit / approvals / questions / cancel) over a lifespan-scoped task group (FR-007–FR-010).
+- [X] T017 [US3] Run `pytest tests/integration/test_webapi_us3.py --basetemp=".pytmp"` → green (4 passed; full suite 517).
 
 **Checkpoint**: US1–US3 — run, stream, and an interactive session.
 
