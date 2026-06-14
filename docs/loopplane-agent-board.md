@@ -92,7 +92,7 @@ git history) — not invented.
 | **010-loopplane-observability-debug-console** | `specs/010-loopplane-observability-debug-console` | **Verified** | Make runs and loops inspectable: trace viewer data contract, event replay, debug timeline, run diagnostics, loop diagnostics, metadata-only observability. No full frontend unless separately specified. | 001, 003 | None — implemented & verified on `main` (`loopplane.inspect`). |
 | **011-loopplane-web-api-host** | `specs/011-loopplane-web-api-host` | **Verified** | Expose LoopPlane through a web/API host: FastAPI or equivalent host, REST endpoints, SSE or WebSocket streaming, auth boundary, session APIs, host-level integration tests. | 002 | None — implemented & verified on `main` (`loopplane.webapi`). |
 | **012-loopplane-desktop-or-studio-host** | `specs/012-loopplane-desktop-or-studio-host` | **Verified** | Local desktop or studio host: local app host, sidecar process, local session manager, developer console, optional UI shell. No private legacy UI copy. | 002 | None — implemented & verified on `main` (`loopplane.studio`). |
-| **013-loopplane-multi-agent-orchestration** | _(not created)_ | **Not started** | Subagents, coordinator, and delegation: agent registry, subagent execution, coordinator, delegation policy, child run references, aggregated events, aggregated artifacts. | 003 | `/speckit.specify`. |
+| **013-loopplane-multi-agent-orchestration** | `specs/013-loopplane-multi-agent-orchestration` | **Verified** | Subagents, coordinator, and delegation: agent registry, subagent execution, coordinator, delegation policy, child run references, aggregated events, aggregated artifacts. | 003 | None — implemented & verified on `main` (`loopplane.orchestration`). |
 | **014-loopplane-release-packaging-docs** | _(not created)_ | **Not started** | Public release quality: packaging, examples, docs, quickstart, API reference, changelog, public-safe cleanup, CI readiness. | all prior | `/speckit.specify`. |
 
 **Status evidence (for audit):**
@@ -207,7 +207,21 @@ git history) — not invented.
   sink). Views are metadata-only; the interactive approval round-trip runs **in-process** (no
   transport, so unit 011's buffering-client limitation does not apply); GUI / process spawn / network
   are reserved. ruff + mypy(strict) clean; full suite **548 passed** → **Verified**.
-- **013–014** — No `specs/` directory and no source → **Not started**.
+- **013** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; source
+  `src/loopplane/orchestration/` (4 modules) + `examples/orchestration_quickstart.py` +
+  `docs/multi-agent-orchestration.md`. Tasks **28/28 complete**; 22 orchestration tests pass
+  (core unit + US1–US5 integration + import/no-tool/no-reemit boundary + metadata-only +
+  determinism + public-safety); the layer is an additive coordination sibling over the public
+  Phase-3 loop surface (`loopplane.engineering`) — it runs each subagent through `run_loop`,
+  **executes no tool** (Constitution V) and **re-emits no live bus** (Constitution VI; it reads
+  each captured `LoopOutcome`, passing no live sink). The registry, the coordinator, and the
+  aggregated event / artifact views are deterministic by registration order then event sequence,
+  and metadata-only (subagent / type / sequence / reference); a failing subagent, a raising
+  delegation policy, and an empty selection are each contained (a fixed public-safe `"failed"` /
+  `"not found"` marker, never raw exception detail). ruff + mypy(strict) clean; full suite
+  **571 passed** → **Verified**.
+- **014** — No `specs/` directory and no source → **Not started**.
 
 ---
 
@@ -215,11 +229,11 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **013-loopplane-multi-agent-orchestration** |
-| Active feature directory | _(not created — `/speckit.specify` will create `specs/013-loopplane-multi-agent-orchestration`)_ |
+| Active unit | **014-loopplane-release-packaging-docs** |
+| Active feature directory | _(not created — `/speckit.specify` will create `specs/014-loopplane-release-packaging-docs`)_ |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main`, no dedicated feature branch required (see §7 Branch Strategy) |
-| Current Spec Kit step | **Specify** (012 is **Verified**; 013 has no `specs/` directory yet) |
-| Depends on | 003 |
+| Current Spec Kit step | **Specify** (013 is **Verified**; 014 has no `specs/` directory yet) |
+| Depends on | all prior |
 | Next command | **`/speckit.specify`** |
 | Stop condition status | None active. Branch strategy is **main-only** — a missing feature branch is *not* a stop condition (see §7 / §9). |
 

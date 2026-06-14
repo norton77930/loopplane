@@ -520,3 +520,43 @@ def test_phase12_studio_files_are_public_safe() -> None:
     assert not violations, "Phase-12 public-safety scan found:\n" + "\n".join(
         violations
     )
+
+
+# Phase-13 multi-agent orchestration files are covered explicitly so they are
+# scanned even before they are committed (T024; SC-003, SC-005).
+PHASE13_TARGETS = [
+    REPO_ROOT / "src" / "loopplane" / "orchestration",
+    REPO_ROOT / "examples" / "orchestration_quickstart.py",
+    REPO_ROOT / "docs" / "multi-agent-orchestration.md",
+    REPO_ROOT / "specs" / "013-loopplane-multi-agent-orchestration",
+]
+
+
+def test_phase13_orchestration_files_are_public_safe() -> None:
+    compiled = {
+        label: re.compile(pattern) for label, pattern in BUILTIN_PATTERNS.items()
+    }
+
+    targets: list[Path] = []
+    for target in PHASE13_TARGETS:
+        if target.is_dir():
+            targets.extend(sorted(target.rglob("*.py")))
+            targets.extend(sorted(target.rglob("*.md")))
+        elif target.is_file():
+            targets.append(target)
+    assert targets, "expected Phase-13 orchestration files to scan"
+
+    violations: list[str] = []
+    for path in targets:
+        text = _read_text(path)
+        if text is None:
+            continue
+        relative = path.relative_to(REPO_ROOT)
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            for label, regex in compiled.items():
+                if regex.search(line):
+                    violations.append(f"{relative}:{lineno}: {label}")
+
+    assert not violations, "Phase-13 public-safety scan found:\n" + "\n".join(
+        violations
+    )

@@ -135,12 +135,12 @@ coordinator completes, the failure is captured, and the healthy subagents still 
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T023 [P] Write contract tests in `tests/contract/test_orchestration_boundary.py`: an import-boundary audit (every `src/loopplane/orchestration/*.py` imports only `loopplane.engineering` / `loopplane.orchestration` + stdlib); a text scan finding no `loopplane.host` / `loopplane.gateway` / `loopplane.controller` / `loopplane.events` / `RuntimeController` / `serialize_event` / sibling-package token; a metadata-only aggregated-record assertion; an aggregation determinism check (NFR-001/002/003, SC-002/003/005).
-- [ ] T024 [P] Extend `tests/contract/test_public_safety.py` with `PHASE13_TARGETS` (`src/loopplane/orchestration`, `examples/orchestration_quickstart.py`, `docs/multi-agent-orchestration.md`, `specs/013-loopplane-multi-agent-orchestration`) and a `test_phase13_orchestration_files_are_public_safe` scan.
-- [ ] T025 [P] Create `examples/orchestration_quickstart.py`: a public-safe, in-process runnable that registers scripted subagents, coordinates them, and prints the aggregated event / artifact views (metadata only) (per [quickstart.md](./quickstart.md)).
-- [ ] T026 [P] Create `docs/multi-agent-orchestration.md`: a public-safe guide — the registry, the coordinator, delegation, the aggregated views, and the reserved extension points (distributed / dynamic / inter-subagent).
-- [ ] T027 Finalize `src/loopplane/orchestration/__init__.py` public `__all__`; run `ruff format` + `ruff check` + `mypy` (strict) → clean.
-- [ ] T028 Run the full suite `pytest --basetemp=".pytmp"` → green; run `python examples/orchestration_quickstart.py`; confirm the public-safety scan is green (SC-003/005); update the board status to **Verified**.
+- [X] T023 [P] Write contract tests in `tests/contract/test_orchestration_boundary.py`: an import-boundary audit (every `src/loopplane/orchestration/*.py` imports only `loopplane.engineering` / `loopplane.orchestration` + stdlib); a text scan finding no `RuntimeController` / `EventEmitter` / `serialize_event` (the `loopplane.*` import allow-list is enforced authoritatively by the AST audit, so the text scan keeps only non-import runtime/re-emit symbols — the 012 false-positive lesson); a metadata-only aggregated-record assertion; an aggregation determinism check (NFR-001/002/003, SC-002/003/005). (4 passed.)
+- [X] T024 [P] Extend `tests/contract/test_public_safety.py` with `PHASE13_TARGETS` (`src/loopplane/orchestration`, `examples/orchestration_quickstart.py`, `docs/multi-agent-orchestration.md`, `specs/013-loopplane-multi-agent-orchestration`) and a `test_phase13_orchestration_files_are_public_safe` scan. (Green.)
+- [X] T025 [P] Create `examples/orchestration_quickstart.py`: a public-safe, in-process runnable that registers scripted subagents, coordinates them, and prints the aggregated event / artifact views (metadata only) (per [quickstart.md](./quickstart.md)). Runs clean — registration-order results, not-found capture, metadata-only events, empty artifacts, delegation.
+- [X] T026 [P] Create `docs/multi-agent-orchestration.md`: a public-safe guide — the registry, the coordinator, delegation, the aggregated views, and the reserved extension points (distributed / dynamic / inter-subagent).
+- [X] T027 Finalize `src/loopplane/orchestration/__init__.py` public `__all__`; run `ruff format` + `ruff check` + `mypy` (strict) → clean (ruff: all checks passed; mypy: no issues in 134 source files).
+- [X] T028 Run the full suite `pytest --basetemp=".pytmp"` → green (571 passed); ran `python examples/orchestration_quickstart.py`; confirmed the public-safety scan is green (SC-003/005); updated the board status to **Verified**.
 
 ---
 
