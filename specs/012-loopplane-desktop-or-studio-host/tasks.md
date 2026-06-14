@@ -37,8 +37,8 @@ dependency is added.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Create the `loopplane.studio` package skeleton: `src/loopplane/studio/__init__.py` with a module docstring and an empty `__all__` placeholder.
-- [ ] T002 [P] Add studio test helpers in `tests/studio_helpers.py`: a public-safe deterministic fake model (`ScriptedModel` pattern — `text_model` / `multi_text_model` / `tool_then_text_model`), a `build_test_host(working_scope, *, model=None, tools=(ECHO_TOOL,), approval=None, storage=False)` returning a `LoopPlaneHost`, and an `auto_approve` `OnApproval` handler returning `ApprovalDecision(allow=True)`. No GUI/transport deps.
+- [X] T001 Create the `loopplane.studio` package skeleton: `src/loopplane/studio/__init__.py` with a module docstring and an empty `__all__` placeholder.
+- [X] T002 [P] Add studio test helpers in `tests/studio_helpers.py`: a public-safe deterministic fake model (`ScriptedModel` pattern — `text_model` / `multi_text_model` / `tool_then_text_model`), a `build_test_host(working_scope, *, model=None, tools=(ECHO_TOOL,), approval=None, storage=False)` returning a `LoopPlaneHost`, and an `auto_approve(payload: object) -> ApprovalDecision` handler (typed `object` so it is a valid `OnApproval` by contravariance, avoiding a `loopplane.events` import). No GUI/transport deps.
 
 ---
 
