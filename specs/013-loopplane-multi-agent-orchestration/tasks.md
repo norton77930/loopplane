@@ -35,8 +35,8 @@ modified; no dependency is added.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Create the `loopplane.orchestration` package skeleton: `src/loopplane/orchestration/__init__.py` with a module docstring and an empty `__all__` placeholder.
-- [ ] T002 [P] Add orchestration test helpers in `tests/orchestration_helpers.py`: a `scripted_subagent_definition(name, *, text="done", artifact=False, fail=False)` building a public-safe `LoopDefinition` over a scripted model (reusing the unit-003 `tests/loop_helpers.py` builder pattern) — a passing single-iteration loop, an artifact-producing variant, and a failing variant — so a coordinator over scripted subagents is deterministic and offline.
+- [X] T001 Create the `loopplane.orchestration` package skeleton: `src/loopplane/orchestration/__init__.py` with a module docstring and an empty `__all__` placeholder.
+- [X] T002 [P] Add orchestration test helpers in `tests/orchestration_helpers.py`: a `scripted_subagent_definition(name, *, text="done", fail=False)` building a public-safe single-iteration `LoopDefinition` over a scripted model (reusing the unit-003 `loop_helpers` pattern: `ManualTrigger` / `StaticInput` / `HostRuntimeProfile(selector)` / `ValidationPolicy(ScriptedValidator("pass"))` / `stop_on_pass()` / `ObservationPolicy(emit_loop_events=True)`). Verified runnable via `run_loop` → `loop_completed`, 5 events, 1 run_ref. `fail=True` makes the host selector raise (for the US5 fail-safe test). (Real scripted loops produce 0 artifacts, so US4 pairs an empty-real case with a constructed-artifact case.)
 
 ---
 
