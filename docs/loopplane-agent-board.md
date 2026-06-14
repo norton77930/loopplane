@@ -184,7 +184,7 @@ git history) — not invented.
 - **011** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
   `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; source
   `src/loopplane/webapi/` (6 modules) + `examples/webapi_quickstart.py` +
-  `docs/web-api-host.md`. Tasks **29/29 complete**; ~25 webapi tests pass (core unit + US1–US5
+  `docs/web-api-host.md`. Tasks **29/29 complete**; 33 webapi tests pass (core unit + US1–US5
   integration + import/no-tool/no-reemit boundary + metadata-only + default-deny + public-safety);
   the layer is an additive transport over the public Host Application Interface (`loopplane.host`) —
   it executes **no tool** (Constitution V) and consumes the normalized event stream as a host
