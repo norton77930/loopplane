@@ -11,7 +11,12 @@ tool itself and consumes each subagent's recorded loop events as a consumer
 
 from __future__ import annotations
 
-from loopplane.orchestration.aggregate import AggregatedEvent, aggregate_events
+from loopplane.orchestration.aggregate import (
+    AggregatedArtifact,
+    AggregatedEvent,
+    aggregate_artifacts,
+    aggregate_events,
+)
 from loopplane.orchestration.coordinator import (
     ChildRunReference,
     Coordinator,
@@ -25,11 +30,13 @@ from loopplane.orchestration.registry import (
 
 __all__ = [
     "AgentRegistry",
+    "AggregatedArtifact",
     "AggregatedEvent",
     "ChildRunReference",
     "Coordinator",
     "DuplicateSubagentError",
     "Subagent",
     "SubagentResult",
+    "aggregate_artifacts",
     "aggregate_events",
 ]

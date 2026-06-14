@@ -109,9 +109,9 @@ grouped by subagent and ordered by sequence, with metadata only.
 **Independent Test**: coordinate subagents that produce artifact references; assert the aggregated view
 groups the references by subagent, with reference metadata only.
 
-- [ ] T017 [P] [US4] Write integration tests in `tests/integration/test_orchestration_us4.py` (MUST FAIL first): `aggregate_artifacts(results)` returns `AggregatedArtifact(subagent, session_id, reference)` records grouped by subagent (registration order); a subagent with no artifacts contributes nothing; **no** artifact content surfaced (US4 scenarios 1–3; SC-003, FR-030, FR-031).
-- [ ] T018 [US4] Implement in `src/loopplane/orchestration/aggregate.py`: the frozen `AggregatedArtifact` and `aggregate_artifacts(results)` projecting each `LoopOutcome.state.artifacts` to `(subagent, session_id, reference)` (FR-030, FR-031).
-- [ ] T019 [US4] Export the symbols; run `pytest tests/integration/test_orchestration_us4.py --basetemp=".pytmp"` → green.
+- [X] T017 [P] [US4] Write integration tests in `tests/integration/test_orchestration_us4.py`: `aggregate_artifacts(results)` returns `AggregatedArtifact(subagent, session_id, reference)` records grouped by subagent (registration order); a subagent with no artifacts contributes nothing; a real scripted run (no artifacts) → empty; **no** artifact content (`vars(x) == {subagent, session_id, reference}`). Populated case over constructed `SubagentResult`s, since scripted text loops produce no artifacts (US4 scenarios 1–3; SC-003, FR-030, FR-031).
+- [X] T018 [US4] Implement in `src/loopplane/orchestration/aggregate.py`: the frozen `AggregatedArtifact` and `aggregate_artifacts(results)` projecting each `LoopOutcome.state.artifacts` to `(subagent, session_id, reference)` (FR-030, FR-031).
+- [X] T019 [US4] Export the symbols; run `pytest tests/integration/test_orchestration_us4.py --basetemp=".pytmp"` → green (3 passed; full suite 562).
 
 **Checkpoint**: US1–US4 — coordinate + aggregated events + artifacts.
 
