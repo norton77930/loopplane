@@ -47,11 +47,11 @@ dependency is added.
 **Purpose**: The metadata-only view models and the `StudioHost` async-context-manager core every
 command composes. **⚠️ Blocks US1–US5.**
 
-- [ ] T003 [P] Write unit tests in `tests/unit/test_studio_core.py` (MUST FAIL first): `RunResultView.from_outcome` projects a `RunOutcome` and the block text never appears (history is `{role, block_count}`, FR-030); `ErrorView` is `{kind, detail}` only; `StudioHost(host)` can be entered/exited as an async context manager (smoke).
-- [ ] T004 [P] Implement `src/loopplane/studio/views.py`: the frozen `HistoryEntryView`, `RunResultView` / `OutcomeView`, `SessionSummaryView`, and `ErrorView` dataclasses, plus the `RunOutcome` → view and `SessionSummary` → view projections (metadata-only; `SessionSummary` read via a structural protocol) (FR-030, NFR-006; [data-model.md](./data-model.md)).
-- [ ] T005 Implement `src/loopplane/studio/console.py`: `StudioHost(host)` as an async context manager — `__aenter__` opens an `anyio` task group + an empty session registry, `__aexit__` cancels/joins it; a module-level `_discard` sink typed `Callable[[object], Awaitable[None]]` (names no event type).
-- [ ] T006 Finalize `src/loopplane/studio/__init__.py` exports (`StudioHost`, the view models).
-- [ ] T007 Run `pytest tests/unit/test_studio_core.py --basetemp=".pytmp"` → green (gate for Foundational).
+- [X] T003 [P] Write unit tests in `tests/unit/test_studio_core.py`: `RunResultView.from_outcome` projects a `RunOutcome` and the block text never appears in the view (history is `{role, block_count}`, FR-030); `ErrorView` is `{kind, detail}` only; `StudioHost(host)` can be entered/exited as an async context manager (smoke).
+- [X] T004 [P] Implement `src/loopplane/studio/views.py`: the frozen `HistoryEntryView`, `RunResultView` (+ `OutcomeView` alias), `SessionSummaryView`, and `ErrorView` dataclasses, plus the `RunOutcome` → view and `SessionSummary` → view projections (metadata-only; `SessionSummary` read via a structural `_SummaryLike` protocol) (FR-030, NFR-006; [data-model.md](./data-model.md)).
+- [X] T005 Implement `src/loopplane/studio/console.py`: `StudioHost(host)` as an async context manager — `__aenter__` opens an `anyio` task group via an `AsyncExitStack`, `__aexit__` cancels/joins it; a module-level `_discard(event: object)` sink (names no event type, so no `loopplane.events` import).
+- [X] T006 Finalize `src/loopplane/studio/__init__.py` exports (`StudioHost`, the view models).
+- [X] T007 Run `pytest tests/unit/test_studio_core.py --basetemp=".pytmp"` → green (gate for Foundational; 3 passed).
 
 **Checkpoint**: The view models and the `StudioHost` async-CM core are ready.
 

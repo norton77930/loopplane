@@ -10,4 +10,20 @@ process spawning — those are reserved extension points.
 
 from __future__ import annotations
 
-__all__: list[str] = []
+from loopplane.studio.console import StudioHost
+from loopplane.studio.views import (
+    ErrorView,
+    HistoryEntryView,
+    OutcomeView,
+    RunResultView,
+    SessionSummaryView,
+)
+
+__all__ = [
+    "ErrorView",
+    "HistoryEntryView",
+    "OutcomeView",
+    "RunResultView",
+    "SessionSummaryView",
+    "StudioHost",
+]
