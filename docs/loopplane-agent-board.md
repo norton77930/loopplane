@@ -98,7 +98,7 @@ git history) — not invented.
 | **016-loopplane-plugin-system** | `specs/016-loopplane-plugin-system` | **Verified** | Plugin manifest bundles: a public-safe `plugin.json` that packages skills + namespaced MCP servers + hooks into a discoverable, host-loadable unit; enable-list gating with zero default behavior change; loads through the existing skills/MCP/hook seams with no new runtime coupling. Reuses 001 skills, 008 toolkit, and 015 hooks. | 001, 008, 015 | None — implemented & verified on `main` (`loopplane.plugins`). |
 | **017-loopplane-cli-host** | `specs/017-loopplane-cli-host` | **Verified** | Interactive CLI host: a thin terminal host over the Host Application Interface (`loopplane.host`) — REPL/chat loop, run/session commands, normalized-event rendering, and an optional credential-gated real model provider behind a seam. Executes **no tool** itself (V) and consumes the normalized event stream (VI). Adds a console entry point; the runtime core is unchanged. | 002 | None — implemented & verified on `main` (`loopplane.cli`; `loopplane` console entry point). |
 | **018-loopplane-web-frontend** | `specs/018-loopplane-web-frontend` | **Verified** | Web frontend: a from-scratch single-page UI over the 011 web/API host (REST + SSE) — chat/run view, event timeline, approvals/questions, session list. **No private legacy UI copy** (VII); written fresh; the JS toolchain is isolated under `apps/` with its own CI gate. | 011 | None — implemented & verified on `main` (`apps/web`; React + Vite + Vitest). |
-| **019-loopplane-desktop-gui** | `specs/019-loopplane-desktop-gui` | **Not started** | Desktop GUI shell: a local desktop application over the 012 studio sidecar contract — a packaged shell embedding the 018 frontend, driving an in-process/sidecar host with no server. **No private legacy UI copy** (VII); reuses 018; packaging + launch only, runtime unchanged. | 012, 018 | Pending — blocked on 012 (done) and 018. |
+| **019-loopplane-desktop-gui** | `specs/019-loopplane-desktop-gui` | **Verified** | Desktop GUI shell: a local desktop application over the 012 studio sidecar contract — an Electron shell embedding the 018 frontend, driving a local sidecar host with no server. **No private legacy UI copy** (VII); reuses 018; launch + shell only, runtime unchanged. | 012, 018 | None — implemented & verified on `main` (`apps/desktop`; Python sidecar bridge + TS transport + reused 018 UI + Electron shell). |
 
 **Status evidence (for audit):**
 
@@ -308,6 +308,30 @@ git history) — not invented.
   stream — VI), renders metadata-only content, and embeds no secret (auth at runtime —
   VII). The Python package is **untouched**: `apps/` is excluded from the wheel, and the
   full Python suite is unchanged at **672 passed**. → **Verified**.
+- **019** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; an Electron
+  desktop app under `apps/desktop/` (no server) that spawns a **Python sidecar**
+  (`sidecar/bridge.py` — a stdio NDJSON bridge over `loopplane.host`, reusing
+  `serialize_event`) and **reuses the unit-018 UI** as its renderer over a sidecar
+  transport (`window.api` IPC) via a `@web` alias (no UI copied — VII), plus
+  `.github/workflows/desktop.yml` (the isolated desktop gate) + `docs/desktop-gui.md`.
+  Tasks **12/12 complete**; **3 Python sidecar tests** (`tests/integration/
+  test_desktop_sidecar.py`, loaded by file path) + **3 Vitest tests** (the
+  `SidecarTransport` over a stubbed bridge; the desktop App rendering a streamed run via
+  the reused 018 components) pass; `tsc --noEmit` (strict) is clean over the renderer +
+  the Electron main/preload (the GUI launch is a manual smoke; the Electron binary is
+  skipped in CI). The renderer runs **no tool** (V) and consumes the normalized stream
+  (VI); no secret is embedded (VII). The Python package and units 011/012/018 are
+  **unchanged** (the sidecar is loaded by path, not in the wheel); the full Python suite
+  is **675 passed**. Packaging a signed installer is reserved. → **Verified**.
+
+> **🏁 The 015–019 post-release extension is COMPLETE.** All roadmap units **000–019 are
+> `Verified`** on `main` (v0.1.0 shipped; MIT). The five post-release features — **015
+> hook-system, 016 plugin-system, 017 cli-host, 018 web-frontend, 019 desktop-gui** —
+> are implemented, tested, and pushed: the Python suite is **675 passed** (ruff +
+> mypy-strict clean), and the isolated JS gates cover the web app (**20 Vitest**) and the
+> desktop app (**3 Vitest**, tsc-strict). The autopilot has no further unit to advance;
+> it stops cleanly.
 
 > **🏁 v0.1.0 release shipped; roadmap extended.** Units **000–014 are all `Verified`** on `main`,
 > the project is licensed under **MIT**, and every release-readiness gate (see
@@ -326,13 +350,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **019-loopplane-desktop-gui** (015–018 `Verified`; 000–014 `Verified`; v0.1.0 shipped) — the **final** unit |
-| Active feature directory | `specs/019-loopplane-desktop-gui` (to be created by `/speckit.specify`) |
-| Current branch | `main` — **main-only autopilot**; all units progress on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **Specify.** No `spec.md` yet for the active feature → run `/speckit.specify` (§6 step 6). |
-| Depends on | 012, 018 (both `Verified`) |
-| Next command | **`/speckit.specify`** for the desktop-GUI feature, then continue clarify/checklist → plan → tasks → analyze → implement → final review. **Note**: 019 is an Electron desktop shell that reuses the 018 frontend; Node is available. Packaging a distributable installer (electron-builder) is a reserved, maintainer-initiated step — the unit ships the shell + its launch/host wiring + tests, not a signed installer. |
-| Stop condition status | None active — proceed. Completing 019 closes the 015–019 roadmap extension. |
+| Active unit | **None — the roadmap is complete.** Units **000–019 are all `Verified`** (v0.1.0 shipped; the 015–019 post-release extension is done). |
+| Active feature directory | `specs/019-loopplane-desktop-gui` (the last unit, Verified) |
+| Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
+| Current Spec Kit step | **None — all units shipped.** 000–019 complete. |
+| Depends on | — |
+| Next command | **None.** The autopilot has no further unit to advance, so it stops cleanly. Reserved, maintainer-initiated steps remain (publishing to a package index; signed/distributable installers for the web + desktop apps). |
+| Stop condition status | Roadmap complete — the autopilot stops cleanly. |
 
 ---
 

@@ -27,6 +27,7 @@ the [API reference](./api-reference.md).
 - [Plugins](./plugins.md) — manifest bundles packaging skills, MCP servers, and hooks (unit 016).
 - [The `loopplane` CLI](./cli.md) — a thin terminal host over the host interface (unit 017).
 - [Web frontend](./web-frontend.md) — a single-page UI over the web/API host (unit 018).
+- [Desktop GUI](./desktop-gui.md) — a local Electron shell over a sidecar host (unit 019).
 
 ## Reference
 
