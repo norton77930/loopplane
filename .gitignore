@@ -21,6 +21,13 @@ venv/
 /build/
 *.egg-info/
 
+# JS frontend / desktop (units 018-019): never commit installed packages or builds
+node_modules/
+apps/*/node_modules/
+apps/*/dist/
+apps/*/.vite/
+*.tsbuildinfo
+
 # Logs / runtime files (root-anchored so source packages are not caught)
 /logs/
 /tmp/

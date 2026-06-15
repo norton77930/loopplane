@@ -97,7 +97,7 @@ git history) — not invented.
 | **015-loopplane-hook-system** | `specs/015-loopplane-hook-system` | **Verified** | Lifecycle hook system: a hook registry plus eleven lifecycle points (pre/post tool use, prompt submit, session start/end, subagent start/stop, file changed, model stop) that let host and plugin code observe — and, at the two gating points, gate or modify — agent behavior without forking the runtime. In-process; honors the single Tool Gateway (V) and Runtime Event Bus (VI) boundaries; hooks are a distinct concept from normalized events (synchronous, may gate/modify vs. fire-and-forget stream). | 001, 003 | None — implemented & verified on `main` (`loopplane.hooks`). |
 | **016-loopplane-plugin-system** | `specs/016-loopplane-plugin-system` | **Verified** | Plugin manifest bundles: a public-safe `plugin.json` that packages skills + namespaced MCP servers + hooks into a discoverable, host-loadable unit; enable-list gating with zero default behavior change; loads through the existing skills/MCP/hook seams with no new runtime coupling. Reuses 001 skills, 008 toolkit, and 015 hooks. | 001, 008, 015 | None — implemented & verified on `main` (`loopplane.plugins`). |
 | **017-loopplane-cli-host** | `specs/017-loopplane-cli-host` | **Verified** | Interactive CLI host: a thin terminal host over the Host Application Interface (`loopplane.host`) — REPL/chat loop, run/session commands, normalized-event rendering, and an optional credential-gated real model provider behind a seam. Executes **no tool** itself (V) and consumes the normalized event stream (VI). Adds a console entry point; the runtime core is unchanged. | 002 | None — implemented & verified on `main` (`loopplane.cli`; `loopplane` console entry point). |
-| **018-loopplane-web-frontend** | `specs/018-loopplane-web-frontend` | **Not started** | Web frontend: a from-scratch single-page UI over the 011 web/API host (REST + SSE) — chat/run view, event timeline, approvals/questions, session list. **No private legacy UI copy** (VII); written fresh; the JS toolchain is isolated under `apps/` with its own CI gate. | 011 | Pending — blocked on 011 (done); sequenced after 017. |
+| **018-loopplane-web-frontend** | `specs/018-loopplane-web-frontend` | **Verified** | Web frontend: a from-scratch single-page UI over the 011 web/API host (REST + SSE) — chat/run view, event timeline, approvals/questions, session list. **No private legacy UI copy** (VII); written fresh; the JS toolchain is isolated under `apps/` with its own CI gate. | 011 | None — implemented & verified on `main` (`apps/web`; React + Vite + Vitest). |
 | **019-loopplane-desktop-gui** | `specs/019-loopplane-desktop-gui` | **Not started** | Desktop GUI shell: a local desktop application over the 012 studio sidecar contract — a packaged shell embedding the 018 frontend, driving an in-process/sidecar host with no server. **No private legacy UI copy** (VII); reuses 018; packaging + launch only, runtime unchanged. | 012, 018 | Pending — blocked on 012 (done) and 018. |
 
 **Status evidence (for audit):**
@@ -295,6 +295,19 @@ git history) — not invented.
   (boundary test). The only packaging change is the entry point; `py.typed` + every
   subpackage still ship. The `loopplane run` command was smoke-run. ruff +
   mypy(strict) clean; full suite **672 passed** → **Verified**.
+- **018** — Full Spec Kit flow on `main`: `spec.md` / `plan.md` / `research.md` /
+  `data-model.md` / `contracts/` (2) / `quickstart.md` / `tasks.md`; a **from-scratch**
+  React + TypeScript + Vite single-page app under `apps/web/` (no legacy UI copied —
+  VII) over the unit-011 `/v1` web API + SSE stream, with its own isolated toolchain
+  and CI gate (`.github/workflows/web.yml`) + `docs/web-frontend.md`. Tasks
+  **22/22 complete**; **20 Vitest tests pass** (the pure core — SSE parser / chat
+  reducer / fetch-injectable API client — in node env; jsdom component smoke tests for
+  Conversation / Timeline / Prompts / SessionList / App). `tsc --noEmit` (strict) clean
+  and `vite build` produces static assets (149 kB / 48 kB gzip). The UI **consumes
+  only** the public web API (runs no tool — V; a consumer of the normalized event
+  stream — VI), renders metadata-only content, and embeds no secret (auth at runtime —
+  VII). The Python package is **untouched**: `apps/` is excluded from the wheel, and the
+  full Python suite is unchanged at **672 passed**. → **Verified**.
 
 > **🏁 v0.1.0 release shipped; roadmap extended.** Units **000–014 are all `Verified`** on `main`,
 > the project is licensed under **MIT**, and every release-readiness gate (see
@@ -302,9 +315,10 @@ git history) — not invented.
 > authorized extending the roadmap with five post-release feature units — **015 hook-system →
 > 016 plugin-system → 017 cli-host → 018 web-frontend → 019 desktop-gui** — to be built with the
 > same Spec Kit flow and autopilot rules. The autopilot advances the lowest-numbered unit that is
-> not yet `Verified` and whose dependencies are all `Verified`. **017-loopplane-cli-host is now
-> `Verified`** (672 tests); the next unit is **018-loopplane-web-frontend** (depends on 011; a
-> from-scratch JS/React build — its implement step needs a Node toolchain).
+> not yet `Verified` and whose dependencies are all `Verified`. **018-loopplane-web-frontend is now
+> `Verified`** (20 Vitest tests; Python suite unchanged at 672); the next and **final** unit is
+> **019-loopplane-desktop-gui** (depends on 012 + 018; an Electron shell reusing the 018 frontend —
+> Node is available). Completing 019 closes the post-release 015–019 roadmap extension.
 
 ---
 
@@ -312,13 +326,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **018-loopplane-web-frontend** (015/016/017 `Verified`; 000–014 `Verified`; v0.1.0 shipped) |
-| Active feature directory | `specs/018-loopplane-web-frontend` (to be created by `/speckit.specify`) |
+| Active unit | **019-loopplane-desktop-gui** (015–018 `Verified`; 000–014 `Verified`; v0.1.0 shipped) — the **final** unit |
+| Active feature directory | `specs/019-loopplane-desktop-gui` (to be created by `/speckit.specify`) |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main` (see §7 Branch Strategy) |
 | Current Spec Kit step | **Specify.** No `spec.md` yet for the active feature → run `/speckit.specify` (§6 step 6). |
-| Depends on | 011 (`Verified`) |
-| Next command | **`/speckit.specify`** for the web-frontend feature, then continue clarify/checklist → plan → tasks → analyze → implement → final review. **Note**: 018 is a from-scratch JS/React app; the implement step needs a Node toolchain (per the board's release-readiness, JS tooling is isolated under `apps/` with its own CI gate). If Node is unavailable in this environment, implement is a §9.4-style hard stop — pause and report. |
-| Stop condition status | None active for specify/plan/tasks — proceed; the 018 implement step may hard-stop if no Node toolchain is present. |
+| Depends on | 012, 018 (both `Verified`) |
+| Next command | **`/speckit.specify`** for the desktop-GUI feature, then continue clarify/checklist → plan → tasks → analyze → implement → final review. **Note**: 019 is an Electron desktop shell that reuses the 018 frontend; Node is available. Packaging a distributable installer (electron-builder) is a reserved, maintainer-initiated step — the unit ships the shell + its launch/host wiring + tests, not a signed installer. |
+| Stop condition status | None active — proceed. Completing 019 closes the 015–019 roadmap extension. |
 
 ---
 

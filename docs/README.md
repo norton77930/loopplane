@@ -26,6 +26,7 @@ the [API reference](./api-reference.md).
 - [Lifecycle hooks](./hooks.md) — observe and gate the agent at lifecycle points (unit 015).
 - [Plugins](./plugins.md) — manifest bundles packaging skills, MCP servers, and hooks (unit 016).
 - [The `loopplane` CLI](./cli.md) — a thin terminal host over the host interface (unit 017).
+- [Web frontend](./web-frontend.md) — a single-page UI over the web/API host (unit 018).
 
 ## Reference
 
