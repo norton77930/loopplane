@@ -42,5 +42,9 @@ additive layers (units 001-013), brought to release quality by unit 014.
   PEP 561 `py.typed` marker, the public API reference, the getting-started guide,
   docs and examples indexes, this changelog, the release-readiness checklist, and
   CI build verification.
+- **020** Model-provider adapters (`loopplane.adapters.anthropic`,
+  `loopplane.adapters.openai`) — real Anthropic and OpenAI adapters implementing the
+  model boundary, each behind its own optional extra (`anthropic`, `openai`), with
+  duck-typed stream mapping, offline stub-based tests, and an opt-in live check.
 
 [0.1.0]: https://github.com/norton77930/loopplane

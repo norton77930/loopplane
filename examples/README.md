@@ -1,7 +1,9 @@
 # LoopPlane examples
 
-Every example is public-safe and runs **in-process with the scripted model** — no
-provider credentials, no network. Run any one with `python examples/<name>.py`.
+Most examples are public-safe and run **in-process with the scripted model** — no
+provider credentials, no network. Run any one with `python examples/<name>.py`. The two
+provider quickstarts (unit 020) are the exception: they drive a **real** model and need a
+provider API key in the environment; without one they print a message and exit.
 
 | Example | What it shows |
 |---|---|
@@ -21,5 +23,7 @@ provider credentials, no network. Run any one with `python examples/<name>.py`.
 | `examples/hooks_quickstart.py` | Observe and gate the agent with lifecycle hooks (unit 015). |
 | `examples/plugins_quickstart.py` | Discover, enable, and load a manifest-bundle plugin (unit 016). |
 | `examples/cli_quickstart.py` | Drive the `loopplane` CLI core programmatically (unit 017). |
+| `examples/anthropic_quickstart.py` | Drive a real Claude turn via the Anthropic adapter (unit 020). |
+| `examples/openai_quickstart.py` | Drive a real GPT turn via the OpenAI adapter (unit 020). |
 
 New to LoopPlane? Start with [Getting started](../docs/getting-started.md).

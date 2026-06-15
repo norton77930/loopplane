@@ -44,7 +44,13 @@ def test_runtime_dependencies_are_unchanged() -> None:
     project = _project()
     names = {re.split(r"[<>=!~ ]", dep)[0] for dep in project["dependencies"]}
     assert names == {"anyio", "pydantic", "jsonschema"}, names
-    assert set(project["optional-dependencies"]) == {"mcp", "otel", "web"}
+    assert set(project["optional-dependencies"]) == {
+        "anthropic",
+        "mcp",
+        "openai",
+        "otel",
+        "web",
+    }
 
 
 def test_version_has_a_single_source() -> None:

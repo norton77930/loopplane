@@ -149,6 +149,20 @@ The MCP tool adapter boundary.
 - `translate_schema` — translate an MCP tool schema.
 - `merge_layers` — merge MCP capability layers.
 
+### `loopplane.adapters.anthropic`
+
+The Anthropic (Claude) model-provider adapter.
+
+- `AnthropicModel` — a model boundary backed by the Anthropic messages API.
+- `AnthropicConfig` — configuration for the Anthropic adapter.
+
+### `loopplane.adapters.openai`
+
+The OpenAI (GPT) model-provider adapter.
+
+- `OpenAIModel` — a model boundary backed by the OpenAI chat-completions API.
+- `OpenAIConfig` — configuration for the OpenAI adapter.
+
 ### `loopplane.skills`
 
 The skill execution profile boundary.
