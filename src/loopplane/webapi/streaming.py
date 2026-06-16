@@ -28,7 +28,9 @@ def _frame(data_json: str, *, event: str | None = None) -> str:
     return f"{prefix}data: {data_json}\n\n"
 
 
-async def run_event_stream(host: LoopPlaneHost, prompt: str) -> AsyncIterator[str]:
+async def run_event_stream(
+    host: LoopPlaneHost, prompt: str, principal_id: str | None = None
+) -> AsyncIterator[str]:
     """Drive one run and yield its normalized events as SSE frames in recorded
     order, then a final ``outcome`` frame (or an ``error`` frame on conflict)."""
 
@@ -42,7 +44,7 @@ async def run_event_stream(host: LoopPlaneHost, prompt: str) -> AsyncIterator[st
     async def drive() -> None:
         try:
             try:
-                outcome = await host.run(prompt, sink)
+                outcome = await host.run(prompt, sink, principal_id=principal_id)
                 final = _frame(
                     RunResult.from_outcome(outcome).model_dump_json(), event="outcome"
                 )

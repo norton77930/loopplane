@@ -500,6 +500,8 @@ The web/API host transport over the Host Application Interface.
 
 - `create_app` — build the web/API application.
 - `Authenticator` — the pluggable default-deny auth boundary.
+- `Principal` — an authenticated caller's identity (session ownership, 022).
+- `token_authenticator` — a reference token→principal verifier (dev/tests).
 - `RunRequest` — a run request body.
 - `RunResult` — a run result (metadata only).
 - `OpenedSession` — an opened session handle.

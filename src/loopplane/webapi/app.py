@@ -1,10 +1,14 @@
-"""``create_app``: the web/API host application factory (011).
+"""``create_app``: the web/API host application factory (011; per-principal
+ownership added in 022).
 
 Builds an ASGI app that exposes the embedded :class:`~loopplane.host.LoopPlaneHost`
 behind the authentication boundary: run, event stream, interactive session, and
-read-only inspection. Malformed requests return the one public-safe
-``ErrorResponse`` envelope (FR-016). Interactive sessions live in a lifespan-held
-task group (see :mod:`loopplane.webapi.sessions`).
+read-only inspection. The boundary now identifies the caller (a ``Principal``) and
+every session is scoped to the principal that opened it — the listing returns only
+the caller's sessions, and a per-session route returns ``404`` (never another
+principal's data or its existence) for a session the caller does not own. Malformed
+requests return the one public-safe ``ErrorResponse`` envelope (FR-016). Interactive
+sessions live in a lifespan-held task group (see :mod:`loopplane.webapi.sessions`).
 """
 
 from __future__ import annotations
@@ -19,7 +23,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from loopplane.events import RuntimeEvent
 from loopplane.host import LoopPlaneHost
-from loopplane.webapi.auth import DENY_ALL, Authenticator, make_auth_dependency
+from loopplane.webapi.auth import (
+    DENY_ALL,
+    Authenticator,
+    Principal,
+    make_auth_dependency,
+)
 from loopplane.webapi.models import (
     ArtifactContent,
     ErrorResponse,
@@ -51,10 +60,12 @@ def create_app(
     """Build the web/API host app embedding ``host`` behind the auth boundary.
 
     ``authenticator`` is the embedder's verifier; absent one, every request is
-    denied (default-deny, FR-014).
+    denied (default-deny, FR-014). Each route resolves the caller's ``Principal``
+    and scopes sessions to it (022).
     """
 
     auth = authenticator or DENY_ALL
+    require = make_auth_dependency(auth)
     sessions: dict[str, SessionEntry] = {}
 
     @asynccontextmanager
@@ -80,22 +91,41 @@ def create_app(
 
     app.add_exception_handler(RequestValidationError, on_validation_error)
 
-    router = APIRouter(
-        prefix=api_prefix, dependencies=[Depends(make_auth_dependency(auth))]
-    )
+    # Auth is enforced per route by resolving the caller's principal; this also
+    # hands each route the identity it scopes ownership against.
+    router = APIRouter(prefix=api_prefix)
 
-    def _require(session_id: str) -> SessionEntry:
+    def _require(session_id: str, principal: Principal) -> SessionEntry:
+        # A live interactive session the caller owns — otherwise 404 (never reveal
+        # another principal's session or its existence).
         entry = sessions.get(session_id)
-        if entry is None:
+        if entry is None or entry.owner != principal.id:
             raise HTTPException(status_code=404, detail="not found")
         return entry
+
+    def _owned_or_404(session_id: str, principal: Principal) -> None:
+        # Ownership for the durable/inspection routes: a live session by its
+        # registry owner, else the durable owner from the checkpoint metadata.
+        entry = sessions.get(session_id)
+        if entry is not None:
+            if entry.owner != principal.id:
+                raise HTTPException(status_code=404, detail="not found")
+            return
+        for summary in host.list_sessions():
+            if summary.session_id == session_id:
+                if summary.principal_id != principal.id:
+                    raise HTTPException(status_code=404, detail="not found")
+                return
+        raise HTTPException(status_code=404, detail="not found")
 
     # --- US1: run -----------------------------------------------------------
 
     @router.post("/runs")
-    async def post_run(body: RunRequest) -> RunResult:
+    async def post_run(
+        body: RunRequest, principal: Principal = Depends(require)
+    ) -> RunResult:
         try:
-            outcome = await host.run(body.prompt, _discard)
+            outcome = await host.run(body.prompt, _discard, principal_id=principal.id)
         except RuntimeError as exc:
             raise HTTPException(
                 status_code=409, detail="a run is already active"
@@ -105,26 +135,35 @@ def create_app(
     # --- US2: event stream --------------------------------------------------
 
     @router.post("/runs/events")
-    async def post_run_events(body: RunRequest) -> StreamingResponse:
+    async def post_run_events(
+        body: RunRequest, principal: Principal = Depends(require)
+    ) -> StreamingResponse:
         return StreamingResponse(
-            run_event_stream(host, body.prompt), media_type="text/event-stream"
+            run_event_stream(host, body.prompt, principal.id),
+            media_type="text/event-stream",
         )
 
     # --- US3: interactive session -------------------------------------------
 
     @router.post("/sessions")
-    async def open_session() -> OpenedSession:
+    async def open_session(
+        principal: Principal = Depends(require),
+    ) -> OpenedSession:
         ready = anyio.Event()
         box: dict[str, str] = {}
-        app.state.session_tg.start_soon(run_session, host, sessions, ready, box)
+        app.state.session_tg.start_soon(
+            run_session, host, sessions, ready, box, principal.id
+        )
         await ready.wait()
         if box.get("error"):
             raise HTTPException(status_code=409, detail="a run is already active")
         return OpenedSession(session_id=box["sid"])
 
     @router.get("/sessions/{session_id}/events")
-    async def session_events(session_id: str) -> StreamingResponse:
-        entry = _require(session_id)
+    async def session_events(
+        session_id: str, principal: Principal = Depends(require)
+    ) -> StreamingResponse:
+        entry = _require(session_id, principal)
 
         async def stream() -> AsyncIterator[str]:
             async for frame in entry.events:
@@ -133,19 +172,24 @@ def create_app(
         return StreamingResponse(stream(), media_type="text/event-stream")
 
     @router.post("/sessions/{session_id}/submit")
-    async def submit_to_session(session_id: str, body: RunRequest) -> RunResult:
+    async def submit_to_session(
+        session_id: str, body: RunRequest, principal: Principal = Depends(require)
+    ) -> RunResult:
         # Drive the live session to its outcome. A pending approval/question is
         # answered out-of-band by a concurrent request; a client that prefers to
         # observe progress incrementally reads the session events stream (FR-007).
-        entry = _require(session_id)
+        entry = _require(session_id, principal)
         outcome = await entry.session.submit(body.prompt)
         return RunResult.from_outcome(outcome)
 
     @router.post("/sessions/{session_id}/approvals/{request_id}")
     async def answer_approval(
-        session_id: str, request_id: str, body: SessionAnswer
+        session_id: str,
+        request_id: str,
+        body: SessionAnswer,
+        principal: Principal = Depends(require),
     ) -> Resolved:
-        entry = _require(session_id)
+        entry = _require(session_id, principal)
         resolved = entry.session.answer_approval(
             request_id, allow=body.allow, scope=body.scope, reason=body.reason
         )
@@ -153,15 +197,20 @@ def create_app(
 
     @router.post("/sessions/{session_id}/questions/{request_id}")
     async def answer_question(
-        session_id: str, request_id: str, body: QuestionAnswer
+        session_id: str,
+        request_id: str,
+        body: QuestionAnswer,
+        principal: Principal = Depends(require),
     ) -> Resolved:
-        entry = _require(session_id)
+        entry = _require(session_id, principal)
         resolved = entry.session.answer_question(request_id, body.answers)
         return Resolved(resolved=resolved)
 
     @router.post("/sessions/{session_id}/cancel")
-    async def cancel_session(session_id: str) -> Resolved:
-        entry = _require(session_id)
+    async def cancel_session(
+        session_id: str, principal: Principal = Depends(require)
+    ) -> Resolved:
+        entry = _require(session_id, principal)
         entry.session.cancel()
         entry.close.set()
         return Resolved(resolved=True)
@@ -169,11 +218,20 @@ def create_app(
     # --- US4: inspection (read-only, metadata-only) -------------------------
 
     @router.get("/sessions")
-    async def list_sessions() -> list[SessionSummaryView]:
-        return [SessionSummaryView.from_summary(s) for s in host.list_sessions()]
+    async def list_sessions(
+        principal: Principal = Depends(require),
+    ) -> list[SessionSummaryView]:
+        return [
+            SessionSummaryView.from_summary(summary)
+            for summary in host.list_sessions()
+            if summary.principal_id == principal.id
+        ]
 
     @router.get("/sessions/{session_id}/history")
-    async def session_history(session_id: str) -> list[HistoryEntryView]:
+    async def session_history(
+        session_id: str, principal: Principal = Depends(require)
+    ) -> list[HistoryEntryView]:
+        _owned_or_404(session_id, principal)
         try:
             entries = host.history_snapshot(session_id)
         except KeyError:
@@ -184,7 +242,10 @@ def create_app(
         ]
 
     @router.post("/sessions/{session_id}/resume")
-    async def resume_session(session_id: str) -> Resolved:
+    async def resume_session(
+        session_id: str, principal: Principal = Depends(require)
+    ) -> Resolved:
+        _owned_or_404(session_id, principal)
         try:
             await host.resume(session_id)
         except (KeyError, RuntimeError):
@@ -192,7 +253,10 @@ def create_app(
         return Resolved(resolved=True)
 
     @router.get("/sessions/{session_id}/artifacts/{reference}")
-    async def get_artifact(session_id: str, reference: str) -> ArtifactContent:
+    async def get_artifact(
+        session_id: str, reference: str, principal: Principal = Depends(require)
+    ) -> ArtifactContent:
+        _owned_or_404(session_id, principal)
         content = host.retrieve_artifact(session_id, reference)
         if content is None:
             raise HTTPException(status_code=404, detail="not found")

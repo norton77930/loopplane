@@ -34,6 +34,7 @@ from loopplane.model import (  # noqa: E402
     ToolCallRequest,
     ToolDescriptor,
 )
+from loopplane.webapi.auth import Principal  # noqa: E402
 
 # --- a public-safe echo tool -------------------------------------------------
 
@@ -136,24 +137,24 @@ def build_test_host(
 
 # --- authenticators (credential-free, public-safe) ---------------------------
 
-Authenticator = Callable[[str | None], Awaitable[bool]]
+Authenticator = Callable[[str | None], Awaitable[Principal | None]]
 
 VALID = "let-me-in"
 
 
-async def allow_all(credential: str | None) -> bool:
-    return True
+async def allow_all(credential: str | None) -> Principal | None:
+    return Principal(id="anyone")
 
 
-async def deny_all(credential: str | None) -> bool:
-    return False
+async def deny_all(credential: str | None) -> Principal | None:
+    return None
 
 
-async def accept_valid(credential: str | None) -> bool:
-    return credential == VALID
+async def accept_valid(credential: str | None) -> Principal | None:
+    return Principal(id="valid-user") if credential == VALID else None
 
 
-async def raising(credential: str | None) -> bool:
+async def raising(credential: str | None) -> Principal | None:
     raise RuntimeError("authenticator failure")
 
 

@@ -20,6 +20,7 @@ class SessionSummary:
     label: str | None
     created_at: datetime
     last_active_at: datetime
+    principal_id: str | None = None
 
 
 class CheckpointStore(Protocol):

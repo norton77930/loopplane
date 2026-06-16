@@ -73,6 +73,11 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection marker is designed to be called in argument
+# defaults (`= Depends(...)`); permit it (the idiomatic FastAPI pattern, 022).
+extend-immutable-calls = ["fastapi.Depends"]
+
 [tool.mypy]
 strict = true
 files = ["src"]

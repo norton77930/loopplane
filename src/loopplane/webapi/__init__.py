@@ -13,7 +13,7 @@ This package requires the ``web`` extra (``pip install loopplane[web]``).
 from __future__ import annotations
 
 from loopplane.webapi.app import create_app
-from loopplane.webapi.auth import Authenticator
+from loopplane.webapi.auth import Authenticator, Principal, token_authenticator
 from loopplane.webapi.models import (
     ArtifactContent,
     ErrorResponse,
@@ -33,6 +33,7 @@ __all__ = [
     "ErrorResponse",
     "HistoryEntryView",
     "OpenedSession",
+    "Principal",
     "QuestionAnswer",
     "Resolved",
     "RunRequest",
@@ -40,4 +41,5 @@ __all__ = [
     "SessionAnswer",
     "SessionSummaryView",
     "create_app",
+    "token_authenticator",
 ]

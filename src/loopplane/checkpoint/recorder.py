@@ -40,6 +40,7 @@ class SessionRecorder:
         session_id: str,
         created_at: datetime,
         label: str | None = None,
+        principal_id: str | None = None,
         next_sequence: int = 1,
         meta_recorded: bool = False,
     ) -> None:
@@ -47,6 +48,7 @@ class SessionRecorder:
         self._session_id = session_id
         self._created_at = created_at
         self._label = label
+        self._principal_id = principal_id
         self._next_sequence = next_sequence
         self._meta_recorded = meta_recorded
 
@@ -68,7 +70,9 @@ class SessionRecorder:
                 sequence=self._sequence(),
                 recorded_at=self._now(),
                 payload=SessionMetaPayload(
-                    created_at=self._created_at, label=self._label
+                    created_at=self._created_at,
+                    label=self._label,
+                    principal_id=self._principal_id,
                 ),
             )
         )

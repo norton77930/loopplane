@@ -34,13 +34,20 @@ _T0 = datetime(2026, 6, 13, 12, 0, 0, tzinfo=UTC)
 
 
 def _meta(
-    session_id: str, sequence: int = 1, recorded_at: datetime = _T0
+    session_id: str,
+    sequence: int = 1,
+    recorded_at: datetime = _T0,
+    principal_id: str | None = None,
 ) -> SessionMetaRecord:
     return SessionMetaRecord(
         session_id=session_id,
         sequence=sequence,
         recorded_at=recorded_at,
-        payload={"created_at": recorded_at, "label": "test session"},
+        payload={
+            "created_at": recorded_at,
+            "label": "test session",
+            "principal_id": principal_id,
+        },
     )
 
 
@@ -176,3 +183,12 @@ async def test_concurrent_appends_to_one_session_all_land(backend: _Backend) -> 
 
     assert problems == []
     assert len(records) == 51  # meta + 2 * 25
+
+
+async def test_list_sessions_surfaces_principal_id(backend: _Backend) -> None:
+    store = backend.open()
+    await store.append(_meta("s1", principal_id="alice"))
+
+    (summary,) = backend.open().list_sessions()
+
+    assert summary.principal_id == "alice"

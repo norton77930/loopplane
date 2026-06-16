@@ -51,5 +51,14 @@ additive layers (units 001-013), brought to release quality by unit 014.
   (the unchanged default) and an optional `SqliteCheckpointStore` (standard-library
   `sqlite3`, no new dependency), selected via `StorageConfig(checkpoint_backend=...)`.
   Multi-user/`principal_id` and a networked database remain deferred.
+- **022** Web principal authentication & per-principal session scoping
+  (`loopplane.webapi`) — the web/API auth boundary now identifies the caller (a
+  `Principal`) instead of only admitting/denying, and every session is scoped to the
+  principal that opened it (the listing is filtered; a non-owner gets a `404`). The owner
+  is recorded in the checkpoint metadata (`principal_id`) so scoping survives restarts,
+  and a reference `token_authenticator` ships for dev/tests. **Breaking:** the web/API
+  `Authenticator` return type changes from a bool to `Principal | None` (the unit-011
+  web/API surface; embedders with a boolean verifier must return a principal or `None`).
+  No new runtime dependency; the runtime core is unchanged.
 
 [0.1.0]: https://github.com/norton77930/loopplane

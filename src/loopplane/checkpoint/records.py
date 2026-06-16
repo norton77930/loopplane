@@ -46,6 +46,7 @@ class _Envelope(_RecordModel):
 class SessionMetaPayload(_RecordModel):
     created_at: AwareDatetime
     label: str | None = None
+    principal_id: str | None = None
 
 
 class SessionMetaRecord(_Envelope):

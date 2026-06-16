@@ -95,6 +95,7 @@ class LoopPlaneHost:
         *,
         on_approval: OnApproval | None = None,
         working_scope: Path | None = None,
+        principal_id: str | None = None,
     ) -> RunOutcome:
         """Start a run and return its outcome (FR-003). ``on_event`` receives
         every normalized event in order (FR-004)."""
@@ -103,7 +104,8 @@ class LoopPlaneHost:
         controller = self._assembled.controller
         sink = self._assembled.sink
         session_id = controller.create_session(
-            working_scope=working_scope or self._working_scope
+            working_scope=working_scope or self._working_scope,
+            principal_id=principal_id,
         )
         self._bind(sink, controller, session_id, on_event, on_approval)
         try:
@@ -121,6 +123,7 @@ class LoopPlaneHost:
         *,
         on_approval: OnApproval | None = None,
         working_scope: Path | None = None,
+        principal_id: str | None = None,
     ) -> AsyncIterator[Session]:
         """Open an interactive round-trip: submit input, answer approvals and
         questions, and cancel — over the Phase-1 controller (US3)."""
@@ -129,7 +132,8 @@ class LoopPlaneHost:
         controller = self._assembled.controller
         sink = self._assembled.sink
         session_id = controller.create_session(
-            working_scope=working_scope or self._working_scope
+            working_scope=working_scope or self._working_scope,
+            principal_id=principal_id,
         )
         controller.attach_reviewer(session_id)
         self._bind(sink, controller, session_id, on_event, on_approval)

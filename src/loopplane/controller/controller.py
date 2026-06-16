@@ -99,6 +99,7 @@ class _Session:
     attached: bool = False
     driving: bool = False
     started: bool = False
+    principal_id: str | None = None
 
 
 class RuntimeController:
@@ -148,6 +149,7 @@ class RuntimeController:
         working_scope: Path,
         label: str | None = None,
         turn_budget: int | None = None,
+        principal_id: str | None = None,
     ) -> str:
         session_id = uuid.uuid4().hex
         now = datetime.now(UTC)
@@ -162,6 +164,7 @@ class RuntimeController:
             decisions=(),
             next_record_sequence=1,
             meta_recorded=False,
+            principal_id=principal_id,
         )
         return session_id
 
@@ -216,6 +219,7 @@ class RuntimeController:
         decisions: Sequence[ReplacementDecision],
         next_record_sequence: int,
         meta_recorded: bool,
+        principal_id: str | None = None,
     ) -> _Session:
         ledger: ReplacementLedger | None = None
         if self._artifacts is not None:
@@ -234,6 +238,7 @@ class RuntimeController:
                 session_id=session_id,
                 created_at=created_at,
                 label=label,
+                principal_id=principal_id,
                 next_sequence=next_record_sequence,
                 meta_recorded=meta_recorded,
             )
@@ -286,6 +291,7 @@ class RuntimeController:
             approval_memory={},
             cancellation=anyio.Event(),
             ledger=ledger,
+            principal_id=principal_id,
         )
 
     def _make_history_hook(
@@ -488,6 +494,7 @@ class RuntimeController:
                 label=session.label,
                 created_at=session.created_at,
                 last_active_at=session.last_active_at,
+                principal_id=session.principal_id,
             )
             for session in self._sessions.values()
         ]

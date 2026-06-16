@@ -89,6 +89,7 @@ class FileCheckpointStore:
                     label=meta.payload.label,
                     created_at=meta.payload.created_at,
                     last_active_at=last_active,
+                    principal_id=meta.payload.principal_id,
                 )
             )
         return sorted(
