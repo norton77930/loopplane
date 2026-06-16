@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from loopplane.checkpoint.store import SessionSummary
+from loopplane.checkpoint.base import SessionSummary
 from loopplane.controller.controller import RuntimeController
 from loopplane.events.emitter import EventSink
 from loopplane.events.envelope import ApprovalRequestedPayload

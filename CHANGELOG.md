@@ -46,5 +46,10 @@ additive layers (units 001-013), brought to release quality by unit 014.
   `loopplane.adapters.openai`) — real Anthropic and OpenAI adapters implementing the
   model boundary, each behind its own optional extra (`anthropic`, `openai`), with
   duck-typed stream mapping, offline stub-based tests, and an opt-in live check.
+- **021** Checkpoint store backends — the checkpoint store is now a `CheckpointStore`
+  interface (Protocol) with two interchangeable implementations: `FileCheckpointStore`
+  (the unchanged default) and an optional `SqliteCheckpointStore` (standard-library
+  `sqlite3`, no new dependency), selected via `StorageConfig(checkpoint_backend=...)`.
+  Multi-user/`principal_id` and a networked database remain deferred.
 
 [0.1.0]: https://github.com/norton77930/loopplane

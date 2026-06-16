@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from loopplane.host import LoopPlaneHost, RuntimeConfig, StorageConfig
+from loopplane.checkpoint import FileCheckpointStore, SqliteCheckpointStore
+from loopplane.host import LoopPlaneHost, RuntimeConfig, StorageConfig, assemble
 
 from .conftest import (
     BIG_TOOL,
@@ -67,6 +68,57 @@ async def test_checkpoint_records_are_durable_and_resumable(tmp_path: Path) -> N
             model=text_model("unused"),
             tools=(ECHO_TOOL,),
             storage=StorageConfig(root=root),
+        ),
+        working_scope=tmp_path,
+    )
+    await reopened.resume(outcome.session_id)
+    restored = reopened.history_snapshot(outcome.session_id)
+
+    assert [entry.role for entry in restored] == [
+        entry.role for entry in outcome.history
+    ]
+    assert restored != ()
+
+
+def test_default_storage_uses_the_file_backend(tmp_path: Path) -> None:
+    assembled = assemble(
+        RuntimeConfig(model=text_model("x"), storage=StorageConfig(root=tmp_path))
+    )
+    assert isinstance(assembled.checkpoint_store, FileCheckpointStore)
+
+
+def test_sqlite_backend_is_selected_when_requested(tmp_path: Path) -> None:
+    assembled = assemble(
+        RuntimeConfig(
+            model=text_model("x"),
+            storage=StorageConfig(root=tmp_path, checkpoint_backend="sqlite"),
+        )
+    )
+    assert isinstance(assembled.checkpoint_store, SqliteCheckpointStore)
+
+
+async def test_sqlite_backend_records_are_durable_and_resumable(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "data"
+    host = LoopPlaneHost(
+        RuntimeConfig(
+            model=tool_then_text_model(),
+            tools=(ECHO_TOOL,),
+            storage=StorageConfig(root=root, checkpoint_backend="sqlite"),
+        ),
+        working_scope=tmp_path,
+    )
+    outcome = await host.run("go", EventCollector())
+
+    # Persisted to the SQLite database, not per-session files.
+    assert (root / "checkpoints.sqlite3").is_file()
+
+    reopened = LoopPlaneHost(
+        RuntimeConfig(
+            model=text_model("unused"),
+            tools=(ECHO_TOOL,),
+            storage=StorageConfig(root=root, checkpoint_backend="sqlite"),
         ),
         working_scope=tmp_path,
     )

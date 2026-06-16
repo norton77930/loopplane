@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from loopplane.approval import HumanApproval
-from loopplane.checkpoint import CheckpointStore, UserInputRecord
+from loopplane.checkpoint import FileCheckpointStore, UserInputRecord
 from loopplane.controller.controller import RuntimeController
 from loopplane.gateway import ToolGateway
 from loopplane.loop import SessionHistory, compact_history
@@ -94,7 +94,7 @@ async def test_memory_injection_keeps_durable_history_verbatim(tmp_path: Path) -
     gateway = ToolGateway()
     gateway.register(ECHO_DESCRIPTOR, echo_handler)
     sink = EventCollector()
-    checkpoint = CheckpointStore(tmp_path / "sessions")
+    checkpoint = FileCheckpointStore(tmp_path / "sessions")
     controller = RuntimeController(
         model=model,
         gateway=gateway,

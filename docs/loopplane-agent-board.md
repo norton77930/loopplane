@@ -100,6 +100,7 @@ git history) — not invented.
 | **018-loopplane-web-frontend** | `specs/018-loopplane-web-frontend` | **Verified** | Web frontend: a from-scratch single-page UI over the 011 web/API host (REST + SSE) — chat/run view, event timeline, approvals/questions, session list. **No private legacy UI copy** (VII); written fresh; the JS toolchain is isolated under `apps/` with its own CI gate. | 011 | None — implemented & verified on `main` (`apps/web`; React + Vite + Vitest). |
 | **019-loopplane-desktop-gui** | `specs/019-loopplane-desktop-gui` | **Verified** | Desktop GUI shell: a local desktop application over the 012 studio sidecar contract — an Electron shell embedding the 018 frontend, driving a local sidecar host with no server. **No private legacy UI copy** (VII); reuses 018; launch + shell only, runtime unchanged. | 012, 018 | None — implemented & verified on `main` (`apps/desktop`; Python sidecar bridge + TS transport + reused 018 UI + Electron shell). |
 | **020-model-provider-adapters** | `specs/020-model-provider-adapters` | **Verified** | Real model-provider adapters: Anthropic (`loopplane.adapters.anthropic`) and OpenAI (`loopplane.adapters.openai`) implementing the existing model boundary, each behind its own optional extra (`anthropic`/`openai`), with duck-typed stream mapping, offline stub-based tests, and an opt-in live check. Runtime core unchanged (VIII); tool calls surface as raw `ToolCallRequest` for the gateway (V); only normalized increments reach the loop (VI). First unit of the post-roadmap gap-closure plan (Phase A: real model). | 001, 002 | None — implemented & verified on `main` (`loopplane.adapters.{anthropic,openai}`; five gates green). |
+| **021-checkpoint-store-backends** | `specs/021-checkpoint-store-backends` | **Verified** | Checkpoint store backends: the checkpoint store is now a `CheckpointStore` interface (Protocol) with two interchangeable implementations — `FileCheckpointStore` (the unchanged default) and an optional standard-library `SqliteCheckpointStore`, selected via `StorageConfig(checkpoint_backend=...)`. No new dependency; runtime core/contracts unchanged; `principal_id`/multi-user and a networked database deferred. Second unit of the gap-closure plan (Phase B: persistence abstraction). | 001, 002 | None — implemented & verified on `main` (`loopplane.checkpoint.{base,file,sqlite}`; one shared parametrized contract suite over both backends; all gates green). |
 
 **Status evidence (for audit):**
 
@@ -325,6 +326,17 @@ git history) — not invented.
   (VI); no secret is embedded (VII). The Python package and units 011/012/018 are
   **unchanged** (the sidecar is loaded by path, not in the wheel); the full Python suite
   is **675 passed**. Packaging a signed installer is reserved. → **Verified**.
+- **020 / 021 — gap-closure Phase A & B** (post-roadmap). **020** shipped the real
+  Anthropic/OpenAI model adapters (Phase A). **021** extracted the checkpoint store into
+  an interface and added an optional SQLite backend (Phase B): `src/loopplane/checkpoint/`
+  is split into `base.py` (the `CheckpointStore` Protocol + `SessionSummary`), `file.py`
+  (`FileCheckpointStore`, the unchanged default), and `sqlite.py` (`SqliteCheckpointStore`,
+  stdlib `sqlite3`); the host selects via `StorageConfig(checkpoint_backend=...)` (default
+  `file`). One shared parametrized contract suite covers both backends (append/load order,
+  corrupt-skip parity, missing→empty, recency); the default path is byte-identical and adds
+  **no new dependency**. Runtime core/contracts unchanged; `principal_id`/multi-user and a
+  networked database (Postgres) are deferred to Phase C. ruff + mypy(strict) clean; full
+  suite green → **Verified**.
 
 > **🏁 The 015–019 post-release extension is COMPLETE.** All roadmap units **000–019 are
 > `Verified`** on `main` (v0.1.0 shipped; MIT). The five post-release features — **015
@@ -351,13 +363,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **None — the roadmap is complete.** Units **000–019 are all `Verified`** (v0.1.0 shipped; the 015–019 post-release extension is done). |
-| Active feature directory | `specs/019-loopplane-desktop-gui` (the last unit, Verified) |
+| Active unit | **None active.** Original roadmap **000–019** complete (v0.1.0; MIT); gap-closure **Phase A (020)** and **Phase B (021)** shipped and `Verified`. **Phase C (web auth productization)** and **Phase D (desktop packaging)** await maintainer decisions before `specify`. |
+| Active feature directory | `specs/021-checkpoint-store-backends` (the last unit, Verified) |
 | Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **None — all units shipped.** 000–019 complete. |
+| Current Spec Kit step | **None — 021 shipped.** |
 | Depends on | — |
-| Next command | **None.** The autopilot has no further unit to advance, so it stops cleanly. Reserved, maintainer-initiated steps remain (publishing to a package index; signed/distributable installers for the web + desktop apps). |
-| Stop condition status | Roadmap complete — the autopilot stops cleanly. |
+| Next command | **None pending.** Phase C (depends on B, now done) and Phase D are the remaining gap-closure units; both need the maintainer's open design decisions before a new `specify`. |
+| Stop condition status | Gap-closure Phase A + B complete; Phase C/D paused on maintainer decisions. |
 
 ---
 

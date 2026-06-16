@@ -13,7 +13,7 @@ import pytest
 from loopplane.artifacts import ArtifactStore, make_artifact_handoff
 from loopplane.checkpoint import (
     AssistantMessageRecord,
-    CheckpointStore,
+    FileCheckpointStore,
     SessionMetaRecord,
     UserInputRecord,
 )
@@ -45,7 +45,7 @@ def _controller(
     """Build a controller wired to durable stores under tmp_path; a fresh
     call simulates a fresh process over the same storage.
     """
-    checkpoint = CheckpointStore(tmp_path / "sessions")
+    checkpoint = FileCheckpointStore(tmp_path / "sessions")
     artifacts = ArtifactStore(tmp_path / "sessions", preview_chars=64)
     handoff = make_artifact_handoff(artifacts)
     if output_limit is not None:
@@ -108,7 +108,7 @@ async def test_resume_repairs_an_interrupted_tool_call(tmp_path: Path) -> None:
     error-marked synthetic result and surfaced as a warning.
     """
     now = datetime.now(UTC)
-    store = CheckpointStore(tmp_path / "sessions")
+    store = FileCheckpointStore(tmp_path / "sessions")
     await store.append(
         SessionMetaRecord(
             session_id="s1",

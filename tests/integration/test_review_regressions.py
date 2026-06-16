@@ -13,7 +13,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from loopplane.adapters.mcp import MCPServerConfig, merge_layers
-from loopplane.checkpoint import CheckpointStore
+from loopplane.checkpoint import FileCheckpointStore
 from loopplane.context import RunContext
 from loopplane.controller.controller import RuntimeController
 from loopplane.gateway import ToolGateway
@@ -195,7 +195,7 @@ async def test_replay_sequences_are_monotonic(tmp_path: Path) -> None:
         ),
         gateway=gateway,
         event_sink=sink,
-        checkpoint_store=CheckpointStore(tmp_path / "sessions"),
+        checkpoint_store=FileCheckpointStore(tmp_path / "sessions"),
     )
     session_id = controller.create_session(working_scope=tmp_path)
     await controller.drive(session_id, [TextBlock(text="please echo")])

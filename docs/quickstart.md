@@ -103,7 +103,7 @@ one `run-terminated` — followed by the four recorded history entries.
 
 ```python
 from loopplane.artifacts import ArtifactStore, make_artifact_handoff
-from loopplane.checkpoint import CheckpointStore
+from loopplane.checkpoint import FileCheckpointStore
 
 storage = Path("./loopplane-data")
 artifacts = ArtifactStore(storage)
@@ -112,7 +112,7 @@ controller = RuntimeController(
     model=model,
     gateway=gateway,
     event_sink=print_event,
-    checkpoint_store=CheckpointStore(storage),
+    checkpoint_store=FileCheckpointStore(storage),
     artifact_store=artifacts,
 )
 ```

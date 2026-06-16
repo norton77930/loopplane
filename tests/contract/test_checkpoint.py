@@ -15,7 +15,7 @@ import pytest
 
 from loopplane.checkpoint import (
     AssistantMessageRecord,
-    CheckpointStore,
+    FileCheckpointStore,
     SessionMetaRecord,
     TerminationRecord,
     ToolResultRecord,
@@ -86,20 +86,20 @@ def _termination(
 
 
 async def test_append_as_you_go_is_immediately_durable(tmp_path: Path) -> None:
-    store = CheckpointStore(tmp_path)
+    store = FileCheckpointStore(tmp_path)
 
     await store.append(_meta("s1"))
-    records, problems = CheckpointStore(tmp_path).load("s1")
+    records, problems = FileCheckpointStore(tmp_path).load("s1")
     assert problems == []
     assert [r.record_kind for r in records] == ["session-meta"]
 
     await store.append(_user("s1", 2, "hello"))
-    records, _ = CheckpointStore(tmp_path).load("s1")
+    records, _ = FileCheckpointStore(tmp_path).load("s1")
     assert [r.record_kind for r in records] == ["session-meta", "user-input"]
 
 
 async def test_resume_rebuilds_history_from_records_alone(tmp_path: Path) -> None:
-    store = CheckpointStore(tmp_path)
+    store = FileCheckpointStore(tmp_path)
     await store.append(_meta("s1"))
     await store.append(_user("s1", 2, "do the thing"))
     await store.append(
@@ -114,7 +114,7 @@ async def test_resume_rebuilds_history_from_records_alone(tmp_path: Path) -> Non
     await store.append(_assistant("s1", 5, TextBlock(text="all done")))
     await store.append(_termination("s1", 6, turns=2))
 
-    records, problems = CheckpointStore(tmp_path).load("s1")
+    records, problems = FileCheckpointStore(tmp_path).load("s1")
     rebuilt = rebuild_session(records)
 
     assert problems == []
@@ -132,7 +132,7 @@ async def test_resume_rebuilds_history_from_records_alone(tmp_path: Path) -> Non
 
 
 async def test_dangling_call_is_repaired_with_a_warning(tmp_path: Path) -> None:
-    store = CheckpointStore(tmp_path)
+    store = FileCheckpointStore(tmp_path)
     await store.append(_meta("s1"))
     await store.append(_user("s1", 2, "go"))
     await store.append(
@@ -144,7 +144,7 @@ async def test_dangling_call_is_repaired_with_a_warning(tmp_path: Path) -> None:
     )
     # The process died between the call and its result.
 
-    records, _ = CheckpointStore(tmp_path).load("s1")
+    records, _ = FileCheckpointStore(tmp_path).load("s1")
     rebuilt = rebuild_session(records)
 
     assert any("c-lost" in repair for repair in rebuilt.repairs)
@@ -160,7 +160,7 @@ async def test_dangling_call_is_repaired_with_a_warning(tmp_path: Path) -> None:
 
 
 async def test_corrupted_record_is_skipped_and_the_rest_load(tmp_path: Path) -> None:
-    store = CheckpointStore(tmp_path)
+    store = FileCheckpointStore(tmp_path)
     await store.append(_meta("s1"))
     await store.append(_user("s1", 2, "first"))
 
@@ -170,7 +170,7 @@ async def test_corrupted_record_is_skipped_and_the_rest_load(tmp_path: Path) -> 
 
     await store.append(_user("s1", 3, "second"))
 
-    records, problems = CheckpointStore(tmp_path).load("s1")
+    records, problems = FileCheckpointStore(tmp_path).load("s1")
     assert len(problems) == 1
     assert [r.record_kind for r in records] == [
         "session-meta",
@@ -180,7 +180,7 @@ async def test_corrupted_record_is_skipped_and_the_rest_load(tmp_path: Path) -> 
 
 
 async def test_concurrent_writes_never_interleave(tmp_path: Path) -> None:
-    store = CheckpointStore(tmp_path)
+    store = FileCheckpointStore(tmp_path)
     await store.append(_meta("s1"))
 
     async def writer(start: int) -> None:
@@ -191,13 +191,13 @@ async def test_concurrent_writes_never_interleave(tmp_path: Path) -> None:
         task_group.start_soon(writer, 100)
         task_group.start_soon(writer, 200)
 
-    records, problems = CheckpointStore(tmp_path).load("s1")
+    records, problems = FileCheckpointStore(tmp_path).load("s1")
     assert problems == []
     assert len(records) == 51  # meta + 2 * 25, every line parseable
 
 
 async def test_sessions_list_newest_first(tmp_path: Path) -> None:
-    store = CheckpointStore(tmp_path)
+    store = FileCheckpointStore(tmp_path)
     await store.append(_meta("older"))
     await anyio.sleep(0.02)
     await store.append(_meta("newer"))
@@ -211,5 +211,5 @@ async def test_sessions_list_newest_first(tmp_path: Path) -> None:
 
 
 def test_missing_storage_root_yields_an_empty_listing(tmp_path: Path) -> None:
-    store = CheckpointStore(tmp_path / "never-created")
+    store = FileCheckpointStore(tmp_path / "never-created")
     assert store.list_sessions() == []

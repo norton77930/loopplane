@@ -21,6 +21,7 @@ from loopplane.gateway import ToolAdapter, ToolHandler
 from loopplane.model import ModelBoundary, ToolDescriptor
 
 ApprovalDefault = Literal["allow", "ask", "deny"]
+CheckpointBackend = Literal["file", "sqlite"]
 
 
 class ConfigError(ValueError):
@@ -63,6 +64,7 @@ class StorageConfig:
     root: Path
     artifact_threshold_bytes: int | None = None
     replacement_budget_bytes: int | None = None
+    checkpoint_backend: CheckpointBackend = "file"
 
 
 @dataclass(frozen=True)
@@ -147,6 +149,7 @@ def _coerce_storage(value: Any) -> StorageConfig | None:
         root=Path(value["root"]),
         artifact_threshold_bytes=value.get("artifact_threshold_bytes"),
         replacement_budget_bytes=value.get("replacement_budget_bytes"),
+        checkpoint_backend=value.get("checkpoint_backend", "file"),
     )
 
 

@@ -17,7 +17,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from loopplane.artifacts import ArtifactStore, make_artifact_handoff
-from loopplane.checkpoint import CheckpointStore
+from loopplane.checkpoint import FileCheckpointStore
 from loopplane.controller.controller import RuntimeController
 from loopplane.events import RuntimeEvent
 from loopplane.events.emitter import EventSink
@@ -103,7 +103,7 @@ async def test_all_optional_subsystems_on_change_no_event_sequence(
             model=ScriptedModel(script=_script(), context_capacity=100_000),
             gateway=gateway,
             event_sink=observed,
-            checkpoint_store=CheckpointStore(storage / "sessions"),
+            checkpoint_store=FileCheckpointStore(storage / "sessions"),
             artifact_store=artifacts,
             memory_store=MemoryStore(storage / "memory"),
             skills={},

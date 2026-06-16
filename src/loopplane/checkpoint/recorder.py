@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from loopplane.checkpoint.base import CheckpointStore
 from loopplane.checkpoint.records import (
     AssistantMessageRecord,
     AssistantMessageRecordPayload,
@@ -21,7 +22,6 @@ from loopplane.checkpoint.records import (
     UserInputRecord,
     UserInputRecordPayload,
 )
-from loopplane.checkpoint.store import CheckpointStore
 from loopplane.events.emitter import EventSink
 from loopplane.events.envelope import (
     RunTerminatedEvent,

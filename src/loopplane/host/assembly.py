@@ -16,7 +16,11 @@ from typing import Any
 
 from loopplane.approval import HumanApproval, PermissionRule
 from loopplane.artifacts import ArtifactStore, make_artifact_handoff
-from loopplane.checkpoint import CheckpointStore
+from loopplane.checkpoint import (
+    CheckpointStore,
+    FileCheckpointStore,
+    SqliteCheckpointStore,
+)
 from loopplane.controller.controller import RuntimeController
 from loopplane.events import RuntimeEvent
 from loopplane.gateway import PolicyDecider, ToolGateway
@@ -64,7 +68,12 @@ def assemble(config: RuntimeConfig) -> AssembledRuntime:
     replacement_budget_bytes: int | None = None
     if config.storage is not None:
         artifact_store = ArtifactStore(config.storage.root)
-        checkpoint_store = CheckpointStore(config.storage.root)
+        if config.storage.checkpoint_backend == "sqlite":
+            checkpoint_store = SqliteCheckpointStore(
+                config.storage.root / "checkpoints.sqlite3"
+            )
+        else:
+            checkpoint_store = FileCheckpointStore(config.storage.root)
         artifact_handoff = make_artifact_handoff(artifact_store)
         output_limit_bytes = config.storage.artifact_threshold_bytes
         replacement_budget_bytes = config.storage.replacement_budget_bytes

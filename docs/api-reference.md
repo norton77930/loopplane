@@ -194,7 +194,9 @@ Durable session recording, checkpoint records, and session rebuild.
 
 - `SessionRecorder` — records a session to durable records.
 - `RecordingSink` — an event sink that records to the store.
-- `CheckpointStore` — the checkpoint record store.
+- `CheckpointStore` — the checkpoint store interface (Protocol).
+- `FileCheckpointStore` — the default filesystem checkpoint store.
+- `SqliteCheckpointStore` — the optional SQLite checkpoint store.
 - `CheckpointRecord` — base checkpoint record.
 - `RebuildResult` — the result of rebuilding a session.
 - `rebuild_session` — rebuild a session from its records.

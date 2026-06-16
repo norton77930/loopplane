@@ -17,7 +17,7 @@ import anyio
 import pytest
 
 from loopplane.approval import HumanApproval
-from loopplane.checkpoint import CheckpointStore
+from loopplane.checkpoint import FileCheckpointStore
 from loopplane.controller.controller import RuntimeController
 from loopplane.controller.dispatcher import (
     BatchingSink,
@@ -61,7 +61,9 @@ def _controller(
         model=ScriptedModel(script=script, context_capacity=100_000),
         gateway=gateway,
         event_sink=sink,
-        checkpoint_store=CheckpointStore(tmp_path / "sessions") if durable else None,
+        checkpoint_store=FileCheckpointStore(tmp_path / "sessions")
+        if durable
+        else None,
     )
 
 

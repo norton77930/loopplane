@@ -26,9 +26,9 @@ from loopplane.artifacts.budget import (
     ReplacementLedger,
 )
 from loopplane.artifacts.store import ArtifactStore
+from loopplane.checkpoint.base import CheckpointStore, SessionSummary
 from loopplane.checkpoint.rebuild import rebuild_session
 from loopplane.checkpoint.recorder import RecordingSink, SessionRecorder
-from loopplane.checkpoint.store import CheckpointStore, SessionSummary
 from loopplane.context import RunContext
 from loopplane.events.emitter import EventEmitter, EventSink
 from loopplane.events.envelope import (

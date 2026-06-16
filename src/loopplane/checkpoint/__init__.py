@@ -2,6 +2,8 @@
 session listing (contracts/checkpoint.md).
 """
 
+from loopplane.checkpoint.base import CheckpointStore, SessionSummary
+from loopplane.checkpoint.file import FileCheckpointStore
 from loopplane.checkpoint.rebuild import RebuildResult, rebuild_session
 from loopplane.checkpoint.recorder import RecordingSink, SessionRecorder
 from loopplane.checkpoint.records import (
@@ -23,7 +25,7 @@ from loopplane.checkpoint.records import (
     deserialize_record,
     serialize_record,
 )
-from loopplane.checkpoint.store import CheckpointStore, SessionSummary
+from loopplane.checkpoint.sqlite import SqliteCheckpointStore
 
 __all__ = [
     "RECORD_KINDS",
@@ -32,6 +34,7 @@ __all__ = [
     "AssistantMessageRecordPayload",
     "CheckpointRecord",
     "CheckpointStore",
+    "FileCheckpointStore",
     "RebuildResult",
     "RecordingSink",
     "ReplacementDecisionRecord",
@@ -40,6 +43,7 @@ __all__ = [
     "SessionMetaRecord",
     "SessionRecorder",
     "SessionSummary",
+    "SqliteCheckpointStore",
     "TerminationRecord",
     "TerminationRecordPayload",
     "ToolResultRecord",

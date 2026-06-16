@@ -1,19 +1,19 @@
-"""Filesystem checkpoint storage: append-only line-oriented JSON records per
-session under a host-overridable base directory (research R6, A10).
+"""Filesystem checkpoint storage (the default backend): append-only line-oriented JSON
+records per session under a host-overridable base directory (research R6, A10).
 
-Appends are flushed before they return (FR-080) and serialized by a
-per-session lock (FR-084). Loading skips corrupt lines (FR-083); listing a
-missing root yields an empty result (FR-085).
+Appends are flushed before they return (FR-080) and serialized by a per-session lock
+(FR-084). Loading skips corrupt lines (FR-083); listing a missing root yields an empty
+result (FR-085). Implements the ``CheckpointStore`` Protocol (``base.py``).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 import anyio
 
+from loopplane.checkpoint.base import SessionSummary
 from loopplane.checkpoint.records import (
     CheckpointRecord,
     SessionMetaRecord,
@@ -24,15 +24,7 @@ from loopplane.checkpoint.records import (
 _RECORD_FILE = "records.jsonl"
 
 
-@dataclass(frozen=True)
-class SessionSummary:
-    session_id: str
-    label: str | None
-    created_at: datetime
-    last_active_at: datetime
-
-
-class CheckpointStore:
+class FileCheckpointStore:
     def __init__(self, base_dir: Path) -> None:
         self._base = base_dir
         self._locks: dict[str, anyio.Lock] = {}
