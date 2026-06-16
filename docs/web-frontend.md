@@ -43,3 +43,15 @@ a stubbed `fetch` and canned event frames; the components have jsdom smoke tests
 UI renders only metadata-safe content (assistant text; tool name + outcome; normalized
 termination) and embeds no secret. It consumes the existing web API and changes nothing
 server-side.
+
+## Logging in (unit 023)
+
+Against the unit-022 per-principal backend the app must send a bearer token. `AppRoot`
+(`src/AppRoot.tsx`) gates the UI: with no token it shows the **login screen**
+(`src/components/Login.tsx`, a masked token field); on submit it builds an authenticated
+`ApiClient` (sending `Authorization: Bearer <token>`) and shows the chat UI. The token is
+held in `sessionStorage` — it survives a reload within the tab and is cleared when the tab
+closes; a **Log out** control clears it, and an API **401** (an invalid or expired token)
+clears it and returns to the login screen. The token is masked, never logged, never placed
+in the URL, and never committed — only the user enters it. `App` is unchanged apart from an
+optional `onUnauthorized` callback, so the unit-018 components and tests are untouched.

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 
-import { ApiClient } from "./api/client";
+import { ApiClient, ApiError } from "./api/client";
 import type { SessionSummary } from "./api/types";
 import { Conversation } from "./components/Conversation";
 import { Prompts } from "./components/Prompts";
@@ -8,12 +8,28 @@ import { SessionList } from "./components/SessionList";
 import { Timeline } from "./components/Timeline";
 import { errored, initialState, reduce, userPrompt } from "./state/chat";
 
-export function App({ client = new ApiClient() }: { client?: ApiClient }) {
+export function App({
+  client = new ApiClient(),
+  onUnauthorized,
+}: {
+  client?: ApiClient;
+  onUnauthorized?: () => void;
+}) {
   const [state, setState] = useState(initialState);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [input, setInput] = useState("");
   const sessionId = useRef<string | null>(null);
   const reading = useRef(false);
+
+  function fail(error: unknown) {
+    // An authorization failure logs the user out (back to login); any other
+    // error shows the existing disconnected state (unit-018 behavior).
+    if (error instanceof ApiError && error.status === 401) {
+      onUnauthorized?.();
+    } else {
+      setState(errored);
+    }
+  }
 
   async function readEvents(id: string) {
     if (reading.current) return;
@@ -22,8 +38,8 @@ export function App({ client = new ApiClient() }: { client?: ApiClient }) {
       for await (const event of client.streamSession(id)) {
         setState((current) => reduce(current, event));
       }
-    } catch {
-      setState(errored);
+    } catch (error) {
+      fail(error);
     }
   }
 
@@ -40,8 +56,8 @@ export function App({ client = new ApiClient() }: { client?: ApiClient }) {
     setState((current) => userPrompt(current, prompt));
     try {
       await client.submit(await ensureSession(), prompt);
-    } catch {
-      setState(errored);
+    } catch (error) {
+      fail(error);
     }
   }
 

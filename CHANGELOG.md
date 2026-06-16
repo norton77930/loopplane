@@ -60,5 +60,10 @@ additive layers (units 001-013), brought to release quality by unit 014.
   `Authenticator` return type changes from a bool to `Principal | None` (the unit-011
   web/API surface; embedders with a boolean verifier must return a principal or `None`).
   No new runtime dependency; the runtime core is unchanged.
+- **023** Web frontend login UI (`apps/web`) — a login screen captures an access token and
+  gates the single-page app over the unit-022 secured backend: the token is sent as a
+  bearer credential, persisted in `sessionStorage` (cleared on tab close), and cleared on
+  logout or an authorization failure (a 401 returns the user to login). Frontend only; the
+  runtime and the existing unit-018 app are unchanged.
 
 [0.1.0]: https://github.com/norton77930/loopplane
