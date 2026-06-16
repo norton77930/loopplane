@@ -65,5 +65,11 @@ additive layers (units 001-013), brought to release quality by unit 014.
   bearer credential, persisted in `sessionStorage` (cleared on tab close), and cleared on
   logout or an authorization failure (a 401 returns the user to login). Frontend only; the
   runtime and the existing unit-018 app are unchanged.
+- **024** Desktop packaging (`apps/desktop`) — the Electron app can be packaged into a
+  distributable installer that bundles a **PyInstaller-frozen** sidecar, so an end-user
+  needs no system Python: a freeze spec, an electron-builder config, and a unit-tested
+  spawn resolver that runs the bundled frozen sidecar in a packaged app and
+  `python bridge.py` in development. Desktop-only; the runtime is unchanged; producing and
+  signing the per-OS installer is a reserved manual / CI step.
 
 [0.1.0]: https://github.com/norton77930/loopplane

@@ -1,0 +1,24 @@
+# electron-builder packaging (unit 024): bundle the Electron app + the renderer build +
+# the PyInstaller-frozen sidecar into an installer. `extraResources` places the frozen
+# `loopplane-sidecar` under the app's `resources/sidecar/`, exactly where the runtime
+# resolver (electron/sidecar-spawn.ts) looks. The actual per-OS build + signing is a
+# reserved manual / CI step (`npm run dist`); see docs/desktop-gui.md.
+appId: dev.loopplane.desktop
+productName: LoopPlane
+directories:
+  output: release
+files:
+  - electron/**/*.js
+  - electron/**/*.cjs
+  - dist/**/*
+extraResources:
+  - from: sidecar/dist
+    to: sidecar
+    filter:
+      - loopplane-sidecar*
+win:
+  target: nsis
+mac:
+  target: dmg
+linux:
+  target: AppImage

@@ -28,6 +28,11 @@ apps/*/dist/
 apps/*/.vite/
 *.tsbuildinfo
 
+# Desktop packaging artifacts (unit 024): frozen sidecar + installer — never commit
+apps/desktop/sidecar/build/
+apps/desktop/sidecar/dist/
+apps/desktop/release/
+
 # Logs / runtime files (root-anchored so source packages are not caught)
 /logs/
 /tmp/

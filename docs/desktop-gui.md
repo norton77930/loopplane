@@ -41,6 +41,32 @@ over IPC (`window.api`). Closing the window stops the sidecar — no orphan proc
   (typechecked; the GUI is verified by a manual smoke).
 
 The app opens no network port, runs no tool itself (the host does), and embeds no
-secret. The Python package and units 011/012/018 are unchanged. Packaging a signed,
-distributable installer (electron-builder, code signing, auto-update) is a reserved,
-maintainer-initiated step.
+secret. The Python package and units 011/012/018 are unchanged.
+
+## Packaging (unit 024)
+
+To ship the app to a user with **no Python**, the sidecar is **frozen** and bundled:
+
+- `sidecar/loopplane-sidecar.spec` — a **PyInstaller** spec freezing `bridge.py` +
+  `loopplane` into a standalone `loopplane-sidecar` executable (no system Python).
+- `electron-builder.yml` — bundles the Electron app + the renderer build + the frozen
+  sidecar (as `extraResources` → `resources/sidecar/`) into an installer.
+- `electron/sidecar-spawn.ts` — `resolveSidecar(...)` chooses what `main.ts` spawns: the
+  **bundled frozen executable** in a packaged app, else **`python sidecar/bridge.py`** in
+  development (unchanged). A missing bundled sidecar fails visibly, not silently.
+
+The default gate proves the resolver and the spec↔config name consistency **offline** (a
+Vitest unit test + a consistency check). Producing and signing the actual per-OS installer
+is a **reserved manual / CI step**:
+
+```sh
+cd apps/desktop
+pip install pyinstaller
+npm run build:sidecar          # pyinstaller -> sidecar/dist/loopplane-sidecar*
+npx vite build                 # renderer -> dist/  (also compile electron/*.ts -> *.js)
+npm install electron-builder
+npm run dist                   # electron-builder -> apps/desktop/release/<installer>
+# then sign / notarize per platform (reserved)
+```
+
+The frozen sidecar (`sidecar/dist`), the renderer `dist/`, and `release/` are gitignored.

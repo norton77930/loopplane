@@ -6,12 +6,30 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 
-const sidecarScript = fileURLToPath(new URL("../sidecar/bridge.py", import.meta.url));
+import { resolveSidecar, type SidecarSpawn } from "./sidecar-spawn";
 
 function createWindow(): void {
-  const sidecar = spawn("python", [sidecarScript], {
+  let spawnSpec: SidecarSpawn;
+  try {
+    // Packaged: the bundled frozen sidecar; development: `python sidecar/bridge.py`.
+    spawnSpec = resolveSidecar({
+      packaged: app.isPackaged,
+      platform: process.platform,
+      resourcesPath: process.resourcesPath,
+      devDir: fileURLToPath(new URL("../sidecar", import.meta.url)),
+    });
+  } catch {
+    // A missing bundled sidecar must fail visibly, not hang (FR-008).
+    dialog.showErrorBox(
+      "LoopPlane",
+      "The bundled sidecar executable is missing; the installation may be corrupt.",
+    );
+    app.quit();
+    return;
+  }
+  const sidecar = spawn(spawnSpec.command, spawnSpec.args, {
     stdio: ["pipe", "pipe", "inherit"],
   });
 

@@ -103,6 +103,7 @@ git history) — not invented.
 | **021-checkpoint-store-backends** | `specs/021-checkpoint-store-backends` | **Verified** | Checkpoint store backends: the checkpoint store is now a `CheckpointStore` interface (Protocol) with two interchangeable implementations — `FileCheckpointStore` (the unchanged default) and an optional standard-library `SqliteCheckpointStore`, selected via `StorageConfig(checkpoint_backend=...)`. No new dependency; runtime core/contracts unchanged; `principal_id`/multi-user and a networked database deferred. Second unit of the gap-closure plan (Phase B: persistence abstraction). | 001, 002 | None — implemented & verified on `main` (`loopplane.checkpoint.{base,file,sqlite}`; one shared parametrized contract suite over both backends; all gates green). |
 | **022-web-principal-auth** | `specs/022-web-principal-auth` | **Verified** | Web principal authentication & per-principal session scoping (gap-closure Phase C, backend): the web/API auth boundary now returns a `Principal` (was a bool) and every session is scoped to its owner — the listing is filtered and a non-owner gets a `404` (no existence leak). The owner rides the unit-021 checkpoint metadata (`principal_id`) so scoping survives restarts; a reference `token_authenticator` ships. **Breaking** change to the 011 webapi auth return type. Concurrency / login UI deferred (login UI = unit 023). Runtime core unchanged; no new dependency. | 011, 021 | None — implemented & verified on `main` (`loopplane.webapi`; a six-scenario two-principal scoping suite; all gates green). |
 | **023-web-login-ui** | `specs/023-web-login-ui` | **Verified** | Web frontend login UI (gap-closure Phase C, frontend): a login screen captures an access token and gates the unit-018 SPA over the 022 secured backend — `AppRoot` renders `Login` (a masked token field) when there is no token, else the existing `App` wired with a `Bearer <token>` client. The token persists in `sessionStorage` (cleared on tab close); logout and a `401` clear it and return to login. Frontend only; the existing 018 app/components/tests are reused unchanged (`App` gains only an optional `onUnauthorized`). | 018, 022 | None — implemented & verified on `main` (`apps/web`; 27 Vitest incl. login/logout/401-to-login; tsc-strict + vite build green; Python suite unchanged). |
+| **024-desktop-packaging** | `specs/024-desktop-packaging` | **Verified** | Desktop packaging (gap-closure Phase D, the final unit): the unit-019 Electron app can be packaged into a distributable installer that bundles a **PyInstaller-frozen** sidecar, so an end-user needs no system Python. A freeze spec (`sidecar/loopplane-sidecar.spec`), an `electron-builder.yml`, and a pure, unit-tested **spawn resolver** (`electron/sidecar-spawn.ts`) — packaged → the bundled frozen exe, dev → `python bridge.py`, missing → fail clearly. Desktop-only; runtime unchanged; the actual signed per-OS installer build is a reserved manual/CI step. | 019 | None — implemented & verified on `main` (`apps/desktop`; 8 Vitest incl. resolver + config↔spec consistency; tsc-strict green; Python suite unchanged). |
 
 **Status evidence (for audit):**
 
@@ -363,6 +364,20 @@ git history) — not invented.
   total). tsc-strict + vite build green; the Python suite is unchanged (frontend-only).
   With 023, **gap-closure Phase C is complete**; only **Phase D (desktop packaging)**
   remains. → **Verified**.
+- **024 — gap-closure Phase D (desktop packaging), COMPLETE.** The unit-019 Electron app
+  gained a packaging pipeline (`apps/desktop`): a **PyInstaller** spec
+  (`sidecar/loopplane-sidecar.spec`) freezes `bridge.py` + `loopplane` into a standalone
+  `loopplane-sidecar` executable; `electron-builder.yml` bundles the app + renderer +
+  frozen sidecar (`extraResources` → `resources/sidecar/`) into an installer; and a pure,
+  no-`electron` **resolver** (`electron/sidecar-spawn.ts`) chooses what `main.ts` spawns —
+  the bundled frozen exe when packaged, `python bridge.py` in development, and a clear
+  error (not a silent hang) when the frozen exe is missing. A Vitest suite covers the
+  resolver (packaged / dev / missing / per-platform) and asserts the spec↔config name
+  consistency; the existing 019 tests pass unchanged (**8 Vitest**). The default gate
+  proves the resolver + consistency offline; the actual per-OS freeze, installer, and
+  signing are a **reserved manual / CI step** (the 019 precedent). Built artifacts are
+  gitignored. tsc-strict green; the Python suite is unchanged (desktop-only). **With 024,
+  the four-phase gap-closure plan (A–D) is COMPLETE.** → **Verified**.
 
 > **🏁 The 015–019 post-release extension is COMPLETE.** All roadmap units **000–019 are
 > `Verified`** on `main` (v0.1.0 shipped; MIT). The five post-release features — **015
@@ -389,13 +404,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **None active.** Original roadmap **000–019** complete (v0.1.0; MIT); gap-closure **Phase A (020)**, **Phase B (021)**, and **Phase C (022 backend + 023 login UI)** shipped and `Verified`. Only **Phase D (desktop packaging)** remains; it awaits the maintainer's go-ahead before `specify`. |
-| Active feature directory | `specs/023-web-login-ui` (the last unit, Verified) |
+| Active unit | **None — the gap-closure plan is COMPLETE.** Original roadmap **000–019** complete (v0.1.0; MIT); the four-phase gap-closure — **A (020 model adapters)**, **B (021 checkpoint backends)**, **C (022 principal auth + 023 login UI)**, **D (024 desktop packaging)** — is shipped and `Verified`. Units **000–024** are all `Verified` on `main`. |
+| Active feature directory | `specs/024-desktop-packaging` (the last unit, Verified) |
 | Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **None — 023 shipped.** |
+| Current Spec Kit step | **None — 024 shipped; gap-closure complete.** |
 | Depends on | — |
-| Next command | **None pending.** Phase D (desktop packaging) is the only remaining gap-closure unit; it needs the maintainer's go-ahead (bundle Python vs system Python) before a new `specify`. |
-| Stop condition status | Gap-closure Phase A + B + C complete; only Phase D remains, paused on a maintainer decision. |
+| Next command | **None.** The roadmap and the gap-closure plan are complete; the autopilot stops cleanly. Reserved maintainer steps remain (publishing to a package index; building/signing the per-OS desktop installers; cross-platform CI). |
+| Stop condition status | Gap-closure A + B + C + D complete — the autopilot stops cleanly. |
 
 ---
 

@@ -8,7 +8,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "dev": "vite"
+    "dev": "vite",
+    "build:sidecar": "pyinstaller sidecar/loopplane-sidecar.spec --distpath sidecar/dist --workpath sidecar/build",
+    "dist": "electron-builder"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -22,6 +24,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "electron": "^32.1.0",
+    "electron-builder": "^25.1.8",
     "jsdom": "^25.0.1",
     "typescript": "^5.6.2",
     "vite": "^5.4.6",
