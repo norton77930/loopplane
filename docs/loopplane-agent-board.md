@@ -379,6 +379,21 @@ git history) — not invented.
   gitignored. tsc-strict green; the Python suite is unchanged (desktop-only). **With 024,
   the four-phase gap-closure plan (A–D) is COMPLETE.** → **Verified**.
 
+> **🏁 CURRENT STATUS — units `000–024` are all `Verified` on `main`; the gap-closure plan
+> is COMPLETE.** Beyond the original runtime + release roadmap (**000–019**, shipped as
+> **v0.1.0**, MIT), the four-phase **gap-closure** plan is done: **A — model providers
+> (020)**, **B — checkpoint persistence + optional SQLite (021)**, **C — per-principal web
+> auth (022) + login UI (023)**, **D — desktop packaging (024)**. The Python suite is
+> **721 passed, 2 skipped** (ruff + mypy-strict clean; `uv build` green); the isolated JS
+> gates cover the web app (**27 Vitest**, tsc-strict + vite build) and the desktop app
+> (**8 Vitest**, tsc-strict). LoopPlane now spans four host surfaces — **CLI / web /
+> desktop / embedded** — with real model providers, a pluggable checkpoint persistence
+> layer, multi-principal authentication, and a desktop packaging pipeline. The autopilot
+> has **no further unit to advance**; only reserved maintainer steps remain (publish to a
+> package index; build/sign the per-OS desktop installers; cross-platform CI). It stops
+> cleanly. *(The two banners below are the historical milestone trail — accurate as of
+> v0.1.0 and the 015–019 extension, superseded by this current status.)*
+
 > **🏁 The 015–019 post-release extension is COMPLETE.** All roadmap units **000–019 are
 > `Verified`** on `main` (v0.1.0 shipped; MIT). The five post-release features — **015
 > hook-system, 016 plugin-system, 017 cli-host, 018 web-frontend, 019 desktop-gui** —
