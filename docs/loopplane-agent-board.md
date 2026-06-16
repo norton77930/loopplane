@@ -2,7 +2,7 @@
 
 > **🛰 Roadmap Autopilot control document for `/loop` and `/loop 1m`.**
 > Read this file **first** at the start of every `/loop` run. It is the single source of truth that
-> lets `/loop` advance the **entire LoopPlane roadmap (units 000–019) autonomously** — choosing the
+> lets `/loop` advance the **entire LoopPlane roadmap (units 000–024) autonomously** — choosing the
 > active unit, the current Spec Kit step, and the next command from repository state, **without the
 > user manually prompting each step**. It governs *how the loop chooses and sequences work*; it
 > contains no product code.
@@ -484,7 +484,7 @@ Autopilot may:
 7. Move to the next roadmap unit when the current unit is **Verified**.
 8. Stop only on hard stop conditions (Section 9).
 
-**Branch strategy — main-only.** Autopilot runs directly on `main`. All roadmap units (000–019)
+**Branch strategy — main-only.** Autopilot runs directly on `main`. All roadmap units (000–024)
 progress on `main`; no dedicated feature branch is created or required, and autopilot must **not**
 stop merely because a unit lacks a feature branch. After each safe stage it makes a small scoped
 commit and pushes (Sections 10–11). A human may introduce branches manually; autopilot itself does
