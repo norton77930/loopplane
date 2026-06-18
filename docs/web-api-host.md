@@ -66,9 +66,11 @@ A sharp line:
 ## The authentication boundary
 
 Authentication is a **pluggable, default-deny** boundary: an embedder-injected verifier
-`Authenticator = (credential: str | None) -> Awaitable[bool]`, read from the request's `Authorization`
-header and enforced before any route reaches the host. A missing, falsy, or **raising** verdict denies
-with a fixed `401 {"detail": "unauthorized"}` that never echoes the credential. With **no** authenticator
+`Authenticator = (credential: str | None) -> Awaitable[Principal | None]`, read from the request's
+`Authorization` header and enforced before any route reaches the host. The verifier maps the credential to
+a `Principal` identity (which admits and scopes session ownership, 022), or returns `None` to deny; a
+missing or **raising** verdict also denies, with a fixed `401 {"detail": "unauthorized"}` that never echoes
+the credential. A reference `token_authenticator` (maps `Bearer <token>` → `Principal`) ships for dev/tests. With **no** authenticator
 injected the default denies every request, so an unconfigured host is safe. The host ships no credential
 store, token issuer, or login flow — that is out of scope (a reserved extension point).
 

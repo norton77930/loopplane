@@ -17,16 +17,19 @@ from fastapi.testclient import TestClient
 
 from loopplane.host import LoopPlaneHost, RuntimeConfig
 from loopplane.model import ScriptedModel, ScriptedTurn, TextIncrement
-from loopplane.webapi import create_app
+from loopplane.webapi import Principal, create_app
 
 CREDENTIAL = "let-me-in"
 
 
-async def authenticator(credential: str | None) -> bool:
-    """A minimal injected verifier — admit the one demo credential, deny all else
-    (the host ships no credential store; the embedder injects this)."""
+async def authenticator(credential: str | None) -> Principal | None:
+    """A minimal injected verifier — map the one demo credential to a principal,
+    deny all else (the host ships no credential store; the embedder injects this).
 
-    return credential == CREDENTIAL
+    The web/API auth boundary identifies the caller (a ``Principal``) rather than
+    returning a bool (022); a real deployment injects its own OAuth/JWT verifier."""
+
+    return Principal(id="demo-user") if credential == CREDENTIAL else None
 
 
 def build_demo_host(scope: Path) -> LoopPlaneHost:
