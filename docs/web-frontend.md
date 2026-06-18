@@ -116,3 +116,12 @@ servers + their tools), and **Memory** (entries with a source + snippet, with a 
 panel is read-only — no execute/edit affordance — and uses the existing `ApiClient`
 (`inspectSkills` / `inspectTools` / `inspectMcp` / `inspectMemory`). The backend host query methods
 compose existing layers; no tool is executed and no state is mutated.
+
+## Model selection & attachments (unit 028)
+
+Unit 028 adds, additively in the composer: a **model selector** (`ModelSelector`, lists
+`GET /v1/models` and binds the session's model — one model per run, routed in the web/API layer)
+and **file attachments** (`Attachments`, upload via `POST /v1/uploads` with a per-file status; the
+references are appended to the prompt so the agent reads them on demand via the `read_upload` Tool
+Gateway tool). Files are transient input by id — never embedded into the content model. No backend
+ADR; the runtime keeps one model per run and the content model is unchanged.

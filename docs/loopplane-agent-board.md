@@ -107,7 +107,7 @@ git history) — not invented.
 | **025-web-agent-ui** | `specs/025-web-agent-ui` | **Verified** | Web Agent UI (maintainer-authorized post-gap-closure extension): a **frontend-only** visual + UX overhaul of the unit-018 SPA into a professional agent UI — a two-pane app shell (sessions sidebar + chat column with sticky header/composer), assistant **markdown** rendering, **inline collapsible tool cards** (running/success/failure), styled approval/question dialogs, connection/run status + error banner, a **Stop** control, auto-scroll + jump-to-latest, a styled login, and a **light/dark theme** — all mapped onto the **existing** events/endpoints. **No backend change.** Follow-up units take the rest: **026** (reasoning/thinking display, multi-option questions, token usage — all frontend-only; the backend already emits them) and **027+** (skills/MCP/memory panels; model switching and file upload behind a constitution ADR). | 011, 018 | None — implemented & verified on `main` (`apps/web`; ordered-entries reducer + 11 new components + theme/styles; **49 Vitest**, tsc-strict + vite build green; Python suite unchanged). |
 | **026-web-agent-signals** | `specs/026-web-agent-signals` | **Verified** | Web Agent Signals (maintainer-authorized extension): a **frontend-only** unit surfacing three agent signals the backend **already emits** but the unit-018/025 UI ignores — a streamed, de-emphasized, collapsible **reasoning/thinking block**; **selectable option choices** in the question dialog (free-text fallback); and a **token-usage** indicator (per-turn + session total). Consumes existing events/fields; **no backend change**, no ADR. Builds on 025. Cost/pricing, non-emitting-provider reasoning, model switching, file upload, and skills/MCP/memory panels are **out of scope** → later units (panels = 027). | 011, 018, 025 | None — implemented & verified on `main` (`apps/web`; reasoning block + question options + usage indicator; **60 Vitest**, tsc-strict + vite build green; Python suite unchanged). |
 | **027-web-agent-inspection** | `specs/027-web-agent-inspection` | **Verified** | Web Agent Inspection Panels (maintainer-authorized extension): **read-only** inspection of the agent's capabilities/context in the web UI — loaded **skills** (+ load problems), registered **tools**, connected **MCP servers** (+ their tools), and **memory/knowledge** entries. Adds **additive, metadata-only** web/API read endpoints + host query methods composing existing internal layers, rendered as tabbed panels in the 025 shell. **No ADR** (touches neither Tool Gateway execution (V) nor Event Bus (VI); strictly additive — runtime/gateway/bus/existing endpoints unchanged). Read-only (no execute/edit). Model switching + file upload (need an ADR) → unit 028. | 011, 018, 025 | None — implemented & verified on `main` (additive host query methods + 4 `/v1/inspect/*` endpoints + tabbed panel; **747 pytest** + ruff + mypy, **64 Vitest** + build green; no tool exec, no mutation). |
-| **028-web-agent-model-files** | `specs/028-web-agent-model-files` | **Spec complete** | Web Agent Model Selection & File Attachments (maintainer-authorized extension): per-session **model selection** (web/API-layer registry of pre-configured single-model hosts; routes the session's next turn, resuming from the shared checkpoint — runtime keeps **one model per run**) + **file attachments** (upload endpoint, per-principal; agent reads on demand via a **read-upload tool in the Tool Gateway** — files = transient input by id, **not** embedded/artifact/memory). **Additive — NO ADR** (a reference review confirmed neither blurs a runtime boundary; like 027). Tool Gateway (V) / Event Bus (VI) / content model preserved. Multimodal embedded content + cost/pricing out of scope (the former would need an ADR → later unit). | 011, 018, 020, 021, 022, 025 | Run **plan** (`/speckit-plan`) after 027. Spec + checklist drafted. |
+| **028-web-agent-model-files** | `specs/028-web-agent-model-files` | **Verified** | Web Agent Model Selection & File Attachments (maintainer-authorized extension): per-session **model selection** (web/API-layer registry of pre-configured single-model hosts; routes the session's next turn, resuming from the shared checkpoint — runtime keeps **one model per run**) + **file attachments** (upload endpoint, per-principal; agent reads on demand via a **read-upload tool in the Tool Gateway** — files = transient input by id, **not** embedded/artifact/memory). **Additive — NO ADR** (a reference review confirmed neither blurs a runtime boundary; like 027). Tool Gateway (V) / Event Bus (VI) / content model preserved. Multimodal embedded content + cost/pricing out of scope (the former would need an ADR → later unit). | 011, 018, 020, 021, 022, 025 | None — implemented & verified on `main` (model catalog + run routing + upload endpoint + `read_upload` gateway tool + composer selector/attachments; **757 pytest** + ruff + mypy, **68 Vitest** + build green; additive, no ADR). |
 | **029-web-agent-extras** | `specs/029-web-agent-extras` | **Spec complete** | Web Agent Parity Extras (maintainer-authorized extension): **frontend-only** parity polish, **no backend, no ADR** — **i18n** (en + zh-TW + switcher), **code syntax highlighting** (in 025 markdown), a **command palette** (frontend-doable slash + `@file`/`@skill` from the 027 inspection data; backend-semantic commands out of scope), and a **client-side cost estimate** (026 token usage × a bundled price table; server-side pricing deferred). Builds on 025–027. | 011, 018, 025, 026, 027 | Run **plan** (`/speckit-plan`) after 025–028. Spec + checklist drafted. |
 
 **Status evidence (for audit):**
@@ -431,15 +431,20 @@ git history) — not invented.
   green. Additive — existing tests unchanged. Rollback = drop the endpoints/panel + the retained
   refs. → **Verified**.
 - **028 — Web Agent Model Selection & File Attachments (maintainer-authorized extension,
-  2026-06-19), SPEC stage.** Per-session model selection (web/API-layer registry of pre-configured
-  single-model hosts + per-session routing, resuming from the shared checkpoint — runtime keeps
-  one model per run) + file attachments (upload endpoint, per-principal; agent reads on demand via
-  a **read-upload tool in the Tool Gateway**, Principle V — files = transient input by id, not
-  embedded/artifact/memory). **Re-scoped to ADDITIVE — NO ADR** after a reference review (neither
-  blurs a runtime boundary; like 027). Multimodal embedded content (a content block) is the one
-  thing that would need an ADR → deferred. `specify` complete:
-  `specs/028-web-agent-model-files/spec.md` (2 user stories P1–P2; FR-001..FR-010; SC-001..SC-006)
-  + checklist. Next step: `plan`.
+  2026-06-19), COMPLETE.** Additive, web/API-layer, **no ADR**. **Model selection**:
+  `create_app(host, *, models=…)` holds a catalog of pre-configured single-model hosts (the
+  `ModelHost` entries) sharing the unit-021 checkpoint root; `GET /v1/models` lists it; runs +
+  session-open accept a `model` id that `_select_host` routes to the chosen host — the runtime
+  receives **one model per run** (never switches internally). **Files**: a pure per-reference
+  `UploadStore` (`webapi/uploads.py`) + `POST /v1/uploads` (raw octet-stream body, auth-gated,
+  per-principal, size-limited) + a `read_upload` gateway tool (`loopplane.host.upload_tool`, a
+  capability read by reference) the agent calls on demand — transient input by id, **never embedded**
+  into the content model. Frontend: a composer `ModelSelector` + `Attachments`. The webapi boundary
+  is preserved (it imports only host/events — the tool lives in the host layer). **757 pytest**
+  (UploadStore + read_upload unit; catalog/routing/upload integration: routed run, unknown→400,
+  per-principal, size-limit, auth) + ruff + mypy(strict) green; **68 Vitest** + tsc-strict + build
+  green. Multimodal embedded content (a Principle IV change) is deferred. Rollback = drop the
+  catalog/routing + upload endpoint/store/tool + composer UI. → **Verified**.
 - **029 — Web Agent Parity Extras (maintainer-authorized extension, 2026-06-19), SPEC stage.**
   **Frontend-only**, no backend, no ADR: i18n (en + zh-TW + switcher), code syntax highlighting,
   a command palette (frontend slash + `@file`/`@skill` from 027 data), and a client-side cost
@@ -451,10 +456,10 @@ git history) — not invented.
 > - **025-web-agent-ui** (frontend-only) — **Verified** (shipped): two-pane shell, markdown, inline tool cards, styled dialogs, status + Stop, sessions, light/dark theme.
 > - **026-web-agent-signals** (frontend-only) — **Verified** (shipped): reasoning/thinking display, multi-option questions, token usage (signals the backend **already emits**).
 > - **027-web-agent-inspection** (additive, metadata-only, **no ADR**) — **Verified** (shipped): read-only skills / tools / MCP / memory endpoints + tabbed panel.
-> - **028-web-agent-model-files** (additive, **no ADR**) — per-session model selection (web/API-layer host registry + shared-checkpoint routing; runtime keeps one model per run) + file attachments (upload endpoint + a **read-upload tool in the Tool Gateway**, Principle V; files read on demand, not embedded). A reference review confirmed the additive path; multimodal embedded content (which would need an ADR) is deferred.
+> - **028-web-agent-model-files** (additive, **no ADR**) — **Verified** (shipped): per-session model selection (web/API-layer host registry + shared-checkpoint routing; runtime keeps one model per run) + file attachments (upload endpoint + a **read-upload tool in the Tool Gateway**, Principle V; files read on demand, not embedded). Multimodal embedded content (which would need an ADR) is deferred.
 > - **029-web-agent-extras** (frontend-only, no ADR) — i18n, code syntax highlighting, command palette (frontend slash + `@file`/`@skill`), client-side cost estimate.
 >
-> **025 + 026 + 027 are `Verified`** (shipped on `main`); next is **`plan`** for **028**, and autopilot works the remaining **028 → 029** in order — **all gate-free** (028 was re-scoped to additive after a reference review). Only multimodal embedded file content (needs an ADR), backend-semantic slash commands, and authoritative server-side pricing remain beyond these. *(This supersedes the "no further unit to advance" note in the banner below.)*
+> **025 + 026 + 027 + 028 are `Verified`** (shipped on `main`); next is **`plan`** for the final unit **029**, after which the web-UI extension is complete — **all gate-free** (028 was re-scoped to additive after a reference review). Only multimodal embedded file content (needs an ADR), backend-semantic slash commands, and authoritative server-side pricing remain beyond these. *(This supersedes the "no further unit to advance" note in the banner below.)*
 
 > **🏁 CURRENT STATUS — units `000–024` are all `Verified` on `main`; the gap-closure plan
 > is COMPLETE.** Beyond the original runtime + release roadmap (**000–019**, shipped as
@@ -496,13 +501,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **028 → 029** (web-UI extension) — **025 + 026 + 027 are `Verified`** on `main`. 029 frontend-only; 028 additive (**no ADR**). Units **000–027** are `Verified` on `main`. |
-| Active feature directory | `specs/028-web-agent-model-files` (autopilot works the lowest incomplete unit; advance `.specify/feature.json` → 028). Remaining: `…/029-web-agent-extras`. |
+| Active unit | **029** (web-UI extension, the final unit) — **025 + 026 + 027 + 028 are `Verified`** on `main`. 029 is frontend-only (**no ADR**). Units **000–028** are `Verified` on `main`. |
+| Active feature directory | `specs/029-web-agent-extras` (the last unit; advance `.specify/feature.json` → 029). |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **027 COMPLETE** (plan → tasks → analyze → implement → Verified). Next: **plan** for **028**, then 029 (`/speckit-plan`). **All gate-free** (no ADR). |
-| Depends on | 028 → 011 + 018 + 020 + 021 + 022 + 025 (model adapters, shared checkpoint, principal scoping, gateway tool); 029 → +026 +027. All run in order under autopilot. |
-| Next command | **`/speckit-plan`** for `028`, then 029 (each: plan → tasks → analyze → implement). Under autopilot the steps chain across the remaining units — **all gate-free**. |
-| Stop condition status | **025 + 026 + 027 Verified** (shipped); running **028–029** under autopilot (no ADR gate, no hard stop encountered). |
+| Current Spec Kit step | **028 COMPLETE** (plan → tasks → analyze → implement → Verified). Next: **plan** for **029** (`/speckit-plan`), the final web-UI-extension unit. **Gate-free** (no ADR). |
+| Depends on | 029 → 011 + 018 + 025 + 026 + 027 (frontend extras over the shell, the signals, and the inspection data). |
+| Next command | **`/speckit-plan`** for `029` (plan → tasks → analyze → implement) — the final web-UI-extension unit. |
+| Stop condition status | **025 + 026 + 027 + 028 Verified** (shipped); running **029** (the last unit) under autopilot. |
 
 ---
 

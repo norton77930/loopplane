@@ -63,6 +63,12 @@ A sharp line:
   MCP servers (+ their tools, derived from the `external-server:` descriptor source — never the
   MCP config's args/url), and memory entries (source + bounded snippet). They are auth-gated,
   execute no tool, and mutate nothing.
+- **Model catalog + uploads** (unit 028): `GET /v1/models` lists the operator's pre-configured
+  single-model hosts (metadata-only — ids/labels, never api keys); a run carries an optional
+  `model` id routed to the chosen host (one model per run, shared checkpoint). `POST /v1/uploads`
+  (auth-gated, per-principal, size-limited) stores a file and returns an unguessable reference;
+  the agent reads it on demand via the `read_upload` gateway tool — transient input, never
+  embedded into the content model.
 - **The event stream** carries the run's own normalized content (assistant output, etc.) to the
   authenticated client, because that is what a streaming consumer needs (Constitution VI). That is the
   client receiving the run's output by design — not a committed-artifact leak (Principle VII governs

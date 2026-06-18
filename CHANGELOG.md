@@ -93,5 +93,14 @@ additive layers (units 001-013), brought to release quality by unit 014.
   tabbed inspection panel in the web UI. MCP servers are derived from the `external-server:`
   descriptor source (never the config's args/url); no tool is executed and no state is mutated
   (the Tool Gateway and the Event Bus are untouched). No ADR.
+- **028** Web agent model selection & file attachments (`loopplane.webapi` / `loopplane.host` +
+  `apps/web`) — additive, web/API-layer, **no ADR**. A model catalog (`GET /v1/models`) of
+  pre-configured single-model hosts sharing the unit-021 checkpoint root; runs/sessions accept a
+  `model` id routed to the chosen host (one model per run). An upload endpoint
+  (`POST /v1/uploads`, auth-gated, per-principal, size-limited) + a per-reference `UploadStore` +
+  a `read_upload` Tool Gateway tool (`loopplane.host.upload_tool`) the agent calls to read a file
+  on demand — transient input by id, never embedded into the content model. The composer gains a
+  model selector + file attachments. The runtime, content model, Tool Gateway, and Event Bus are
+  unchanged.
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0
