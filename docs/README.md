@@ -38,5 +38,6 @@ the [API reference](./api-reference.md).
 
 - [Roadmap autopilot board](./loopplane-agent-board.md) — the roadmap control document.
 - [Release readiness](./release-readiness.md) — the pre-release gate checklist.
+- [Manual QA](./manual-qa.md) — the human acceptance pass (browser, desktop, real model).
 
 Runnable examples are catalogued in the [examples index](../examples/README.md).
