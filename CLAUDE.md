@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at
-specs/026-web-agent-signals/plan.md
+specs/027-web-agent-inspection/plan.md
 <!-- SPECKIT END -->
