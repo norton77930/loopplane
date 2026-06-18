@@ -5,10 +5,12 @@ import { streamEvents } from "./events";
 import type {
   McpServerView,
   MemoryEntryView,
+  ModelInfo,
   RawEvent,
   SessionSummary,
   SkillsResponse,
   ToolView,
+  UploadResult,
 } from "./types";
 
 export class ApiError extends Error {
@@ -54,8 +56,26 @@ export class ApiClient {
     yield* streamEvents(res.body);
   }
 
-  async openSession(): Promise<{ session_id: string }> {
-    return this.json("/v1/sessions", { method: "POST" });
+  async openSession(model?: string): Promise<{ session_id: string }> {
+    const suffix = model ? `?model=${encodeURIComponent(model)}` : "";
+    return this.json(`/v1/sessions${suffix}`, { method: "POST" });
+  }
+
+  async listModels(): Promise<ModelInfo[]> {
+    return this.json("/v1/models");
+  }
+
+  async uploadFile(file: File): Promise<UploadResult> {
+    const res = await this.fetchFn(
+      `${this.base}/v1/uploads?name=${encodeURIComponent(file.name)}`,
+      {
+        method: "POST",
+        headers: { ...this.headers, "content-type": "application/octet-stream" },
+        body: file,
+      },
+    );
+    if (!res.ok) throw new ApiError(res.status);
+    return (await res.json()) as UploadResult;
   }
 
   async *streamSession(id: string): AsyncGenerator<RawEvent> {

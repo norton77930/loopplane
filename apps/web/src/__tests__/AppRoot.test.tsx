@@ -18,6 +18,8 @@ function stubClient(overrides: Partial<ApiClient> = {}): ApiClient {
     answerApproval: async () => undefined,
     answerQuestion: async () => undefined,
     cancel: async () => undefined,
+    listModels: async () => [],
+    uploadFile: async () => ({ reference: "r", name: "f" }),
     ...overrides,
   } as unknown as ApiClient;
 }

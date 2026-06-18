@@ -1,15 +1,17 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 // A sticky composer (FR-012): a textarea that grows with multi-line content and disables
-// sending while a run is in flight. Enter sends; Shift+Enter inserts a newline.
+// sending while a run is in flight. Enter sends; Shift+Enter inserts a newline. `extras` hosts
+// the composer controls (the model selector + attachments, unit 028).
 interface Props {
   disabled: boolean;
   onSend: (text: string) => void;
+  extras?: ReactNode;
 }
 
 const MAX_HEIGHT = 200;
 
-export function Composer({ disabled, onSend }: Props) {
+export function Composer({ disabled, onSend, extras }: Props) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -29,14 +31,16 @@ export function Composer({ disabled, onSend }: Props) {
   }
 
   return (
-    <form
-      className="composer"
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-    >
-      <textarea
+    <div className="composer-area">
+      {extras ? <div className="composer-extras">{extras}</div> : null}
+      <form
+        className="composer"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <textarea
         ref={ref}
         aria-label="prompt"
         rows={1}
@@ -54,9 +58,10 @@ export function Composer({ disabled, onSend }: Props) {
           }
         }}
       />
-      <button type="submit" className="primary" disabled={disabled || !value.trim()}>
-        Send
-      </button>
-    </form>
+        <button type="submit" className="primary" disabled={disabled || !value.trim()}>
+          Send
+        </button>
+      </form>
+    </div>
   );
 }

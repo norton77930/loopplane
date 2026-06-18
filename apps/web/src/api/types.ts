@@ -101,3 +101,14 @@ export interface MemoryEntryView {
   description: string;
   snippet: string;
 }
+
+// 028 — model catalog + uploads.
+export interface ModelInfo {
+  id: string;
+  label: string;
+}
+
+export interface UploadResult {
+  reference: string;
+  name: string;
+}

@@ -4,11 +4,13 @@ import { ApiClient, ApiError, type ApprovalDecision } from "./api/client";
 import type { RawEvent, SessionSummary } from "./api/types";
 import { AppShell } from "./components/AppShell";
 import { ApprovalDialog } from "./components/ApprovalDialog";
+import { Attachments, type Attachment } from "./components/Attachments";
 import { ChatHeader } from "./components/ChatHeader";
 import { Composer } from "./components/Composer";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { InspectionPanel } from "./components/InspectionPanel";
 import { MessageList } from "./components/MessageList";
+import { ModelSelector } from "./components/ModelSelector";
 import { QuestionDialog } from "./components/QuestionDialog";
 import { Sidebar } from "./components/Sidebar";
 import { errored, initialState, reduce, userPrompt } from "./state/chat";
@@ -24,6 +26,8 @@ export function App({
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showInspect, setShowInspect] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const sessionId = useRef<string | null>(null);
   const reading = useRef(false);
 
@@ -53,7 +57,7 @@ export function App({
 
   async function ensureSession(): Promise<string> {
     if (sessionId.current) return sessionId.current;
-    const { session_id } = await client.openSession();
+    const { session_id } = await client.openSession(selectedModel ?? undefined);
     sessionId.current = session_id;
     setActiveId(session_id);
     void readEvents(session_id);
@@ -62,9 +66,16 @@ export function App({
 
   async function send(prompt: string) {
     if (!prompt.trim()) return;
+    const refs = attachments
+      .filter((item) => item.status === "done" && item.reference)
+      .map((item) => item.reference as string);
+    const full = refs.length
+      ? `${prompt}\n\n${refs.map((reference) => `[attachment: ${reference}]`).join("\n")}`
+      : prompt;
     setState((current) => userPrompt(current, prompt));
+    setAttachments([]);
     try {
-      await client.submit(await ensureSession(), prompt);
+      await client.submit(await ensureSession(), full);
       void refreshSessions();
     } catch (error) {
       fail(error);
@@ -155,7 +166,20 @@ export function App({
       banner={state.status === "error" ? <ErrorBanner /> : undefined}
       panel={showInspect ? <InspectionPanel client={client} /> : undefined}
       composer={
-        <Composer disabled={state.status === "running"} onSend={(text) => void send(text)} />
+        <Composer
+          disabled={state.status === "running"}
+          onSend={(text) => void send(text)}
+          extras={
+            <>
+              <ModelSelector
+                client={client}
+                value={selectedModel}
+                onChange={setSelectedModel}
+              />
+              <Attachments client={client} onChange={setAttachments} />
+            </>
+          }
+        />
       }
     >
       <MessageList entries={state.entries} />

@@ -37,6 +37,9 @@ class _SummaryLike(Protocol):
 
 class RunRequest(BaseModel):
     prompt: str = Field(min_length=1)
+    model: str | None = (
+        None  # 028 — optional model id; routed to the chosen host (one per run)
+    )
 
 
 class SessionAnswer(BaseModel):
@@ -175,3 +178,18 @@ class MemoryEntryView(BaseModel):
             description=info.description,
             snippet=info.snippet,
         )
+
+
+# --- 028: model catalog + uploads (metadata-only) ----------------------------
+
+
+class ModelInfo(BaseModel):
+    """An available model the host offers — metadata only, never an api key."""
+
+    id: str
+    label: str
+
+
+class UploadResult(BaseModel):
+    reference: str
+    name: str

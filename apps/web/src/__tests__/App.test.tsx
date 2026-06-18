@@ -16,6 +16,8 @@ function makeClient(overrides: Record<string, unknown> = {}): ApiClient {
     answerQuestion: async () => undefined,
     cancel: async () => undefined,
     history: async () => [],
+    listModels: async () => [],
+    uploadFile: async () => ({ reference: "r", name: "f" }),
     ...overrides,
   } as unknown as ApiClient;
 }

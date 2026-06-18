@@ -13,8 +13,9 @@ sessions live in a lifespan-held task group (see :mod:`loopplane.webapi.sessions
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 
 import anyio
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
@@ -35,6 +36,7 @@ from loopplane.webapi.models import (
     HistoryEntryView,
     McpServerView,
     MemoryEntryView,
+    ModelInfo,
     OpenedSession,
     QuestionAnswer,
     Resolved,
@@ -45,9 +47,11 @@ from loopplane.webapi.models import (
     SkillsResponse,
     SkillView,
     ToolView,
+    UploadResult,
 )
 from loopplane.webapi.sessions import SessionEntry, run_session
 from loopplane.webapi.streaming import run_event_stream
+from loopplane.webapi.uploads import UploadStore, UploadTooLarge
 
 
 async def _discard(event: RuntimeEvent) -> None:
@@ -56,22 +60,45 @@ async def _discard(event: RuntimeEvent) -> None:
     return None
 
 
+@dataclass(frozen=True)
+class ModelHost:
+    """A model-catalog entry (028): a label + a single-model host. Catalog hosts share
+    one checkpoint root (021) so a routed run resumes the shared session."""
+
+    label: str
+    host: LoopPlaneHost
+
+
 def create_app(
     host: LoopPlaneHost,
     *,
     authenticator: Authenticator | None = None,
     api_prefix: str = "/v1",
+    models: Mapping[str, ModelHost] | None = None,
+    uploads: UploadStore | None = None,
 ) -> FastAPI:
     """Build the web/API host app embedding ``host`` behind the auth boundary.
 
     ``authenticator`` is the embedder's verifier; absent one, every request is
     denied (default-deny, FR-014). Each route resolves the caller's ``Principal``
-    and scopes sessions to it (022).
+    and scopes sessions to it (022). ``models`` is an optional catalog of single-model
+    hosts a run can route to (028, one model per run); ``uploads`` is an optional
+    per-principal blob store for the upload endpoint + the ``read_upload`` tool.
     """
 
     auth = authenticator or DENY_ALL
     require = make_auth_dependency(auth)
     sessions: dict[str, SessionEntry] = {}
+    catalog = dict(models or {})
+
+    def _select_host(model: str | None) -> LoopPlaneHost:
+        # Route to the chosen single-model host (028); one model per run.
+        if not model:
+            return host
+        entry = catalog.get(model)
+        if entry is None:
+            raise HTTPException(status_code=400, detail="unknown model")
+        return entry.host
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -130,7 +157,9 @@ def create_app(
         body: RunRequest, principal: Principal = Depends(require)
     ) -> RunResult:
         try:
-            outcome = await host.run(body.prompt, _discard, principal_id=principal.id)
+            outcome = await _select_host(body.model).run(
+                body.prompt, _discard, principal_id=principal.id
+            )
         except RuntimeError as exc:
             raise HTTPException(
                 status_code=409, detail="a run is already active"
@@ -143,8 +172,9 @@ def create_app(
     async def post_run_events(
         body: RunRequest, principal: Principal = Depends(require)
     ) -> StreamingResponse:
+        chosen = _select_host(body.model)
         return StreamingResponse(
-            run_event_stream(host, body.prompt, principal.id),
+            run_event_stream(chosen, body.prompt, principal.id),
             media_type="text/event-stream",
         )
 
@@ -152,12 +182,13 @@ def create_app(
 
     @router.post("/sessions")
     async def open_session(
-        principal: Principal = Depends(require),
+        model: str | None = None, principal: Principal = Depends(require)
     ) -> OpenedSession:
+        chosen = _select_host(model)
         ready = anyio.Event()
         box: dict[str, str] = {}
         app.state.session_tg.start_soon(
-            run_session, host, sessions, ready, box, principal.id
+            run_session, chosen, sessions, ready, box, principal.id
         )
         await ready.wait()
         if box.get("error"):
@@ -289,6 +320,29 @@ def create_app(
         q: str | None = None, principal: Principal = Depends(require)
     ) -> list[MemoryEntryView]:
         return [MemoryEntryView.from_info(info) for info in host.inspect_memory(q)]
+
+    # --- 028: model catalog + file uploads ----------------------------------
+
+    @router.get("/models")
+    async def list_models(
+        principal: Principal = Depends(require),
+    ) -> list[ModelInfo]:
+        return [ModelInfo(id=mid, label=entry.label) for mid, entry in catalog.items()]
+
+    @router.post("/uploads")
+    async def upload_file(
+        request: Request,
+        name: str = "upload",
+        principal: Principal = Depends(require),
+    ) -> UploadResult:
+        if uploads is None:
+            raise HTTPException(status_code=404, detail="uploads not configured")
+        data = await request.body()
+        try:
+            stored = uploads.save(principal.id, name, data)
+        except UploadTooLarge as exc:
+            raise HTTPException(status_code=413, detail="upload too large") from exc
+        return UploadResult(reference=stored.reference, name=stored.name)
 
     app.include_router(router)
     return app
