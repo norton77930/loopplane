@@ -1,37 +1,42 @@
+import { useTranslation } from "../i18n/i18n";
 import type { ChatState, UsageState } from "../state/chat";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { UsageIndicator } from "./UsageIndicator";
 
-// The sticky chat header: a connection/run status indicator (FR-009), the token-usage indicator
-// (026), an Inspect toggle (027), a Stop control while a run is in flight, and the theme toggle.
-const LABEL: Record<ChatState["status"], string> = {
-  idle: "Idle",
-  running: "Running",
-  terminated: "Ended",
-  error: "Disconnected",
+// The sticky chat header: a localized status indicator (FR-009; 029 i18n), the token-usage +
+// estimated-cost indicator (026/029), an Inspect toggle (027), a Stop control while running, the
+// language switcher (029), and the theme toggle.
+const LABEL_KEY: Record<ChatState["status"], string> = {
+  idle: "header.idle",
+  running: "header.running",
+  terminated: "header.terminated",
+  error: "header.error",
 };
 
 interface Props {
   status: ChatState["status"];
   usage: UsageState;
+  cost?: number | null;
   onStop: () => void;
   inspectOpen: boolean;
   onToggleInspect: () => void;
 }
 
-export function ChatHeader({ status, usage, onStop, inspectOpen, onToggleInspect }: Props) {
+export function ChatHeader({ status, usage, cost, onStop, inspectOpen, onToggleInspect }: Props) {
+  const { t } = useTranslation();
   return (
     <header className="chat-header">
       <span className="brand">LoopPlane</span>
       <span className="status" data-status={status}>
         <span className="dot" aria-hidden="true" />
-        {LABEL[status]}
+        {t(LABEL_KEY[status])}
       </span>
-      <UsageIndicator usage={usage} />
+      <UsageIndicator usage={usage} cost={cost} />
       <span className="spacer" />
       {status === "running" && (
         <button type="button" className="danger" onClick={onStop}>
-          Stop
+          {t("header.stop")}
         </button>
       )}
       <button
@@ -40,8 +45,9 @@ export function ChatHeader({ status, usage, onStop, inspectOpen, onToggleInspect
         aria-pressed={inspectOpen}
         onClick={onToggleInspect}
       >
-        Inspect
+        {t("header.inspect")}
       </button>
+      <LanguageSwitcher />
       <ThemeToggle />
     </header>
   );

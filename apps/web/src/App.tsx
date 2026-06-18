@@ -13,6 +13,7 @@ import { MessageList } from "./components/MessageList";
 import { ModelSelector } from "./components/ModelSelector";
 import { QuestionDialog } from "./components/QuestionDialog";
 import { Sidebar } from "./components/Sidebar";
+import { estimateCost } from "./pricing";
 import { errored, initialState, reduce, userPrompt } from "./state/chat";
 
 export function App({
@@ -137,6 +138,21 @@ export function App({
     void readEvents(id);
   }
 
+  // Command-palette @-mentions: skill + tool names from the unit-027 inspection data (029).
+  async function loadMentions(query: string): Promise<string[]> {
+    try {
+      const [skills, tools] = await Promise.all([
+        client.inspectSkills(),
+        client.inspectTools(),
+      ]);
+      const names = [...skills.skills.map((s) => s.name), ...tools.map((tool) => tool.name)];
+      const needle = query.toLowerCase();
+      return names.filter((name) => name.toLowerCase().includes(needle));
+    } catch {
+      return [];
+    }
+  }
+
   useEffect(() => {
     void refreshSessions();
   }, []);
@@ -158,6 +174,7 @@ export function App({
         <ChatHeader
           status={state.status}
           usage={state.usage}
+          cost={estimateCost(state.usage.total, selectedModel)}
           onStop={() => void stop()}
           inspectOpen={showInspect}
           onToggleInspect={() => setShowInspect((value) => !value)}
@@ -169,6 +186,11 @@ export function App({
         <Composer
           disabled={state.status === "running"}
           onSend={(text) => void send(text)}
+          commands={[{ id: "toggle-inspect", label: "Toggle inspection panel" }]}
+          onCommand={(id) => {
+            if (id === "toggle-inspect") setShowInspect((value) => !value);
+          }}
+          loadMentions={loadMentions}
           extras={
             <>
               <ModelSelector

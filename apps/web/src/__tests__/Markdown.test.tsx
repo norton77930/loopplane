@@ -25,4 +25,14 @@ describe("Markdown", () => {
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain("alert(1)");
   });
+
+  it("highlights a fenced code block with a known language", () => {
+    const { container } = render(<Markdown>{"```js\nconst x = 1;\n```"}</Markdown>);
+    expect(container.querySelector("code.hljs")).not.toBeNull();
+  });
+
+  it("renders an unknown-language code block without error", () => {
+    const { container } = render(<Markdown>{"```nosuchlang\nzzz\n```"}</Markdown>);
+    expect(container.querySelector("pre code")?.textContent).toContain("zzz");
+  });
 });

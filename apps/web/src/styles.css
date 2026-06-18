@@ -164,6 +164,21 @@ button.danger { color: var(--danger); border-color: var(--danger); }
 .attachment { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); }
 .attachment-error { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
 .attach-status { color: var(--text-muted); }
+
+/* ---- Parity extras (029) ---- */
+.lang-switcher { padding: 4px 6px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); font-size: 12px; }
+.usage-cost { color: var(--text-muted); }
+.palette { list-style: none; margin: 0 16px 4px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elev); box-shadow: var(--shadow); max-height: 220px; overflow-y: auto; }
+.palette li button { width: 100%; text-align: left; border: none; background: none; padding: 6px 10px; border-radius: var(--radius-sm); }
+.palette li button:hover { background: var(--accent-soft); }
+/* rehype-highlight tokens, bound to the theme tokens (light/dark) */
+.markdown .hljs { color: var(--text); background: var(--bg-code); }
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name { color: var(--accent); }
+.hljs-string, .hljs-attr, .hljs-addition { color: var(--success); }
+.hljs-comment, .hljs-quote { color: var(--text-muted); font-style: italic; }
+.hljs-number, .hljs-literal, .hljs-type { color: var(--running); }
+.hljs-title, .hljs-section { color: var(--accent); }
+.hljs-deletion { color: var(--danger); }
 .composer textarea { flex: 1; resize: none; font: inherit; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-input); color: var(--text); max-height: 200px; }
 .composer textarea:focus { outline: none; border-color: var(--accent); }
 

@@ -33,4 +33,16 @@ describe("UsageIndicator", () => {
     const { container } = render(<UsageIndicator usage={{ total: ZERO_USAGE }} />);
     expect(container.firstChild).toBeNull();
   });
+
+  it("shows the estimated cost when one is provided", () => {
+    render(
+      <UsageIndicator
+        usage={{ total: { input_tokens: 10, output_tokens: 5, cached_tokens: 0, reasoning_tokens: 0 } }}
+        cost={0.0123}
+      />,
+    );
+    const usage = screen.getByTestId("usage");
+    expect(usage).toHaveTextContent("est.");
+    expect(usage).toHaveTextContent("0.0123");
+  });
 });

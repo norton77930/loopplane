@@ -1,9 +1,9 @@
 import type { TokenUsage } from "../api/types";
 import type { UsageState } from "../state/chat";
 
-// A compact token-usage indicator (FR-006/007): the last turn + the session total. Hidden when
-// the session total is all-zero (a stub/demo provider or a turn with no usage shows nothing —
-// FR-008); cached/reasoning sub-counts show only when non-zero.
+// A compact token-usage indicator (026) + an optional client-side cost estimate (029). Hidden when
+// the session total is all-zero; cached/reasoning sub-counts show only when non-zero; the cost
+// (when provided) is clearly labeled an estimate.
 function isZero(usage: TokenUsage): boolean {
   return (
     usage.input_tokens === 0 &&
@@ -13,7 +13,12 @@ function isZero(usage: TokenUsage): boolean {
   );
 }
 
-export function UsageIndicator({ usage }: { usage: UsageState }) {
+interface Props {
+  usage: UsageState;
+  cost?: number | null;
+}
+
+export function UsageIndicator({ usage, cost }: Props) {
   if (isZero(usage.total)) return null;
   const { last, total } = usage;
 
@@ -29,6 +34,7 @@ export function UsageIndicator({ usage }: { usage: UsageState }) {
         {total.cached_tokens > 0 ? ` / ${total.cached_tokens} cached` : ""}
         {total.reasoning_tokens > 0 ? ` / ${total.reasoning_tokens} reasoning` : ""}
       </span>
+      {cost != null && <span className="usage-cost">~${cost.toFixed(4)} (est.)</span>}
     </span>
   );
 }

@@ -1,4 +1,5 @@
 import type { SessionSummary } from "../api/types";
+import { useTranslation } from "../i18n/i18n";
 
 // The sessions sidebar (FR-008): lists existing sessions with recency and a new-chat action;
 // an empty list shows a clear empty state.
@@ -10,14 +11,15 @@ interface Props {
 }
 
 export function Sidebar({ sessions, activeId, onOpen, onNew }: Props) {
+  const { t } = useTranslation();
   return (
     <>
       <div className="sidebar-title">LoopPlane</div>
       <button type="button" className="new-chat" onClick={onNew}>
-        + New chat
+        {t("sidebar.newChat")}
       </button>
       {sessions.length === 0 ? (
-        <div className="sidebar-empty">No sessions yet.</div>
+        <div className="sidebar-empty">{t("sidebar.empty")}</div>
       ) : (
         <ul className="session-list" data-testid="sessions">
           {sessions.map((session) => (
