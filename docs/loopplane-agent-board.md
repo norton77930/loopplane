@@ -106,7 +106,9 @@ git history) — not invented.
 | **024-desktop-packaging** | `specs/024-desktop-packaging` | **Verified** | Desktop packaging (gap-closure Phase D, the final unit): the unit-019 Electron app can be packaged into a distributable installer that bundles a **PyInstaller-frozen** sidecar, so an end-user needs no system Python. A freeze spec (`sidecar/loopplane-sidecar.spec`), an `electron-builder.yml`, and a pure, unit-tested **spawn resolver** (`electron/sidecar-spawn.ts`) — packaged → the bundled frozen exe, dev → `python bridge.py`, missing → fail clearly. Desktop-only; runtime unchanged; the actual signed per-OS installer build is a reserved manual/CI step. | 019 | None — implemented & verified on `main` (`apps/desktop`; 8 Vitest incl. resolver + config↔spec consistency; tsc-strict green; Python suite unchanged). |
 | **025-web-agent-ui** | `specs/025-web-agent-ui` | **Spec complete** | Web Agent UI (maintainer-authorized post-gap-closure extension): a **frontend-only** visual + UX overhaul of the unit-018 SPA into a professional agent UI — a two-pane app shell (sessions sidebar + chat column with sticky header/composer), assistant **markdown** rendering, **inline collapsible tool cards** (running/success/failure), styled approval/question dialogs, connection/run status + error banner, a **Stop** control, auto-scroll + jump-to-latest, a styled login, and a **light/dark theme** — all mapped onto the **existing** events/endpoints. **No backend change.** Follow-up units take the rest: **026** (reasoning/thinking display, multi-option questions, token usage — all frontend-only; the backend already emits them) and **027+** (skills/MCP/memory panels; model switching and file upload behind a constitution ADR). | 011, 018 | Run **plan** (`/speckit-plan`). Spec + checklist drafted; at the spec-review gate. |
 | **026-web-agent-signals** | `specs/026-web-agent-signals` | **Spec complete** | Web Agent Signals (maintainer-authorized extension): a **frontend-only** unit surfacing three agent signals the backend **already emits** but the unit-018/025 UI ignores — a streamed, de-emphasized, collapsible **reasoning/thinking block**; **selectable option choices** in the question dialog (free-text fallback); and a **token-usage** indicator (per-turn + session total). Consumes existing events/fields; **no backend change**, no ADR. Builds on 025. Cost/pricing, non-emitting-provider reasoning, model switching, file upload, and skills/MCP/memory panels are **out of scope** → later units (panels = 027). | 011, 018, 025 | Run **plan** (`/speckit-plan`) after 025. Spec + checklist drafted. |
-| **027-web-agent-inspection** | `specs/027-web-agent-inspection` | **Spec complete** | Web Agent Inspection Panels (maintainer-authorized extension): **read-only** inspection of the agent's capabilities/context in the web UI — loaded **skills** (+ load problems), registered **tools**, connected **MCP servers** (+ their tools), and **memory/knowledge** entries. Adds **additive, metadata-only** web/API read endpoints + host query methods composing existing internal layers, rendered as tabbed panels in the 025 shell. **No ADR** (touches neither Tool Gateway execution (V) nor Event Bus (VI); strictly additive — runtime/gateway/bus/existing endpoints unchanged). Read-only (no execute/edit). Model switching + file upload (need an ADR) remain out of scope → later units. | 011, 018, 025 | Run **plan** (`/speckit-plan`) after 025/026. Spec + checklist drafted. |
+| **027-web-agent-inspection** | `specs/027-web-agent-inspection` | **Spec complete** | Web Agent Inspection Panels (maintainer-authorized extension): **read-only** inspection of the agent's capabilities/context in the web UI — loaded **skills** (+ load problems), registered **tools**, connected **MCP servers** (+ their tools), and **memory/knowledge** entries. Adds **additive, metadata-only** web/API read endpoints + host query methods composing existing internal layers, rendered as tabbed panels in the 025 shell. **No ADR** (touches neither Tool Gateway execution (V) nor Event Bus (VI); strictly additive — runtime/gateway/bus/existing endpoints unchanged). Read-only (no execute/edit). Model switching + file upload (need an ADR) → unit 028. | 011, 018, 025 | Run **plan** (`/speckit-plan`) after 025/026. Spec + checklist drafted. |
+| **028-web-agent-model-files** | `specs/028-web-agent-model-files` | **Spec complete** | Web Agent Model Selection & File Attachments (maintainer-authorized extension): per-session **model selection** (host-layer registry; runtime keeps **one model per run**) + **file attachments** (upload endpoint; files = **transient run input**, not artifacts/memory). **⚠️ Governance-gated:** both touch **Constitution IV (boundary clarity)**, so the `plan` MUST carry **boundary ADRs** recorded in Complexity Tracking and **approved by the maintainer before implement** — ADRs, **not** a constitution amendment (Principle VIII not engaged). **Autopilot pauses at this unit's plan gate.** Tool Gateway (V) / Event Bus (VI) preserved. Cost/pricing out of scope. | 011, 018, 020, 025 | Run **plan** (`/speckit-plan`) — **authors + gates the ADRs**. Spec + checklist drafted. |
+| **029-web-agent-extras** | `specs/029-web-agent-extras` | **Spec complete** | Web Agent Parity Extras (maintainer-authorized extension): **frontend-only** parity polish, **no backend, no ADR** — **i18n** (en + zh-TW + switcher), **code syntax highlighting** (in 025 markdown), a **command palette** (frontend-doable slash + `@file`/`@skill` from the 027 inspection data; backend-semantic commands out of scope), and a **client-side cost estimate** (026 token usage × a bundled price table; server-side pricing deferred). Builds on 025–027. | 011, 018, 025, 026, 027 | Run **plan** (`/speckit-plan`) after 025–028. Spec + checklist drafted. |
 
 **Status evidence (for audit):**
 
@@ -405,23 +407,29 @@ git history) — not invented.
   `specify` complete: `specs/027-web-agent-inspection/spec.md` (3 user stories P1–P3;
   FR-001..FR-011; SC-001..SC-006) + `checklists/requirements.md` (all pass; no
   `[NEEDS CLARIFICATION]`). Next step: `plan` (after 025/026).
+- **028 — Web Agent Model Selection & File Attachments (maintainer-authorized extension,
+  2026-06-19), SPEC stage.** Per-session model selection (host-layer; runtime keeps one model
+  per run) + file attachments (upload endpoint; files = transient run input). **Governance-gated:**
+  both touch **Constitution IV**, so the `plan` carries **boundary ADRs** (recorded in Complexity
+  Tracking, **maintainer-approved before implement**) — ADRs, not an amendment (VIII not engaged).
+  **Autopilot pauses at this unit's plan gate.** `specify` complete:
+  `specs/028-web-agent-model-files/spec.md` (2 user stories P1–P2; FR-001..FR-010; CG-001..CG-003;
+  SC-001..SC-006) + checklist. Next step: `plan` (authors the ADRs).
+- **029 — Web Agent Parity Extras (maintainer-authorized extension, 2026-06-19), SPEC stage.**
+  **Frontend-only**, no backend, no ADR: i18n (en + zh-TW + switcher), code syntax highlighting,
+  a command palette (frontend slash + `@file`/`@skill` from 027 data), and a client-side cost
+  estimate (026 usage × a bundled price table). Builds on 025–027. `specify` complete:
+  `specs/029-web-agent-extras/spec.md` (4 user stories P1–P4; FR-001..FR-010; SC-001..SC-006) +
+  checklist. Next step: `plan`.
 
-> **🚧 NEW UNITS IN PROGRESS — `025-web-agent-ui` + `026-web-agent-signals` + `027-web-agent-inspection` (maintainer-authorized extension,
-> 2026-06-19).** The original roadmap (000–019, v0.1.0; MIT) and the four-phase gap-closure
-> (020–024) remain COMPLETE and `Verified`. Beyond them, the maintainer authorized a
-> **frontend-only Web Agent UI overhaul** (unit 025): restyle the unit-018 SPA into a modern
-> agent UI — a two-pane shell (sessions sidebar + chat column), assistant **markdown**,
-> **inline collapsible tool cards** (running/success/failure), styled approval/question
-> dialogs, connection/run status + error banner, a **Stop** control, auto-scroll +
-> jump-to-latest, a styled login, and a **light/dark theme** — all over the **existing** event
-> stream, **with no backend change**. Two more units are also specced: **`026-web-agent-signals`**
-> (frontend-only — surfaces reasoning/thinking, multi-option questions, and token usage, all
-> signals the backend **already emits**) and **`027-web-agent-inspection`** (additive +
-> metadata-only — read-only skills / tools / MCP / memory inspection endpoints + panels, **no
-> ADR**). All three units' **`specify` step is complete**; next is **`plan`** (autopilot works
-> **025 → 026 → 027** in order). Only **model switching** and **file upload** (which need a
-> constitution ADR — Principle III/IV/VIII) remain deferred to a later unit. *(This supersedes
-> the "no further unit to advance" note in the banner below.)*
+> **🚧 NEW UNITS IN PROGRESS — `025-web-agent-ui` → `026-web-agent-signals` → `027-web-agent-inspection` → `028-web-agent-model-files` → `029-web-agent-extras` (maintainer-authorized web-UI extension, 2026-06-19).** The original roadmap (000–019, v0.1.0; MIT) and the four-phase gap-closure (020–024) remain COMPLETE and `Verified`. Beyond them, the maintainer authorized a **web-UI extension** to bring the unit-018 SPA to parity with a modern agent app. Five units, all `specify`-complete on `main`:
+> - **025-web-agent-ui** (frontend-only) — the overhaul: two-pane shell, markdown, inline tool cards, styled dialogs, status + Stop, sessions, light/dark theme.
+> - **026-web-agent-signals** (frontend-only) — reasoning/thinking display, multi-option questions, token usage (signals the backend **already emits**).
+> - **027-web-agent-inspection** (additive, metadata-only, **no ADR**) — read-only skills / tools / MCP / memory endpoints + panels.
+> - **028-web-agent-model-files** (**⚠️ governance-gated**) — per-session model selection + file attachments; touches **Constitution IV**, so its `plan` carries **boundary ADRs** the **maintainer approves before implement** (ADRs, not an amendment). **Autopilot PAUSES at this unit's plan gate.**
+> - **029-web-agent-extras** (frontend-only, no ADR) — i18n, code syntax highlighting, command palette (frontend slash + `@file`/`@skill`), client-side cost estimate.
+>
+> Next is **`plan`**; autopilot works them **025 → 026 → 027 → 028 → 029** in order, **pausing at 028** for the maintainer's boundary-ADR decision. Only backend-semantic slash commands and authoritative server-side pricing remain beyond these. *(This supersedes the "no further unit to advance" note in the banner below.)*
 
 > **🏁 CURRENT STATUS — units `000–024` are all `Verified` on `main`; the gap-closure plan
 > is COMPLETE.** Beyond the original runtime + release roadmap (**000–019**, shipped as
@@ -463,13 +471,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **025-web-agent-ui** → **026-web-agent-signals** → **027-web-agent-inspection** — maintainer-authorized post-gap-closure extensions (2026-06-19). 025/026 are frontend-only; 027 is additive + metadata-only (read endpoints + panels). Units **000–024** remain `Verified` on `main`. |
-| Active feature directory | `specs/025-web-agent-ui` (autopilot works the lowest incomplete unit first; `.specify/feature.json` → 025). 026 = `specs/026-web-agent-signals`; 027 = `specs/027-web-agent-inspection`. |
+| Active unit | **025 → 026 → 027 → 028 → 029** (web-UI extension) — maintainer-authorized post-gap-closure (2026-06-19). 025/026/029 frontend-only; 027 additive metadata-only; **028 governance-gated (boundary ADRs)**. Units **000–024** remain `Verified` on `main`. |
+| Active feature directory | `specs/025-web-agent-ui` (autopilot works the lowest incomplete unit first; `.specify/feature.json` → 025). 026–029 = `specs/026-web-agent-signals`, `…/027-web-agent-inspection`, `…/028-web-agent-model-files`, `…/029-web-agent-extras`. |
 | Current branch | `main` — **main-only autopilot**; all units progress on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **Specify complete for 025, 026, and 027** (each has `spec.md` + `checklists/requirements.md`). Next: **plan** for 025, then 026, then 027 (`/speckit-plan`); clarify/checklist optional (scope already encoded). |
-| Depends on | 025 → 011 + 018; 026 → 011 + 018 + 025; 027 → 011 + 018 + 025 (composes existing skills/toolkit/MCP/recall layers). All run in order under autopilot. |
-| Next command | **`/speckit-plan`** for `025-web-agent-ui` first, then `026`, then `027` (each: plan → tasks → analyze → implement). Under autopilot the steps chain across all three units; otherwise stop at each human gate. |
-| Stop condition status | At the **spec-review human gate** — `specify` done for 025 + 026 + 027; awaiting `plan` (or autopilot enablement to chain steps). |
+| Current Spec Kit step | **Specify complete for 025–029** (each has `spec.md` + `checklists/requirements.md`). Next: **plan** in order 025→026→027→028→029 (`/speckit-plan`). **028 pauses at its plan gate** for maintainer-approved boundary ADRs (Constitution IV). |
+| Depends on | 025 → 011 + 018; 026/027 → +025; 028 → +020 (model adapters); 029 → +026 +027. All run in order under autopilot. |
+| Next command | **`/speckit-plan`** for `025` first, then 026 → 027 → 028 → 029 (each: plan → tasks → analyze → implement). Autopilot chains them but **stops at 028's plan** for the boundary-ADR decision; 025/026/027/029 are gate-free. |
+| Stop condition status | At the **spec-review human gate** — `specify` done for 025–029. **028 will require a maintainer ADR decision at its plan gate** (Constitution IV boundary change); 025/026/027/029 are autopilot-friendly. |
 
 ---
 
