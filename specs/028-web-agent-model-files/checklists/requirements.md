@@ -31,27 +31,30 @@
 
 ## Notes
 
-- **This unit is governance-gated — intentionally, and called out in the spec.** Unlike
-  025–027, per-session model selection and file attachments **touch runtime boundaries**
-  (Constitution Principle IV), so the spec carries a **Constitution & ADR (Governance)**
-  section (CG-001..CG-003): each capability needs an **ADR updating a boundary definition**,
-  recorded in the plan's **Complexity Tracking** and **approved by the maintainer before
-  implement**. This is a process/governance requirement, not an implementation detail — it
-  names *principles*, not frameworks or APIs.
-- **ADRs, not a constitution amendment.** Per the constitution, an amendment is required only
-  to replace the runtime core with an external framework (Principle VIII) — which this unit
-  does **not** do. Model selection is resolved at the **host layer** (the runtime keeps one
-  model per run); files are **transient run input** (distinct from artifacts/memory). Both are
-  additive boundary clarifications → **ADRs** (Principle I / IV), so the unit is specifiable
-  now while the boundary decision is reserved for the maintainer at the plan gate.
-- **Autopilot pauses here.** Because a boundary change is a human decision point, this unit is
-  **not** a clean gate-free unit like 025–027; under autopilot it stops at the plan gate for
-  ADR approval. The board/banner reflect this.
-- **Behavior-level requirements.** The functional requirements describe what the user can do
-  (select a model, attach files) and the boundary-preserving guarantees (one model per run;
-  files as transient input), not the endpoint shapes or UI libraries — those are a `plan.md`
-  decision.
-- **Additive & reversible (X), public-safe (VII), no SDK replacement (VIII).** The Tool
-  Gateway (V) and Event Bus (VI) contracts are preserved.
+- **Re-scoped to additive — no ADR — after a reference review.** This unit was first flagged as
+  "governance-gated" (per-session model + file upload looked like they needed boundary ADRs).
+  A read-only review of a working reference design plus the runtime's own seams showed both can
+  be delivered **additively, without blurring a runtime boundary**, so **no constitution ADR is
+  required** — it is now like unit 027:
+  - **Model selection** is resolved **in the web/API layer**: a registry of pre-configured
+    single-model hosts (one per unit-020 adapter) + per-session routing, with the session
+    resuming from the **shared checkpoint store** (unit 021) across hosts. The runtime keeps
+    **one model per run** (never made to switch internally), so Principle IV is untouched.
+  - **File upload** is an **additive upload endpoint** (per-principal, unit 022) + a
+    **read-upload tool inside the Tool Gateway** (Principle V explicitly permits new tools in the
+    gateway). Files are **transient input read on demand** — **no content-model change**, so the
+    content/prompt contract is unchanged.
+- **The one thing that WOULD need an ADR is deliberately Out of Scope.** Embedding file/image
+  content directly into the prompt (a multimodal content block) would touch the content boundary
+  (Principle IV); it is **deferred to a later unit**. This unit delivers **tool-read** access,
+  which already exceeds the reference (whose web path never feeds file content to the model).
+- **Autopilot no longer pauses here.** Because nothing blurs a runtime boundary, this unit is
+  **gate-free like 025–027/029** — the board/banner reflect the removal of the ADR gate.
+- **Behavior-level requirements.** The FRs describe what the user can do (select a model, attach
+  files the agent can read) and the additive guarantees (one model per run; files via a gateway
+  tool, not embedded), not the endpoint shapes or UI libraries — a `plan.md` decision.
+- **Additive & reversible (X), public-safe (VII), no SDK replacement (VIII).** The runtime core,
+  the Tool Gateway (V), the Event Bus (VI), the content model, and existing endpoints are
+  preserved.
 - No `[NEEDS CLARIFICATION]` markers; all items pass on the first iteration. Ready for
-  `/speckit-plan` — where the **ADRs** are authored and gated.
+  `/speckit-plan`.
