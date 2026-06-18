@@ -104,6 +104,7 @@ git history) — not invented.
 | **022-web-principal-auth** | `specs/022-web-principal-auth` | **Verified** | Web principal authentication & per-principal session scoping (gap-closure Phase C, backend): the web/API auth boundary now returns a `Principal` (was a bool) and every session is scoped to its owner — the listing is filtered and a non-owner gets a `404` (no existence leak). The owner rides the unit-021 checkpoint metadata (`principal_id`) so scoping survives restarts; a reference `token_authenticator` ships. **Breaking** change to the 011 webapi auth return type. Concurrency / login UI deferred (login UI = unit 023). Runtime core unchanged; no new dependency. | 011, 021 | None — implemented & verified on `main` (`loopplane.webapi`; a six-scenario two-principal scoping suite; all gates green). |
 | **023-web-login-ui** | `specs/023-web-login-ui` | **Verified** | Web frontend login UI (gap-closure Phase C, frontend): a login screen captures an access token and gates the unit-018 SPA over the 022 secured backend — `AppRoot` renders `Login` (a masked token field) when there is no token, else the existing `App` wired with a `Bearer <token>` client. The token persists in `sessionStorage` (cleared on tab close); logout and a `401` clear it and return to login. Frontend only; the existing 018 app/components/tests are reused unchanged (`App` gains only an optional `onUnauthorized`). | 018, 022 | None — implemented & verified on `main` (`apps/web`; 27 Vitest incl. login/logout/401-to-login; tsc-strict + vite build green; Python suite unchanged). |
 | **024-desktop-packaging** | `specs/024-desktop-packaging` | **Verified** | Desktop packaging (gap-closure Phase D, the final unit): the unit-019 Electron app can be packaged into a distributable installer that bundles a **PyInstaller-frozen** sidecar, so an end-user needs no system Python. A freeze spec (`sidecar/loopplane-sidecar.spec`), an `electron-builder.yml`, and a pure, unit-tested **spawn resolver** (`electron/sidecar-spawn.ts`) — packaged → the bundled frozen exe, dev → `python bridge.py`, missing → fail clearly. Desktop-only; runtime unchanged; the actual signed per-OS installer build is a reserved manual/CI step. | 019 | None — implemented & verified on `main` (`apps/desktop`; 8 Vitest incl. resolver + config↔spec consistency; tsc-strict green; Python suite unchanged). |
+| **025-web-agent-ui** | `specs/025-web-agent-ui` | **Spec complete** | Web Agent UI (maintainer-authorized post-gap-closure extension): a **frontend-only** visual + UX overhaul of the unit-018 SPA into a professional agent UI — a two-pane app shell (sessions sidebar + chat column with sticky header/composer), assistant **markdown** rendering, **inline collapsible tool cards** (running/success/failure), styled approval/question dialogs, connection/run status + error banner, a **Stop** control, auto-scroll + jump-to-latest, a styled login, and a **light/dark theme** — all mapped onto the **existing** events/endpoints. **No backend change.** Capabilities needing new backend events/endpoints (thinking display, model picker, file upload, multi-option questions, cost/usage, skills/MCP panels) are **out of scope** → follow-up unit. | 011, 018 | Run **plan** (`/speckit-plan`). Spec + checklist drafted; at the spec-review gate. |
 
 **Status evidence (for audit):**
 
@@ -378,6 +379,26 @@ git history) — not invented.
   signing are a **reserved manual / CI step** (the 019 precedent). Built artifacts are
   gitignored. tsc-strict green; the Python suite is unchanged (desktop-only). **With 024,
   the four-phase gap-closure plan (A–D) is COMPLETE.** → **Verified**.
+- **025 — Web Agent UI (maintainer-authorized extension, 2026-06-19), SPEC stage.** A
+  frontend-only visual + UX overhaul of the unit-018 SPA (`apps/web`) into a professional
+  agent UI, mapped onto the existing events/endpoints — **no backend change**. The `specify`
+  step is complete: `specs/025-web-agent-ui/spec.md` (4 user stories P1–P4; FR-001..FR-017;
+  SC-001..SC-006) + `checklists/requirements.md` (all items pass; no `[NEEDS CLARIFICATION]`).
+  Backend-dependent features (thinking, model picker, uploads, multi-option questions, cost,
+  skills/MCP) are scoped out → a follow-up unit. Next step: `plan`.
+
+> **🚧 NEW UNIT IN PROGRESS — `025-web-agent-ui` (maintainer-authorized extension,
+> 2026-06-19).** The original roadmap (000–019, v0.1.0; MIT) and the four-phase gap-closure
+> (020–024) remain COMPLETE and `Verified`. Beyond them, the maintainer authorized a
+> **frontend-only Web Agent UI overhaul** (unit 025): restyle the unit-018 SPA into a modern
+> agent UI — a two-pane shell (sessions sidebar + chat column), assistant **markdown**,
+> **inline collapsible tool cards** (running/success/failure), styled approval/question
+> dialogs, connection/run status + error banner, a **Stop** control, auto-scroll +
+> jump-to-latest, a styled login, and a **light/dark theme** — all over the **existing** event
+> stream, **with no backend change**. The Spec Kit step **`specify` is complete**; next is
+> `plan`. Depends on 018 + 011. Features needing new backend events/endpoints are deferred to
+> a follow-up unit. *(This supersedes the "no further unit to advance" note in the banner
+> below.)*
 
 > **🏁 CURRENT STATUS — units `000–024` are all `Verified` on `main`; the gap-closure plan
 > is COMPLETE.** Beyond the original runtime + release roadmap (**000–019**, shipped as
@@ -419,13 +440,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **None — the gap-closure plan is COMPLETE.** Original roadmap **000–019** complete (v0.1.0; MIT); the four-phase gap-closure — **A (020 model adapters)**, **B (021 checkpoint backends)**, **C (022 principal auth + 023 login UI)**, **D (024 desktop packaging)** — is shipped and `Verified`. Units **000–024** are all `Verified` on `main`. |
-| Active feature directory | `specs/024-desktop-packaging` (the last unit, Verified) |
-| Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **None — 024 shipped; gap-closure complete.** |
-| Depends on | — |
-| Next command | **None.** The roadmap and the gap-closure plan are complete; the autopilot stops cleanly. Reserved maintainer steps remain (publishing to a package index; building/signing the per-OS desktop installers; cross-platform CI). |
-| Stop condition status | Gap-closure A + B + C + D complete — the autopilot stops cleanly. |
+| Active unit | **025-web-agent-ui** — a maintainer-authorized post-gap-closure extension (2026-06-19): a **frontend-only** Web Agent UI overhaul of the unit-018 SPA. Units **000–024** remain `Verified` on `main` (original roadmap 000–019 v0.1.0/MIT + gap-closure 020–024). |
+| Active feature directory | `specs/025-web-agent-ui` |
+| Current branch | `main` — **main-only autopilot**; all units progress on `main` (see §7 Branch Strategy) |
+| Current Spec Kit step | **Specify complete** — `spec.md` + `checklists/requirements.md` drafted. Next: **plan** (`/speckit-plan`); clarify/checklist optional (the scope decision is already encoded). |
+| Depends on | 011 (web/API host), 018 (web frontend) — both `Verified`. |
+| Next command | **`/speckit-plan`** for `025-web-agent-ui` (then tasks → analyze → implement). Under autopilot the steps chain; otherwise stop at each human gate. |
+| Stop condition status | At the **spec-review human gate** — `specify` done; awaiting `plan` (or autopilot enablement to chain steps). |
 
 ---
 
