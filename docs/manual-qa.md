@@ -58,6 +58,14 @@ Check:
 - [ ] Reload the tab → still logged in (token in `sessionStorage`); **Log out** → returns to login.
 - [ ] Enter a wrong token → a request returns **401** → the app returns to login (token cleared).
 
+> **Windows note (localhost / IPv6).** On Windows, `localhost` usually resolves to
+> IPv6 `::1` first, but the snippet above binds IPv4 `127.0.0.1`. Vite proxies `/v1`
+> to `http://localhost:8000`, so the proxy then reaches `::1:8000` (nothing there) and
+> the chat shows **"Disconnected — please retry."** Fix: bind the demo host to `::1` —
+> change the last line to `uvicorn.run(app, host="::1", port=8000)` (or run
+> `uvicorn serve_web_demo:app --host ::1 --port 8000`). On Linux/macOS, `127.0.0.1` is
+> fine. If the browser itself cannot reach the dev server, open the exact URL Vite prints.
+
 Reference: [Web frontend](./web-frontend.md).
 
 ## 3. Desktop app (Electron + Python sidecar)
