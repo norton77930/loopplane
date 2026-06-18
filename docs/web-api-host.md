@@ -58,6 +58,11 @@ A sharp line:
 - **JSON response bodies** (run result, history, session summaries, errors) are **metadata-only**:
   ids, counts, public-safe reasons. History is projected to `{role, block_count}` — never the raw
   `ContentBlock` text or tool I/O.
+- **Inspection endpoints** (`GET /v1/inspect/{skills,tools,mcp,memory}`, unit 027) are
+  **read-only and metadata-only**: loaded skills (+ load problems), registered tools, connected
+  MCP servers (+ their tools, derived from the `external-server:` descriptor source — never the
+  MCP config's args/url), and memory entries (source + bounded snippet). They are auth-gated,
+  execute no tool, and mutate nothing.
 - **The event stream** carries the run's own normalized content (assistant output, etc.) to the
   authenticated client, because that is what a streaming consumer needs (Constitution VI). That is the
   client receiving the run's output by design — not a committed-artifact leak (Principle VII governs

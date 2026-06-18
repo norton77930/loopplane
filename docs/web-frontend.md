@@ -106,3 +106,13 @@ unit-018/025 UI ignored — **no backend change**:
 Each signal degrades gracefully when absent (the central correctness requirement); the reducer
 stays a pure consumer of the existing events (Constitution VI). Reverting the `apps/web` diff
 restores the unit-025 app.
+
+## Inspection panels (unit 027)
+
+Unit 027 adds **read-only** inspection of the agent's capabilities/context — a tabbed, right-side
+`InspectionPanel` (toggled from the header) over four additive, metadata-only endpoints:
+**Skills** (loaded skills + load problems), **Tools** (registered tools), **MCP** (connected
+servers + their tools), and **Memory** (entries with a source + snippet, with a search box). The
+panel is read-only — no execute/edit affordance — and uses the existing `ApiClient`
+(`inspectSkills` / `inspectTools` / `inspectMcp` / `inspectMemory`). The backend host query methods
+compose existing layers; no tool is executed and no state is mutated.

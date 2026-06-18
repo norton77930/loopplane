@@ -86,5 +86,12 @@ additive layers (units 001-013), brought to release quality by unit 014.
   free-text fallback (the question payload's `text` + `options`; corrects the unit-018 `prompt`
   mis-mapping), and a **per-turn + session token-usage** indicator (`turn-completed`). Each
   degrades gracefully when its data is absent. No backend change.
+- **027** Web agent inspection panels (`loopplane.host` / `loopplane.webapi` + `apps/web`) —
+  additive, read-only, metadata-only inspection of the agent's capabilities/context: four
+  `GET /v1/inspect/{skills,tools,mcp,memory}` endpoints (auth-gated) backed by `LoopPlaneHost`
+  query methods that compose the existing skills / gateway / MCP / memory layers, rendered as a
+  tabbed inspection panel in the web UI. MCP servers are derived from the `external-server:`
+  descriptor source (never the config's args/url); no tool is executed and no state is mutated
+  (the Tool Gateway and the Event Bus are untouched). No ADR.
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0
