@@ -50,6 +50,34 @@ host = LoopPlaneHost(RuntimeConfig(model=model))
 outcome = await host.run("Say hello.", on_event)
 ```
 
+### OpenAI-compatible / self-hosted endpoints
+
+The OpenAI adapter speaks the standard chat-completions API, so it drives **any
+OpenAI-compatible endpoint** — a self-hosted server (vLLM, llama.cpp, LM Studio, …) or a
+gateway, not only `api.openai.com`. Set it up in one of two ways.
+
+The OpenAI SDK reads `OPENAI_BASE_URL` (and `OPENAI_API_KEY`) from the environment, so the
+default adapter needs no code change:
+
+```
+export OPENAI_BASE_URL=https://your-host.example/v1   # the part before /chat/completions
+export OPENAI_API_KEY=...
+```
+
+Or inject a client explicitly:
+
+```python
+from openai import AsyncOpenAI
+
+from loopplane.adapters.openai import OpenAIConfig, OpenAIModel
+
+client = AsyncOpenAI(base_url="https://your-host.example/v1", api_key="...")
+model = OpenAIModel(OpenAIConfig(model="<the served model name>", client=client))
+```
+
+`base_url` is everything before `/chat/completions`; it reuses the same
+`OpenAIConfig.client` seam the offline tests use.
+
 ## Behavior
 
 - **Streaming** — provider stream events are mapped to the loop's normalized increments
