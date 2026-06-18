@@ -80,5 +80,11 @@ additive layers (units 001-013), brought to release quality by unit 014.
   default), and a restyled login. The reducer now folds events into one **ordered entry
   list** so tool cards interleave with messages. Reuses the api layer + the unit-023 auth
   gate unchanged; no backend change.
+- **026** Web agent signals (`apps/web`) — a frontend-only extension that surfaces three signals
+  the backend **already emits** but the UI ignored: a distinct, de-emphasized, **collapsible
+  thinking block** (`assistant-reasoning-increment`), **selectable question options** with a
+  free-text fallback (the question payload's `text` + `options`; corrects the unit-018 `prompt`
+  mis-mapping), and a **per-turn + session token-usage** indicator (`turn-completed`). Each
+  degrades gracefully when its data is absent. No backend change.
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

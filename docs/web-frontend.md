@@ -82,4 +82,27 @@ it is applied via a `data-theme` attribute and CSS custom properties. The api la
 (`api/*`) and the unit-023 auth gate (`AppRoot`) are **reused unchanged**; reverting the
 `apps/web` presentation diff restores the unstyled-but-functional unit-018/023 app.
 Reasoning display, multi-option questions, token usage, and code syntax highlighting are
-**out of scope** (units 026 / 029).
+**out of scope** for unit 025 (reasoning / options / usage land in unit 026; syntax
+highlighting in unit 029).
+
+## Signals (unit 026)
+
+Unit 026 is a **frontend-only** extension that renders three signals the backend **already
+emits** over the existing stream (grounded in `src/loopplane/events/envelope.py`) but the
+unit-018/025 UI ignored — **no backend change**:
+
+- **Reasoning / thinking** — `assistant-reasoning-increment` events fold into a `reasoning`
+  conversation entry (merged like the answer, so it interleaves **before** the turn's answer);
+  `ReasoningBlock` renders it as a distinct, de-emphasized, **collapsible** block. A turn with
+  no reasoning shows nothing.
+- **Question options** — the `question-asked` payload's `questions[].{ text, options }` is read
+  correctly (unit 018 mis-named the field `prompt`); `QuestionDialog` renders the options as a
+  select-one-or-many choice group submitting the selection as `answers`, and falls back to the
+  free-text field when there are no options.
+- **Token usage** — `turn-completed` carries `usage` (input / output / cached / reasoning); the
+  reducer keeps `{ last, total }` and `UsageIndicator` (in the header) shows the per-turn usage
+  and a session total, hidden when all-zero.
+
+Each signal degrades gracefully when absent (the central correctness requirement); the reducer
+stays a pure consumer of the existing events (Constitution VI). Reverting the `apps/web` diff
+restores the unit-025 app.
