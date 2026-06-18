@@ -71,5 +71,14 @@ additive layers (units 001-013), brought to release quality by unit 014.
   spawn resolver that runs the bundled frozen sidecar in a packaged app and
   `python bridge.py` in development. Desktop-only; the runtime is unchanged; producing and
   signing the per-OS installer is a reserved manual / CI step.
+- **025** Web agent UI (`apps/web`) — a frontend-only visual + UX overhaul of the
+  single-page app into a modern agent UI: a two-pane shell (sessions sidebar + a chat
+  column with a sticky header and composer), assistant **markdown** rendering (safe — no
+  raw HTML), inline **collapsible tool cards** (running -> success/failure), styled
+  approval/question dialogs, a run-status indicator + a **Stop** control, a non-blocking
+  error banner, auto-scroll with jump-to-latest, a **light/dark theme** (persisted, system
+  default), and a restyled login. The reducer now folds events into one **ordered entry
+  list** so tool cards interleave with messages. Reuses the api layer + the unit-023 auth
+  gate unchanged; no backend change.
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0
