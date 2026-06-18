@@ -4,7 +4,7 @@ All notable changes to LoopPlane are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 Semantic Versioning.
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-06-18
 
 The initial LoopPlane line: a spec-first, embeddable agent-harness runtime and its
 additive layers (units 001-013), brought to release quality by unit 014.
@@ -72,4 +72,4 @@ additive layers (units 001-013), brought to release quality by unit 014.
   `python bridge.py` in development. Desktop-only; the runtime is unchanged; producing and
   signing the per-OS installer is a reserved manual / CI step.
 
-[0.1.0]: https://github.com/norton77930/loopplane
+[0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0
