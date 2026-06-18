@@ -20,6 +20,16 @@ from loopplane.events.emitter import EventSink
 from loopplane.events.envelope import ApprovalRequestedPayload
 from loopplane.host.assembly import AssembledRuntime, assemble
 from loopplane.host.config import RuntimeConfig
+from loopplane.host.inspect import (
+    McpServerInfo,
+    MemoryEntryInfo,
+    SkillInfo,
+    ToolInfo,
+    mcp_view,
+    memory_view,
+    skills_view,
+    tools_view,
+)
 from loopplane.host.sink import RunSink
 from loopplane.loop.history import HistoryEntry
 from loopplane.model import ContentBlock, TextBlock
@@ -163,6 +173,27 @@ class LoopPlaneHost:
         if store is None:
             return None
         return store.retrieve(session_id, reference)
+
+    # --- Read-only inspection (027): metadata-only, executes no tool ---------
+
+    def inspect_skills(self) -> tuple[SkillInfo, ...]:
+        """Loaded skills as safe metadata (load problems are ``skill_problems``)."""
+        return skills_view(self._assembled.skills)
+
+    def inspect_tools(self) -> tuple[ToolInfo, ...]:
+        """Registered tool descriptors as safe metadata — reads, never invokes."""
+        return tools_view(self._assembled.gateway.descriptors())
+
+    def inspect_mcp(self) -> tuple[McpServerInfo, ...]:
+        """Connected MCP servers + their tools, derived from descriptor source."""
+        return mcp_view(self._assembled.gateway.descriptors())
+
+    def inspect_memory(self, query: str | None = None) -> tuple[MemoryEntryInfo, ...]:
+        """Memory entries (source + snippet); ``query`` filters when given."""
+        store = self._assembled.memory_store
+        if store is None:
+            return ()
+        return memory_view(store.list_entries(), query)
 
     def _enter_run(self) -> None:
         if self._active:

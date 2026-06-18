@@ -53,6 +53,10 @@ class AssembledRuntime:
     artifact_store: ArtifactStore | None
     checkpoint_store: CheckpointStore | None
     skill_problems: tuple[str, ...]
+    # Read-only refs retained for inspection (027); already built below; additive.
+    gateway: ToolGateway
+    skills: Mapping[str, LoadedSkill]
+    memory_store: MemoryStore | None
 
 
 def assemble(config: RuntimeConfig) -> AssembledRuntime:
@@ -144,6 +148,9 @@ def assemble(config: RuntimeConfig) -> AssembledRuntime:
         artifact_store=artifact_store,
         checkpoint_store=checkpoint_store,
         skill_problems=skill_problems,
+        gateway=gateway,
+        skills=skills_map or {},
+        memory_store=memory_store,
     )
 
 

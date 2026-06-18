@@ -12,6 +12,12 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, Field
 
 from loopplane.host import RunOutcome
+from loopplane.host.inspect import (
+    McpServerInfo,
+    MemoryEntryInfo,
+    SkillInfo,
+    ToolInfo,
+)
 
 
 class _SummaryLike(Protocol):
@@ -102,3 +108,70 @@ class ErrorResponse(BaseModel):
     stack trace, internal name, path, secret, or the supplied credential."""
 
     detail: str
+
+
+# --- 027: read-only inspection views (metadata-only) -------------------------
+
+
+class SkillView(BaseModel):
+    name: str
+    description: str
+    autonomous: bool
+    approval_required: bool
+    source: str
+
+    @classmethod
+    def from_info(cls, info: SkillInfo) -> SkillView:
+        return cls(
+            name=info.name,
+            description=info.description,
+            autonomous=info.autonomous,
+            approval_required=info.approval_required,
+            source=info.source,
+        )
+
+
+class SkillsResponse(BaseModel):
+    skills: list[SkillView]
+    problems: list[str]
+
+
+class ToolView(BaseModel):
+    name: str
+    description: str
+    read_only: bool
+    source: str
+
+    @classmethod
+    def from_info(cls, info: ToolInfo) -> ToolView:
+        return cls(
+            name=info.name,
+            description=info.description,
+            read_only=info.read_only,
+            source=info.source,
+        )
+
+
+class McpServerView(BaseModel):
+    name: str
+    tools: list[str]
+
+    @classmethod
+    def from_info(cls, info: McpServerInfo) -> McpServerView:
+        return cls(name=info.name, tools=list(info.tools))
+
+
+class MemoryEntryView(BaseModel):
+    type: str
+    name: str
+    description: str
+    snippet: str
+
+    @classmethod
+    def from_info(cls, info: MemoryEntryInfo) -> MemoryEntryView:
+        return cls(
+            type=info.type,
+            name=info.name,
+            description=info.description,
+            snippet=info.snippet,
+        )

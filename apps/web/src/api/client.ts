@@ -2,7 +2,14 @@
 // fetch is injectable so tests run the full client against a stubbed network.
 
 import { streamEvents } from "./events";
-import type { RawEvent, SessionSummary } from "./types";
+import type {
+  McpServerView,
+  MemoryEntryView,
+  RawEvent,
+  SessionSummary,
+  SkillsResponse,
+  ToolView,
+} from "./types";
 
 export class ApiError extends Error {
   constructor(public readonly status: number) {
@@ -98,6 +105,24 @@ export class ApiClient {
 
   async history(id: string): Promise<unknown[]> {
     return this.json(`/v1/sessions/${id}/history`);
+  }
+
+  // 027 — read-only inspection (metadata-only).
+  async inspectSkills(): Promise<SkillsResponse> {
+    return this.json("/v1/inspect/skills");
+  }
+
+  async inspectTools(): Promise<ToolView[]> {
+    return this.json("/v1/inspect/tools");
+  }
+
+  async inspectMcp(): Promise<McpServerView[]> {
+    return this.json("/v1/inspect/mcp");
+  }
+
+  async inspectMemory(query?: string): Promise<MemoryEntryView[]> {
+    const suffix = query ? `?q=${encodeURIComponent(query)}` : "";
+    return this.json(`/v1/inspect/memory${suffix}`);
   }
 
   private async json<T>(path: string, init?: RequestInit): Promise<T> {

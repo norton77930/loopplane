@@ -7,6 +7,7 @@ import { ApprovalDialog } from "./components/ApprovalDialog";
 import { ChatHeader } from "./components/ChatHeader";
 import { Composer } from "./components/Composer";
 import { ErrorBanner } from "./components/ErrorBanner";
+import { InspectionPanel } from "./components/InspectionPanel";
 import { MessageList } from "./components/MessageList";
 import { QuestionDialog } from "./components/QuestionDialog";
 import { Sidebar } from "./components/Sidebar";
@@ -22,6 +23,7 @@ export function App({
   const [state, setState] = useState(initialState);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [showInspect, setShowInspect] = useState(false);
   const sessionId = useRef<string | null>(null);
   const reading = useRef(false);
 
@@ -141,8 +143,17 @@ export function App({
           onNew={newChat}
         />
       }
-      header={<ChatHeader status={state.status} usage={state.usage} onStop={() => void stop()} />}
+      header={
+        <ChatHeader
+          status={state.status}
+          usage={state.usage}
+          onStop={() => void stop()}
+          inspectOpen={showInspect}
+          onToggleInspect={() => setShowInspect((value) => !value)}
+        />
+      }
       banner={state.status === "error" ? <ErrorBanner /> : undefined}
+      panel={showInspect ? <InspectionPanel client={client} /> : undefined}
       composer={
         <Composer disabled={state.status === "running"} onSend={(text) => void send(text)} />
       }

@@ -68,3 +68,36 @@ export interface SessionSummary {
   session_id: string;
   last_active_at: string;
 }
+
+// 027 — read-only inspection views (metadata-only).
+export interface SkillView {
+  name: string;
+  description: string;
+  autonomous: boolean;
+  approval_required: boolean;
+  source: string;
+}
+
+export interface SkillsResponse {
+  skills: SkillView[];
+  problems: string[];
+}
+
+export interface ToolView {
+  name: string;
+  description: string;
+  read_only: boolean;
+  source: string;
+}
+
+export interface McpServerView {
+  name: string;
+  tools: string[];
+}
+
+export interface MemoryEntryView {
+  type: string;
+  name: string;
+  description: string;
+  snippet: string;
+}
