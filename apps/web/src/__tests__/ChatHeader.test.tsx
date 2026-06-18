@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { ChatHeader } from "../components/ChatHeader";
+import { ZERO_USAGE } from "../state/chat";
 
 describe("ChatHeader", () => {
   beforeEach(() => {
@@ -13,15 +14,17 @@ describe("ChatHeader", () => {
   });
 
   it("shows the run status label", () => {
-    render(<ChatHeader status="running" onStop={() => undefined} />);
+    render(<ChatHeader status="running" usage={{ total: ZERO_USAGE }} onStop={() => undefined} />);
     expect(screen.getByText("Running")).toBeInTheDocument();
   });
 
   it("offers Stop only while running and fires it", () => {
     const onStop = vi.fn();
-    const { rerender } = render(<ChatHeader status="idle" onStop={onStop} />);
+    const { rerender } = render(
+      <ChatHeader status="idle" usage={{ total: ZERO_USAGE }} onStop={onStop} />,
+    );
     expect(screen.queryByText("Stop")).not.toBeInTheDocument();
-    rerender(<ChatHeader status="running" onStop={onStop} />);
+    rerender(<ChatHeader status="running" usage={{ total: ZERO_USAGE }} onStop={onStop} />);
     fireEvent.click(screen.getByText("Stop"));
     expect(onStop).toHaveBeenCalled();
   });

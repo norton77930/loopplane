@@ -181,3 +181,18 @@ input:focus { outline: none; border-color: var(--accent); }
   .sidebar { flex-direction: row; flex-wrap: wrap; align-items: center; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--border); }
   .session-list { flex-direction: row; }
 }
+
+/* ---- Reasoning block (026) ---- */
+.reasoning-block { max-width: 760px; width: 100%; margin: 0 auto; border-left: 2px solid var(--border-strong); border-radius: var(--radius-sm); }
+.reasoning-toggle { border: none; background: none; color: var(--text-muted); font-size: 13px; padding: 6px 12px; width: 100%; text-align: left; }
+.reasoning-block .caret { display: inline-block; transition: transform 0.12s ease; }
+.reasoning-block[data-open="true"] .caret { transform: rotate(90deg); }
+.reasoning-text { padding: 0 14px 10px 26px; color: var(--text-muted); font-size: 13px; white-space: pre-wrap; }
+
+/* ---- Usage indicator (026) ---- */
+.usage { display: inline-flex; gap: 10px; font-size: 12px; color: var(--text-muted); }
+.usage-turn { opacity: 0.8; }
+
+/* ---- Question options (026) ---- */
+.dialog-options { display: flex; flex-direction: column; gap: 6px; }
+.option-choice { display: flex; align-items: center; gap: 8px; cursor: pointer; }

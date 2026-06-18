@@ -1,8 +1,9 @@
-import type { ChatState } from "../state/chat";
+import type { ChatState, UsageState } from "../state/chat";
 import { ThemeToggle } from "./ThemeToggle";
+import { UsageIndicator } from "./UsageIndicator";
 
-// The sticky chat header (FR-009): a connection/run status indicator, a Stop control while a
-// run is in flight, and the theme toggle.
+// The sticky chat header (FR-009; 026): a connection/run status indicator, the token-usage
+// indicator (026), a Stop control while a run is in flight, and the theme toggle.
 const LABEL: Record<ChatState["status"], string> = {
   idle: "Idle",
   running: "Running",
@@ -12,10 +13,11 @@ const LABEL: Record<ChatState["status"], string> = {
 
 interface Props {
   status: ChatState["status"];
+  usage: UsageState;
   onStop: () => void;
 }
 
-export function ChatHeader({ status, onStop }: Props) {
+export function ChatHeader({ status, usage, onStop }: Props) {
   return (
     <header className="chat-header">
       <span className="brand">LoopPlane</span>
@@ -23,6 +25,7 @@ export function ChatHeader({ status, onStop }: Props) {
         <span className="dot" aria-hidden="true" />
         {LABEL[status]}
       </span>
+      <UsageIndicator usage={usage} />
       <span className="spacer" />
       {status === "running" && (
         <button type="button" className="danger" onClick={onStop}>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { ConversationEntry } from "../state/chat";
 import { Markdown } from "./Markdown";
+import { ReasoningBlock } from "./ReasoningBlock";
 import { ToolCard } from "./ToolCard";
 
 const BOTTOM_THRESHOLD = 40;
@@ -56,6 +57,8 @@ function Entry({ entry }: { entry: ConversationEntry }) {
           <div className="bubble">{entry.text}</div>
         </div>
       );
+    case "reasoning":
+      return <ReasoningBlock text={entry.text} />;
     case "assistant":
       return (
         <div className="message message-assistant">

@@ -76,9 +76,9 @@ export function App({
     setState((current) => ({ ...current, pendingApproval: undefined }));
   }
 
-  async function answer(requestId: string, text: string) {
+  async function answer(requestId: string, answers: string[]) {
     if (sessionId.current) {
-      await client.answerQuestion(sessionId.current, requestId, [text]);
+      await client.answerQuestion(sessionId.current, requestId, answers);
     }
     setState((current) => ({ ...current, pendingQuestion: undefined }));
   }
@@ -141,7 +141,7 @@ export function App({
           onNew={newChat}
         />
       }
-      header={<ChatHeader status={state.status} onStop={() => void stop()} />}
+      header={<ChatHeader status={state.status} usage={state.usage} onStop={() => void stop()} />}
       banner={state.status === "error" ? <ErrorBanner /> : undefined}
       composer={
         <Composer disabled={state.status === "running"} onSend={(text) => void send(text)} />
@@ -157,7 +157,8 @@ export function App({
       {pendingQuestion && (
         <QuestionDialog
           prompt={pendingQuestion.prompt}
-          onAnswer={(text) => void answer(pendingQuestion.requestId, text)}
+          options={pendingQuestion.options}
+          onAnswer={(answers) => void answer(pendingQuestion.requestId, answers)}
         />
       )}
     </AppShell>

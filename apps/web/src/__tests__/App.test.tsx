@@ -38,9 +38,18 @@ describe("App", () => {
     }) as unknown as typeof window.matchMedia;
   });
 
-  it("streams a run and renders the conversation as markdown", async () => {
+  it("streams a run and renders markdown, reasoning, and usage", async () => {
     const client = streamingClient([
+      { type: "assistant-reasoning-increment", payload: { text: "let me think", turn_index: 0 } },
       { type: "assistant-output-increment", payload: { text: "hi there", turn_index: 0 } },
+      {
+        type: "turn-completed",
+        payload: {
+          turn_index: 0,
+          stop_reason: "end-turn",
+          usage: { input_tokens: 12, output_tokens: 7, cached_tokens: 0, reasoning_tokens: 0 },
+        },
+      },
       { type: "run-terminated", payload: { reason: "natural-completion", turns_taken: 1 } },
     ]);
     render(<App client={client} />);
@@ -48,7 +57,8 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(screen.getByText("hi there")).toBeInTheDocument());
     expect(screen.getByText("hello")).toBeInTheDocument();
-    expect(screen.getByText(/natural-completion/)).toBeInTheDocument();
+    expect(screen.getByText("let me think")).toBeInTheDocument(); // reasoning block
+    expect(screen.getByTestId("usage")).toHaveTextContent("12 in"); // usage indicator
   });
 
   it("shows a non-blocking error banner when the stream fails", async () => {
@@ -78,6 +88,21 @@ describe("App", () => {
     await waitFor(() =>
       expect(answerApproval).toHaveBeenCalledWith("s1", "r1", { allow: true, scope: "session" }),
     );
+  });
+
+  it("renders question options and submits the selection", async () => {
+    const answerQuestion = vi.fn().mockResolvedValue(undefined);
+    const client = streamingClient(
+      [{ type: "question-asked", payload: { request_id: "q1", questions: [{ text: "Pick", options: ["A", "B"] }] } }],
+      { answerQuestion },
+    );
+    render(<App client={client} />);
+    fireEvent.change(screen.getByLabelText("prompt"), { target: { value: "go" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    const dialog = await screen.findByTestId("question");
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "B" }));
+    fireEvent.click(within(dialog).getByText("Send"));
+    await waitFor(() => expect(answerQuestion).toHaveBeenCalledWith("s1", "q1", ["B"]));
   });
 
   it("cancels an in-flight run via the Stop control", async () => {

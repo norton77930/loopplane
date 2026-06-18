@@ -1,5 +1,6 @@
-// Metadata-only shapes mirroring the web API (unit 018; data-model.md).
-// Only the fields the UI renders are typed.
+// Metadata-only shapes mirroring the web API (unit 018; extended in 026). Field shapes are
+// grounded in the runtime event contract (src/loopplane/events/envelope.py), serialized verbatim
+// by serialize_event. Only the fields the UI renders are typed.
 
 export interface RawEvent {
   type: string;
@@ -7,6 +8,12 @@ export interface RawEvent {
 }
 
 export interface OutputPayload {
+  text: string;
+  turn_index: number;
+}
+
+// 026 — reasoning/thinking increment (assistant-reasoning-increment); same shape as output.
+export interface ReasoningPayload {
   text: string;
   turn_index: number;
 }
@@ -27,9 +34,29 @@ export interface ApprovalPayload {
   input_summary: string;
 }
 
+// 026 — the real wire question shape is { text, options } (unit-018 mis-modeled it as { prompt }).
+export interface Question {
+  text: string;
+  options: string[];
+}
+
 export interface QuestionPayload {
   request_id: string;
-  questions: { prompt: string }[];
+  questions: Question[];
+}
+
+// 026 — per-turn token usage, reported on turn-completed.
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cached_tokens: number;
+  reasoning_tokens: number;
+}
+
+export interface TurnCompletedPayload {
+  turn_index: number;
+  stop_reason: string;
+  usage: TokenUsage;
 }
 
 export interface TerminatedPayload {
