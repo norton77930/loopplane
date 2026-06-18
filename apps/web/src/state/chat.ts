@@ -1,4 +1,7 @@
-// A pure reducer folding the normalized event stream into the view model (R3).
+// A pure reducer folding the normalized event stream into the ordered view model (R3).
+// One ordered `entries` list (stream order) replaces the previous parallel turns/timeline,
+// so tool cards interleave with assistant messages (FR-002/003). Consumer-side shaping over
+// the same normalized events (Constitution VI) — no event schema change.
 
 import type {
   ApprovalPayload,
@@ -10,35 +13,31 @@ import type {
   ToolStartedPayload,
 } from "../api/types";
 
-export interface Turn {
-  role: "user" | "assistant";
-  text: string;
-}
-
-export type TimelineEntry =
+export type ConversationEntry =
+  | { kind: "user"; text: string }
+  | { kind: "assistant"; text: string }
   | { kind: "tool"; callId: string; name: string; outcome?: "success" | "failure" }
   | { kind: "terminated"; reason: string; turns: number };
 
 export interface ChatState {
-  turns: Turn[];
-  timeline: TimelineEntry[];
+  entries: ConversationEntry[];
   pendingApproval?: { requestId: string; toolName: string };
   pendingQuestion?: { requestId: string; prompt: string };
   status: "idle" | "running" | "terminated" | "error";
 }
 
-export const initialState: ChatState = { turns: [], timeline: [], status: "idle" };
+export const initialState: ChatState = { entries: [], status: "idle" };
 
 /** Record a submitted user prompt and mark the run active. */
 export function userPrompt(state: ChatState, text: string): ChatState {
   return {
     ...state,
-    turns: [...state.turns, { role: "user", text }],
+    entries: [...state.entries, { kind: "user", text }],
     status: "running",
   };
 }
 
-/** Mark the connection/stream as failed (FR-008). */
+/** Mark the connection/stream as failed (FR-010); the conversation is preserved. */
 export function errored(state: ChatState): ChatState {
   return { ...state, status: "error" };
 }
@@ -51,8 +50,8 @@ export function reduce(state: ChatState, event: RawEvent): ChatState {
       const p = event.payload as ToolStartedPayload;
       return {
         ...state,
-        timeline: [
-          ...state.timeline,
+        entries: [
+          ...state.entries,
           { kind: "tool", callId: p.call_id, name: p.tool_name },
         ],
       };
@@ -61,7 +60,7 @@ export function reduce(state: ChatState, event: RawEvent): ChatState {
       const p = event.payload as ToolCompletedPayload;
       return {
         ...state,
-        timeline: state.timeline.map((entry) =>
+        entries: state.entries.map((entry) =>
           entry.kind === "tool" &&
           entry.callId === p.call_id &&
           entry.outcome === undefined
@@ -92,28 +91,31 @@ export function reduce(state: ChatState, event: RawEvent): ChatState {
       return {
         ...state,
         status: "terminated",
-        timeline: [
-          ...state.timeline,
+        // A run that ends while a dialog is pending clears it (spec edge case).
+        pendingApproval: undefined,
+        pendingQuestion: undefined,
+        entries: [
+          ...state.entries,
           { kind: "terminated", reason: p.reason, turns: p.turns_taken },
         ],
       };
     }
     default:
-      // Unknown event types pass through unchanged (forward-compatible).
+      // Unknown event types pass through unchanged (forward-compatible — FR-016).
       return state;
   }
 }
 
 function appendAssistant(state: ChatState, text: string): ChatState {
-  const last = state.turns[state.turns.length - 1];
-  if (last && last.role === "assistant") {
+  const last = state.entries[state.entries.length - 1];
+  if (last && last.kind === "assistant") {
     return {
       ...state,
-      turns: [
-        ...state.turns.slice(0, -1),
-        { role: "assistant", text: last.text + text },
+      entries: [
+        ...state.entries.slice(0, -1),
+        { kind: "assistant", text: last.text + text },
       ],
     };
   }
-  return { ...state, turns: [...state.turns, { role: "assistant", text }] };
+  return { ...state, entries: [...state.entries, { kind: "assistant", text }] };
 }

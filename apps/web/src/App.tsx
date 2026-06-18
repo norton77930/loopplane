@@ -1,11 +1,15 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { ApiClient, ApiError } from "./api/client";
-import type { SessionSummary } from "./api/types";
-import { Conversation } from "./components/Conversation";
-import { Prompts } from "./components/Prompts";
-import { SessionList } from "./components/SessionList";
-import { Timeline } from "./components/Timeline";
+import { ApiClient, ApiError, type ApprovalDecision } from "./api/client";
+import type { RawEvent, SessionSummary } from "./api/types";
+import { AppShell } from "./components/AppShell";
+import { ApprovalDialog } from "./components/ApprovalDialog";
+import { ChatHeader } from "./components/ChatHeader";
+import { Composer } from "./components/Composer";
+import { ErrorBanner } from "./components/ErrorBanner";
+import { MessageList } from "./components/MessageList";
+import { QuestionDialog } from "./components/QuestionDialog";
+import { Sidebar } from "./components/Sidebar";
 import { errored, initialState, reduce, userPrompt } from "./state/chat";
 
 export function App({
@@ -17,13 +21,13 @@ export function App({
 }) {
   const [state, setState] = useState(initialState);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [input, setInput] = useState("");
+  const [activeId, setActiveId] = useState<string | null>(null);
   const sessionId = useRef<string | null>(null);
   const reading = useRef(false);
 
   function fail(error: unknown) {
-    // An authorization failure logs the user out (back to login); any other
-    // error shows the existing disconnected state (unit-018 behavior).
+    // An authorization failure logs the user out (back to login); any other error shows the
+    // non-blocking error banner (FR-010) while the conversation is preserved.
     if (error instanceof ApiError && error.status === 401) {
       onUnauthorized?.();
     } else {
@@ -40,6 +44,8 @@ export function App({
       }
     } catch (error) {
       fail(error);
+    } finally {
+      reading.current = false;
     }
   }
 
@@ -47,6 +53,7 @@ export function App({
     if (sessionId.current) return sessionId.current;
     const { session_id } = await client.openSession();
     sessionId.current = session_id;
+    setActiveId(session_id);
     void readEvents(session_id);
     return session_id;
   }
@@ -56,14 +63,15 @@ export function App({
     setState((current) => userPrompt(current, prompt));
     try {
       await client.submit(await ensureSession(), prompt);
+      void refreshSessions();
     } catch (error) {
       fail(error);
     }
   }
 
-  async function approve(requestId: string, allow: boolean) {
+  async function approve(requestId: string, decision: ApprovalDecision) {
     if (sessionId.current) {
-      await client.answerApproval(sessionId.current, requestId, { allow });
+      await client.answerApproval(sessionId.current, requestId, decision);
     }
     setState((current) => ({ ...current, pendingApproval: undefined }));
   }
@@ -75,6 +83,15 @@ export function App({
     setState((current) => ({ ...current, pendingQuestion: undefined }));
   }
 
+  async function stop() {
+    if (!sessionId.current) return;
+    try {
+      await client.cancel(sessionId.current);
+    } catch (error) {
+      fail(error);
+    }
+  }
+
   async function refreshSessions() {
     try {
       setSessions(await client.listSessions());
@@ -83,40 +100,66 @@ export function App({
     }
   }
 
+  function newChat() {
+    sessionId.current = null;
+    reading.current = false;
+    setActiveId(null);
+    setState(initialState);
+  }
+
+  async function selectSession(id: string) {
+    if (id === activeId) return;
+    sessionId.current = id;
+    reading.current = false;
+    setActiveId(id);
+    // Replay history through the same reducer, then stream live (R6).
+    let next = initialState;
+    try {
+      const events = (await client.history(id)) as RawEvent[];
+      for (const event of events) next = reduce(next, event);
+    } catch {
+      next = initialState;
+    }
+    setState(next);
+    void readEvents(id);
+  }
+
+  useEffect(() => {
+    void refreshSessions();
+  }, []);
+
+  const pendingApproval = state.pendingApproval;
+  const pendingQuestion = state.pendingQuestion;
+
   return (
-    <main className="app">
-      <h1>LoopPlane</h1>
-      {state.status === "error" && (
-        <div className="error" role="alert">
-          Disconnected — please retry.
-        </div>
-      )}
-      <Conversation turns={state.turns} />
-      <Timeline entries={state.timeline} />
-      <Prompts
-        state={state}
-        onApproval={(id, allow) => void approve(id, allow)}
-        onQuestion={(id, text) => void answer(id, text)}
-      />
-      <form
-        className="composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void send(input);
-          setInput("");
-        }}
-      >
-        <input
-          aria-label="prompt"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
+    <AppShell
+      sidebar={
+        <Sidebar
+          sessions={sessions}
+          activeId={activeId}
+          onOpen={(id) => void selectSession(id)}
+          onNew={newChat}
         />
-        <button type="submit">Send</button>
-      </form>
-      <button type="button" onClick={() => void refreshSessions()}>
-        Sessions
-      </button>
-      <SessionList sessions={sessions} onOpen={() => undefined} />
-    </main>
+      }
+      header={<ChatHeader status={state.status} onStop={() => void stop()} />}
+      banner={state.status === "error" ? <ErrorBanner /> : undefined}
+      composer={
+        <Composer disabled={state.status === "running"} onSend={(text) => void send(text)} />
+      }
+    >
+      <MessageList entries={state.entries} />
+      {pendingApproval && (
+        <ApprovalDialog
+          toolName={pendingApproval.toolName}
+          onDecide={(decision) => void approve(pendingApproval.requestId, decision)}
+        />
+      )}
+      {pendingQuestion && (
+        <QuestionDialog
+          prompt={pendingQuestion.prompt}
+          onAnswer={(text) => void answer(pendingQuestion.requestId, text)}
+        />
+      )}
+    </AppShell>
   );
 }

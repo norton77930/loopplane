@@ -1,27 +1,56 @@
 import type { RawEvent } from "../api/types";
-import { initialState, reduce, userPrompt } from "../state/chat";
+import { errored, initialState, reduce, userPrompt } from "../state/chat";
 
 const ev = (type: string, payload: unknown): RawEvent => ({ type, payload });
 
-describe("reduce", () => {
-  it("appends assistant output incrementally", () => {
-    let state = userPrompt(initialState, "hello");
-    state = reduce(state, ev("assistant-output-increment", { text: "Hel", turn_index: 0 }));
-    state = reduce(state, ev("assistant-output-increment", { text: "lo", turn_index: 0 }));
-    expect(state.turns).toEqual([
-      { role: "user", text: "hello" },
-      { role: "assistant", text: "Hello" },
-    ]);
+describe("reduce (ordered entries)", () => {
+  it("records a user prompt and marks the run running", () => {
+    const state = userPrompt(initialState, "hello");
+    expect(state.entries).toEqual([{ kind: "user", text: "hello" }]);
     expect(state.status).toBe("running");
   });
 
-  it("records tool start then outcome in the timeline", () => {
-    let state = reduce(
-      initialState,
-      ev("tool-call-started", { call_id: "c1", tool_name: "echo" }),
-    );
+  it("merges consecutive assistant increments into one entry", () => {
+    let state = userPrompt(initialState, "hi");
+    state = reduce(state, ev("assistant-output-increment", { text: "Hel", turn_index: 0 }));
+    state = reduce(state, ev("assistant-output-increment", { text: "lo", turn_index: 0 }));
+    expect(state.entries).toEqual([
+      { kind: "user", text: "hi" },
+      { kind: "assistant", text: "Hello" },
+    ]);
+  });
+
+  it("interleaves tool cards between assistant messages in stream order", () => {
+    let state = userPrompt(initialState, "do it");
+    state = reduce(state, ev("assistant-output-increment", { text: "working", turn_index: 0 }));
+    state = reduce(state, ev("tool-call-started", { call_id: "c1", tool_name: "echo" }));
     state = reduce(state, ev("tool-call-completed", { call_id: "c1", outcome: "success" }));
-    expect(state.timeline).toEqual([
+    state = reduce(state, ev("assistant-output-increment", { text: "done", turn_index: 1 }));
+    expect(state.entries).toEqual([
+      { kind: "user", text: "do it" },
+      { kind: "assistant", text: "working" },
+      { kind: "tool", callId: "c1", name: "echo", outcome: "success" },
+      { kind: "assistant", text: "done" },
+    ]);
+  });
+
+  it("marks a tool entry running until its matching completion", () => {
+    let state = reduce(initialState, ev("tool-call-started", { call_id: "c1", tool_name: "echo" }));
+    expect(state.entries).toEqual([{ kind: "tool", callId: "c1", name: "echo" }]);
+    state = reduce(state, ev("tool-call-completed", { call_id: "c1", outcome: "failure" }));
+    expect(state.entries).toEqual([
+      { kind: "tool", callId: "c1", name: "echo", outcome: "failure" },
+    ]);
+  });
+
+  it("ignores an orphan or duplicate tool-call-completed (no-op)", () => {
+    const orphan = reduce(initialState, ev("tool-call-completed", { call_id: "x", outcome: "success" }));
+    expect(orphan.entries).toEqual([]);
+
+    let state = reduce(initialState, ev("tool-call-started", { call_id: "c1", tool_name: "echo" }));
+    state = reduce(state, ev("tool-call-completed", { call_id: "c1", outcome: "success" }));
+    const after = reduce(state, ev("tool-call-completed", { call_id: "c1", outcome: "failure" }));
+    expect(after.entries).toEqual([
       { kind: "tool", callId: "c1", name: "echo", outcome: "success" },
     ]);
   });
@@ -36,20 +65,31 @@ describe("reduce", () => {
     expect(state.pendingQuestion).toEqual({ requestId: "r2", prompt: "ok?" });
   });
 
-  it("marks termination on the timeline and status", () => {
-    const state = reduce(
+  it("appends a terminated marker, sets status, and clears pending dialogs", () => {
+    let state = reduce(
       initialState,
-      ev("run-terminated", { reason: "natural-completion", turns_taken: 2 }),
+      ev("approval-requested", { request_id: "r1", tool_name: "t", input_summary: "x" }),
     );
+    state = reduce(state, ev("question-asked", { request_id: "r2", questions: [{ prompt: "ok?" }] }));
+    state = reduce(state, ev("run-terminated", { reason: "natural-completion", turns_taken: 2 }));
     expect(state.status).toBe("terminated");
-    expect(state.timeline).toContainEqual({
+    expect(state.entries).toContainEqual({
       kind: "terminated",
       reason: "natural-completion",
       turns: 2,
     });
+    expect(state.pendingApproval).toBeUndefined();
+    expect(state.pendingQuestion).toBeUndefined();
   });
 
   it("ignores unknown event types", () => {
     expect(reduce(initialState, ev("mystery", {}))).toBe(initialState);
+  });
+
+  it("errored preserves entries and flips status", () => {
+    const base = userPrompt(initialState, "hi");
+    const state = errored(base);
+    expect(state.status).toBe("error");
+    expect(state.entries).toEqual(base.entries);
   });
 });
