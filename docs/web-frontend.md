@@ -125,3 +125,16 @@ and **file attachments** (`Attachments`, upload via `POST /v1/uploads` with a pe
 references are appended to the prompt so the agent reads them on demand via the `read_upload` Tool
 Gateway tool). Files are transient input by id — never embedded into the content model. No backend
 ADR; the runtime keeps one model per run and the content model is unchanged.
+
+## Parity extras (unit 029)
+
+Unit 029 is the final frontend-only polish (no backend, no ADR): **i18n** (`src/i18n/` — a `t()`
+lookup over en + zh-TW string maps, an `I18nProvider` persisting the choice in `localStorage`, a
+`LanguageSwitcher` in the header, with an English fallback; only UI chrome is localized);
+**code syntax highlighting** (`rehype-highlight` added to the unit-025 `Markdown`, with theme-bound
+`hljs` token CSS and a plain fallback for unknown languages); a **command palette** in the composer
+(`CommandPalette` — typing `/` lists frontend-doable commands like toggling the inspection panel,
+and `@` autocompletes skill/tool mentions from the unit-027 inspection data; backend-semantic
+commands are out of scope); and a **client-side cost estimate** (`pricing.ts` — the unit-026 usage
+× a bundled price table for the unit-028 selected model, shown by `UsageIndicator` as a labeled
+estimate, with token counts only when no price entry exists). Each degrades gracefully.

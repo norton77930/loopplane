@@ -102,5 +102,14 @@ additive layers (units 001-013), brought to release quality by unit 014.
   on demand — transient input by id, never embedded into the content model. The composer gains a
   model selector + file attachments. The runtime, content model, Tool Gateway, and Event Bus are
   unchanged.
+- **029** Web agent parity extras (`apps/web`) — frontend-only polish, no backend, no ADR:
+  **i18n** (an in-house `t()` over en + zh-TW string maps, an `I18nProvider` persisting the choice,
+  a `LanguageSwitcher`, with an English fallback; UI chrome localized, assistant content
+  untranslated); **code syntax highlighting** (`rehype-highlight` on the unit-025 markdown, with
+  theme-bound tokens + a plain fallback); a composer **command palette** (a `/` toggle-inspection
+  command + `@skill`/`@tool` autocomplete from the unit-027 inspection data; backend-semantic
+  commands out of scope); and a **client-side cost estimate** (the unit-026 usage × a bundled price
+  table for the unit-028 model, clearly labeled an estimate, graceful when no price). Each degrades
+  gracefully; the backend is untouched. With 029, the web-UI extension (025–029) is complete.
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

@@ -108,7 +108,7 @@ git history) — not invented.
 | **026-web-agent-signals** | `specs/026-web-agent-signals` | **Verified** | Web Agent Signals (maintainer-authorized extension): a **frontend-only** unit surfacing three agent signals the backend **already emits** but the unit-018/025 UI ignores — a streamed, de-emphasized, collapsible **reasoning/thinking block**; **selectable option choices** in the question dialog (free-text fallback); and a **token-usage** indicator (per-turn + session total). Consumes existing events/fields; **no backend change**, no ADR. Builds on 025. Cost/pricing, non-emitting-provider reasoning, model switching, file upload, and skills/MCP/memory panels are **out of scope** → later units (panels = 027). | 011, 018, 025 | None — implemented & verified on `main` (`apps/web`; reasoning block + question options + usage indicator; **60 Vitest**, tsc-strict + vite build green; Python suite unchanged). |
 | **027-web-agent-inspection** | `specs/027-web-agent-inspection` | **Verified** | Web Agent Inspection Panels (maintainer-authorized extension): **read-only** inspection of the agent's capabilities/context in the web UI — loaded **skills** (+ load problems), registered **tools**, connected **MCP servers** (+ their tools), and **memory/knowledge** entries. Adds **additive, metadata-only** web/API read endpoints + host query methods composing existing internal layers, rendered as tabbed panels in the 025 shell. **No ADR** (touches neither Tool Gateway execution (V) nor Event Bus (VI); strictly additive — runtime/gateway/bus/existing endpoints unchanged). Read-only (no execute/edit). Model switching + file upload (need an ADR) → unit 028. | 011, 018, 025 | None — implemented & verified on `main` (additive host query methods + 4 `/v1/inspect/*` endpoints + tabbed panel; **747 pytest** + ruff + mypy, **64 Vitest** + build green; no tool exec, no mutation). |
 | **028-web-agent-model-files** | `specs/028-web-agent-model-files` | **Verified** | Web Agent Model Selection & File Attachments (maintainer-authorized extension): per-session **model selection** (web/API-layer registry of pre-configured single-model hosts; routes the session's next turn, resuming from the shared checkpoint — runtime keeps **one model per run**) + **file attachments** (upload endpoint, per-principal; agent reads on demand via a **read-upload tool in the Tool Gateway** — files = transient input by id, **not** embedded/artifact/memory). **Additive — NO ADR** (a reference review confirmed neither blurs a runtime boundary; like 027). Tool Gateway (V) / Event Bus (VI) / content model preserved. Multimodal embedded content + cost/pricing out of scope (the former would need an ADR → later unit). | 011, 018, 020, 021, 022, 025 | None — implemented & verified on `main` (model catalog + run routing + upload endpoint + `read_upload` gateway tool + composer selector/attachments; **757 pytest** + ruff + mypy, **68 Vitest** + build green; additive, no ADR). |
-| **029-web-agent-extras** | `specs/029-web-agent-extras` | **Spec complete** | Web Agent Parity Extras (maintainer-authorized extension): **frontend-only** parity polish, **no backend, no ADR** — **i18n** (en + zh-TW + switcher), **code syntax highlighting** (in 025 markdown), a **command palette** (frontend-doable slash + `@file`/`@skill` from the 027 inspection data; backend-semantic commands out of scope), and a **client-side cost estimate** (026 token usage × a bundled price table; server-side pricing deferred). Builds on 025–027. | 011, 018, 025, 026, 027 | Run **plan** (`/speckit-plan`) after 025–028. Spec + checklist drafted. |
+| **029-web-agent-extras** | `specs/029-web-agent-extras` | **Verified** | Web Agent Parity Extras (maintainer-authorized extension): **frontend-only** parity polish, **no backend, no ADR** — **i18n** (en + zh-TW + switcher), **code syntax highlighting** (in 025 markdown), a **command palette** (frontend-doable slash + `@file`/`@skill` from the 027 inspection data; backend-semantic commands out of scope), and a **client-side cost estimate** (026 token usage × a bundled price table; server-side pricing deferred). Builds on 025–027. | 011, 018, 025, 026, 027 | None — the final unit; implemented & verified on `main` (i18n + syntax highlighting + command palette + client-side cost; **79 Vitest** + tsc + build green; Python unchanged). The web-UI extension (025–029) is COMPLETE. |
 
 **Status evidence (for audit):**
 
@@ -445,21 +445,29 @@ git history) — not invented.
   per-principal, size-limit, auth) + ruff + mypy(strict) green; **68 Vitest** + tsc-strict + build
   green. Multimodal embedded content (a Principle IV change) is deferred. Rollback = drop the
   catalog/routing + upload endpoint/store/tool + composer UI. → **Verified**.
-- **029 — Web Agent Parity Extras (maintainer-authorized extension, 2026-06-19), SPEC stage.**
-  **Frontend-only**, no backend, no ADR: i18n (en + zh-TW + switcher), code syntax highlighting,
-  a command palette (frontend slash + `@file`/`@skill` from 027 data), and a client-side cost
-  estimate (026 usage × a bundled price table). Builds on 025–027. `specify` complete:
-  `specs/029-web-agent-extras/spec.md` (4 user stories P1–P4; FR-001..FR-010; SC-001..SC-006) +
-  checklist. Next step: `plan`.
+- **029 — Web Agent Parity Extras (maintainer-authorized extension, 2026-06-19), COMPLETE.**
+  Frontend-only, no backend, no ADR. **i18n**: an in-house `t()` over `en` + `zh-TW` string maps
+  (`src/i18n/`), an `I18nProvider` persisting `localStorage["loopplane-locale"]`, a
+  `LanguageSwitcher`, with an English fallback (key chrome localized; assistant content untranslated).
+  **Highlighting**: `rehype-highlight` on the unit-025 `Markdown` with theme-bound `hljs` token CSS
+  and a plain fallback. **Command palette**: a composer `CommandPalette` — `/` lists frontend-doable
+  commands (toggle inspection) and `@` autocompletes skill/tool mentions from the unit-027 inspection
+  data; backend-semantic commands are out of scope (`@file` has no frontend inventory). **Cost
+  estimate**: `pricing.ts` (bundled table) × the unit-026 usage for the unit-028 selected model,
+  shown by `UsageIndicator` as a labeled estimate (token counts only when no price). Each degrades
+  gracefully. **79 Vitest** (i18n / switcher / palette / pricing / markdown-hljs / usage-cost + the
+  025–028 suites) + tsc-strict + `vite build` green; one new dep (`rehype-highlight`); the Python
+  suite is unchanged (frontend-only). Rollback = revert the `apps/web` diff → units 025–028.
+  → **Verified**. **With 029, the web-UI extension (025–029) is COMPLETE.**
 
-> **🚧 NEW UNITS IN PROGRESS — `025-web-agent-ui` → `026-web-agent-signals` → `027-web-agent-inspection` → `028-web-agent-model-files` → `029-web-agent-extras` (maintainer-authorized web-UI extension, 2026-06-19).** The original roadmap (000–019, v0.1.0; MIT) and the four-phase gap-closure (020–024) remain COMPLETE and `Verified`. Beyond them, the maintainer authorized a **web-UI extension** to bring the unit-018 SPA to parity with a modern agent app. Five units, all `specify`-complete on `main`:
+> **✅ WEB-UI EXTENSION COMPLETE — `025-web-agent-ui` → `026-web-agent-signals` → `027-web-agent-inspection` → `028-web-agent-model-files` → `029-web-agent-extras` (maintainer-authorized web-UI extension, 2026-06-19).** The original roadmap (000–019, v0.1.0; MIT) and the four-phase gap-closure (020–024) remain COMPLETE and `Verified`. Beyond them, the maintainer authorized a **web-UI extension** to bring the unit-018 SPA to parity with a modern agent app. Five units, **all `Verified` on `main`**:
 > - **025-web-agent-ui** (frontend-only) — **Verified** (shipped): two-pane shell, markdown, inline tool cards, styled dialogs, status + Stop, sessions, light/dark theme.
 > - **026-web-agent-signals** (frontend-only) — **Verified** (shipped): reasoning/thinking display, multi-option questions, token usage (signals the backend **already emits**).
 > - **027-web-agent-inspection** (additive, metadata-only, **no ADR**) — **Verified** (shipped): read-only skills / tools / MCP / memory endpoints + tabbed panel.
 > - **028-web-agent-model-files** (additive, **no ADR**) — **Verified** (shipped): per-session model selection (web/API-layer host registry + shared-checkpoint routing; runtime keeps one model per run) + file attachments (upload endpoint + a **read-upload tool in the Tool Gateway**, Principle V; files read on demand, not embedded). Multimodal embedded content (which would need an ADR) is deferred.
-> - **029-web-agent-extras** (frontend-only, no ADR) — i18n, code syntax highlighting, command palette (frontend slash + `@file`/`@skill`), client-side cost estimate.
+> - **029-web-agent-extras** (frontend-only, no ADR) — **Verified** (shipped): i18n (en + zh-TW), code syntax highlighting, command palette (frontend slash + `@skill`/`@tool` from 027 data), client-side cost estimate.
 >
-> **025 + 026 + 027 + 028 are `Verified`** (shipped on `main`); next is **`plan`** for the final unit **029**, after which the web-UI extension is complete — **all gate-free** (028 was re-scoped to additive after a reference review). Only multimodal embedded file content (needs an ADR), backend-semantic slash commands, and authoritative server-side pricing remain beyond these. *(This supersedes the "no further unit to advance" note in the banner below.)*
+> **025–029 are all `Verified`** (shipped on `main`) — the **web-UI extension is COMPLETE**. The unit-018 SPA now has: a styled two-pane shell + markdown + tool cards + dialogs + theme (025); reasoning / multi-option questions / token usage (026); read-only skills/tools/MCP/memory inspection panels (027); per-session model selection + file attachments (028); and i18n + syntax highlighting + a command palette + a client-side cost estimate (029). The autopilot has **no further unit to advance** and stops cleanly. Only reserved/out-of-scope items remain: multimodal embedded file content + backend-semantic slash commands (need an ADR / backend) and authoritative server-side pricing.
 
 > **🏁 CURRENT STATUS — units `000–024` are all `Verified` on `main`; the gap-closure plan
 > is COMPLETE.** Beyond the original runtime + release roadmap (**000–019**, shipped as
@@ -501,13 +509,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **029** (web-UI extension, the final unit) — **025 + 026 + 027 + 028 are `Verified`** on `main`. 029 is frontend-only (**no ADR**). Units **000–028** are `Verified` on `main`. |
-| Active feature directory | `specs/029-web-agent-extras` (the last unit; advance `.specify/feature.json` → 029). |
-| Current branch | `main` — **main-only autopilot**; all units progress on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **028 COMPLETE** (plan → tasks → analyze → implement → Verified). Next: **plan** for **029** (`/speckit-plan`), the final web-UI-extension unit. **Gate-free** (no ADR). |
-| Depends on | 029 → 011 + 018 + 025 + 026 + 027 (frontend extras over the shell, the signals, and the inspection data). |
-| Next command | **`/speckit-plan`** for `029` (plan → tasks → analyze → implement) — the final web-UI-extension unit. |
-| Stop condition status | **025 + 026 + 027 + 028 Verified** (shipped); running **029** (the last unit) under autopilot. |
+| Active unit | **None** — the web-UI extension (**025–029**) is **COMPLETE**; **all units 000–029 are `Verified`** on `main`. |
+| Active feature directory | — (no active feature; `.specify/feature.json` → `specs/029-web-agent-extras`, the last completed unit). |
+| Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
+| Current Spec Kit step | **029 COMPLETE** (plan → tasks → analyze → implement → Verified). The web-UI extension (025–029) is fully shipped; the autopilot has **no further unit to advance** and stops cleanly. |
+| Depends on | — (all dependencies are `Verified`). |
+| Next command | — (no further unit). Only reserved/out-of-scope items remain: multimodal embedded content + backend-semantic slash commands (need an ADR / backend) and authoritative server-side pricing. |
+| Stop condition status | **Complete** — 025–029 are all `Verified`; no further unit; the autopilot stops cleanly. |
 
 ---
 
