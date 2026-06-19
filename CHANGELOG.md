@@ -158,5 +158,15 @@ additive layers (units 001-013), brought to release quality by unit 014.
   (mocked transport + stub provider) plus an opt-in, secret-gated live fetch; existing tools /
   descriptors / policies unchanged. No frontend, no ADR. Second unit of the Tier-1
   agent-capability sprint (033–036).
+- **035** OpenAI-compatible providers (`loopplane.adapters.openai_compat`) — two additive model
+  providers that **reuse** the unit-020 `OpenAIModel` + chat-completions mapping unchanged, differing
+  only in the client `base_url`: `openrouter_model` (OpenRouter — brokers 100+ models incl.
+  Claude/Gemini/Llama behind the OpenAI wire format, injected key) and `ollama_model` (a local
+  Ollama endpoint, no key — placeholder + overridable `base_url`). No new dependency (rides the
+  existing `openai` extra; the SDK is imported lazily), so the package imports without it and is
+  tested offline (a fake `openai` module asserts the base_url / key wiring). They register as model
+  hosts like the OpenAI host, so the existing `/v1/models` selector lists them with no frontend
+  change. **Native Gemini (direct Google API) is deferred** to a follow-up — reachable via
+  OpenRouter today. Third unit of the Tier-1 agent-capability sprint (033–036).
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

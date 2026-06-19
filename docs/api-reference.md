@@ -166,6 +166,15 @@ The OpenAI (GPT) model-provider adapter.
 - `OpenAIModel` — a model boundary backed by the OpenAI chat-completions API.
 - `OpenAIConfig` — configuration for the OpenAI adapter.
 
+### `loopplane.adapters.openai_compat`
+
+OpenAI-compatible model providers (OpenRouter, Ollama) reusing the OpenAI adapter.
+
+- `OPENROUTER_BASE_URL` — the OpenRouter API base URL.
+- `OLLAMA_BASE_URL` — the default local Ollama OpenAI-compatible base URL.
+- `openrouter_model` — build an `OpenAIModel` pointed at OpenRouter.
+- `ollama_model` — build an `OpenAIModel` pointed at a local Ollama endpoint.
+
 ### `loopplane.skills`
 
 The skill execution profile boundary.
