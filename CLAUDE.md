@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at
-specs/044-todo-tool/plan.md
+specs/045-structured-output/plan.md
 <!-- SPECKIT END -->
