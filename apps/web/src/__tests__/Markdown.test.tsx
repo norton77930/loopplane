@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 
 import { Markdown } from "../components/Markdown";
 
@@ -34,5 +34,18 @@ describe("Markdown", () => {
   it("renders an unknown-language code block without error", () => {
     const { container } = render(<Markdown>{"```nosuchlang\nzzz\n```"}</Markdown>);
     expect(container.querySelector("pre code")?.textContent).toContain("zzz");
+  });
+
+  it("shows a copy button on a code block that copies the exact code", () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+      writable: true,
+    });
+    const { getByLabelText } = render(<Markdown>{"```js\nconst x = 1;\n```"}</Markdown>);
+    fireEvent.click(getByLabelText("Copy code"));
+    expect(writeText).toHaveBeenCalled();
+    expect(writeText.mock.calls[0][0]).toContain("const x = 1;");
   });
 });

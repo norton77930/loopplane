@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useTranslation } from "../i18n/i18n";
+import { copyText } from "../lib/clipboard";
 import type { ConversationEntry } from "../state/chat";
 import { Markdown } from "./Markdown";
 import { ReasoningBlock } from "./ReasoningBlock";
@@ -9,10 +11,22 @@ const BOTTOM_THRESHOLD = 40;
 
 // The scrolling message region: renders the ordered entries (FR-001/002/006) and owns its
 // own scroll container so it can auto-scroll when pinned to the bottom and offer a
-// jump-to-latest affordance when the user has scrolled up (FR-011).
-export function MessageList({ entries }: { entries: ConversationEntry[] }) {
+// jump-to-latest affordance when the user has scrolled up (FR-011). Each user/assistant message
+// carries copy + regenerate actions (unit 031); regenerate shows on the latest assistant message.
+interface Props {
+  entries: ConversationEntry[];
+  onRegenerate?: () => void;
+  canRegenerate?: boolean;
+}
+
+export function MessageList({ entries, onRegenerate, canRegenerate }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
+
+  let lastAssistant = -1;
+  entries.forEach((entry, index) => {
+    if (entry.kind === "assistant") lastAssistant = index;
+  });
 
   function onScroll() {
     const el = ref.current;
@@ -37,7 +51,12 @@ export function MessageList({ entries }: { entries: ConversationEntry[] }) {
   return (
     <div className="messages" data-testid="messages" ref={ref} onScroll={onScroll}>
       {entries.map((entry, index) => (
-        <Entry key={index} entry={entry} />
+        <Entry
+          key={index}
+          entry={entry}
+          onRegenerate={index === lastAssistant ? onRegenerate : undefined}
+          canRegenerate={canRegenerate}
+        />
       ))}
       {!pinned && (
         <button type="button" className="jump-latest" onClick={jumpToLatest}>
@@ -48,13 +67,20 @@ export function MessageList({ entries }: { entries: ConversationEntry[] }) {
   );
 }
 
-function Entry({ entry }: { entry: ConversationEntry }) {
+interface EntryProps {
+  entry: ConversationEntry;
+  onRegenerate?: () => void;
+  canRegenerate?: boolean;
+}
+
+function Entry({ entry, onRegenerate, canRegenerate }: EntryProps) {
   switch (entry.kind) {
     case "user":
       return (
         <div className="message message-user">
           <div className="message-role">You</div>
           <div className="bubble">{entry.text}</div>
+          <MessageActions text={entry.text} />
         </div>
       );
     case "reasoning":
@@ -64,6 +90,11 @@ function Entry({ entry }: { entry: ConversationEntry }) {
         <div className="message message-assistant">
           <div className="message-role">LoopPlane</div>
           <Markdown>{entry.text}</Markdown>
+          <MessageActions
+            text={entry.text}
+            onRegenerate={onRegenerate}
+            canRegenerate={canRegenerate}
+          />
         </div>
       );
     case "tool":
@@ -76,4 +107,32 @@ function Entry({ entry }: { entry: ConversationEntry }) {
         </div>
       );
   }
+}
+
+function MessageActions({
+  text,
+  onRegenerate,
+  canRegenerate,
+}: {
+  text: string;
+  onRegenerate?: () => void;
+  canRegenerate?: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="message-actions">
+      <button type="button" onClick={() => void copyText(text)}>
+        {t("action.copy")}
+      </button>
+      {onRegenerate && (
+        <button
+          type="button"
+          disabled={canRegenerate === false}
+          onClick={onRegenerate}
+        >
+          {t("action.regenerate")}
+        </button>
+      )}
+    </div>
+  );
 }

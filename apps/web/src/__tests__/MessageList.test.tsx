@@ -33,4 +33,43 @@ describe("MessageList", () => {
 
     expect(screen.getByText("Jump to latest")).toBeInTheDocument();
   });
+
+  it("copies a message's text via the copy action", () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+      writable: true,
+    });
+    render(<MessageList entries={[{ kind: "user", text: "hello world" }]} />);
+    fireEvent.click(screen.getByText("Copy"));
+    expect(writeText).toHaveBeenCalledWith("hello world");
+  });
+
+  it("offers Regenerate on the latest assistant message and invokes the handler", () => {
+    const onRegenerate = vi.fn();
+    render(
+      <MessageList
+        entries={[
+          { kind: "user", text: "go" },
+          { kind: "assistant", text: "answer" },
+        ]}
+        onRegenerate={onRegenerate}
+        canRegenerate
+      />,
+    );
+    fireEvent.click(screen.getByText("Regenerate"));
+    expect(onRegenerate).toHaveBeenCalled();
+  });
+
+  it("disables Regenerate while a run is in flight", () => {
+    render(
+      <MessageList
+        entries={[{ kind: "assistant", text: "answer" }]}
+        onRegenerate={() => undefined}
+        canRegenerate={false}
+      />,
+    );
+    expect(screen.getByText("Regenerate")).toBeDisabled();
+  });
 });

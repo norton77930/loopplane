@@ -194,6 +194,17 @@ button.danger { color: var(--danger); border-color: var(--danger); }
 .menu-popup li button:hover { background: var(--accent-soft); }
 .session-rename { width: 100%; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); font-size: 13px; }
 
+/* ---- Message actions + code-block copy (031) ---- */
+.message-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.12s ease; margin-top: 2px; }
+.message:hover .message-actions, .message-actions:focus-within { opacity: 1; }
+.message-actions button { font-size: 11px; color: var(--text-muted); border: 1px solid var(--border); background: var(--bg-elev); padding: 2px 8px; border-radius: var(--radius-sm); cursor: pointer; }
+.message-actions button:hover:not(:disabled) { background: var(--accent-soft); color: var(--text); }
+.message-actions button:disabled { opacity: 0.5; cursor: default; }
+.code-block { position: relative; }
+.code-copy { position: absolute; top: 6px; right: 6px; z-index: 1; font-size: 11px; color: var(--text-muted); border: 1px solid var(--border); background: var(--bg-elev); padding: 2px 8px; border-radius: var(--radius-sm); cursor: pointer; opacity: 0; transition: opacity 0.12s ease; }
+.code-block:hover .code-copy, .code-copy:focus { opacity: 1; }
+.code-copy:hover { background: var(--accent-soft); color: var(--text); }
+
 .composer textarea { flex: 1; resize: none; font: inherit; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-input); color: var(--text); max-height: 200px; }
 .composer textarea:focus { outline: none; border-color: var(--accent); }
 

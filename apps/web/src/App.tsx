@@ -83,6 +83,17 @@ export function App({
     }
   }
 
+  // 031 — regenerate: re-run the last user turn through the existing send path.
+  function regenerate() {
+    for (let index = state.entries.length - 1; index >= 0; index--) {
+      const entry = state.entries[index];
+      if (entry.kind === "user") {
+        void send(entry.text);
+        return;
+      }
+    }
+  }
+
   async function approve(requestId: string, decision: ApprovalDecision) {
     if (sessionId.current) {
       await client.answerApproval(sessionId.current, requestId, decision);
@@ -228,7 +239,11 @@ export function App({
         />
       }
     >
-      <MessageList entries={state.entries} />
+      <MessageList
+        entries={state.entries}
+        onRegenerate={regenerate}
+        canRegenerate={state.status !== "running"}
+      />
       {pendingApproval && (
         <ApprovalDialog
           toolName={pendingApproval.toolName}
