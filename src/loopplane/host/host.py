@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+import anyio
+
 from loopplane.checkpoint.base import SessionSummary
 from loopplane.controller.controller import RuntimeController
 from loopplane.events.emitter import EventSink
@@ -130,9 +132,23 @@ class LoopPlaneHost:
         )
         self._bind(sink, controller, session_id, on_event, on_approval)
         try:
-            await controller.drive(
-                session_id, _coerce_blocks(prompt), output_schema=output_schema
-            )
+            if controller.max_background_tasks >= 1:
+                # Background tasks (spec 048; ADR 0002): own a task group for this run,
+                # so task_create can launch child runs; cancel any still pending at end.
+                async with anyio.create_task_group() as task_group:
+                    supervisor = controller.make_background_supervisor(task_group)
+                    await controller.drive(
+                        session_id,
+                        _coerce_blocks(prompt),
+                        output_schema=output_schema,
+                        background_supervisor=supervisor,
+                    )
+                    if supervisor is not None:
+                        supervisor.cancel_all()
+            else:
+                await controller.drive(
+                    session_id, _coerce_blocks(prompt), output_schema=output_schema
+                )
             outcome = _build_outcome(controller, session_id, sink)
         finally:
             sink.unbind()

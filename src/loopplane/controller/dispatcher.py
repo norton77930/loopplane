@@ -10,7 +10,7 @@ host without modification.
 from __future__ import annotations
 
 from collections.abc import AsyncIterable, Sequence
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import anyio
 from pydantic import BaseModel, ConfigDict
@@ -19,6 +19,9 @@ from loopplane.controller.controller import RuntimeController
 from loopplane.events.emitter import EventSink
 from loopplane.events.envelope import RuntimeEvent
 from loopplane.model.content import ContentBlock
+
+if TYPE_CHECKING:
+    from loopplane.context import BackgroundSupervisor
 
 _INCREMENT_TYPES = ("assistant-output-increment", "assistant-reasoning-increment")
 
@@ -90,6 +93,7 @@ class Dispatcher:
         self._session_id = session_id
         self._inbound = inbound
         self._driving = False
+        self._supervisor: BackgroundSupervisor | None = None
 
     async def run(self) -> None:
         """Drive the round-trip until the inbound channel closes. On close
@@ -98,12 +102,17 @@ class Dispatcher:
         """
         self._controller.attach_reviewer(self._session_id)
         async with anyio.create_task_group() as task_group:
+            # Background tasks (spec 048; ADR 0002): build a supervisor from this
+            # session's task group when enabled; task_create starts child runs there.
+            self._supervisor = self._controller.make_background_supervisor(task_group)
             try:
                 async for request in self._inbound:
                     await self._handle(request, task_group)
             finally:
                 if self._driving:
                     self._controller.cancel(self._session_id)
+                if self._supervisor is not None:
+                    self._supervisor.cancel_all()
                 self._controller.on_reviewer_disconnect(self._session_id)
 
     async def _handle(
@@ -153,6 +162,8 @@ class Dispatcher:
 
     async def _drive_one(self, blocks: Sequence[ContentBlock]) -> None:
         try:
-            await self._controller.drive(self._session_id, blocks)
+            await self._controller.drive(
+                self._session_id, blocks, background_supervisor=self._supervisor
+            )
         finally:
             self._driving = False

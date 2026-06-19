@@ -29,7 +29,12 @@ from loopplane.artifacts.store import ArtifactStore
 from loopplane.checkpoint.base import CheckpointStore, SessionSummary
 from loopplane.checkpoint.rebuild import rebuild_session
 from loopplane.checkpoint.recorder import RecordingSink, SessionRecorder
-from loopplane.context import PlanModeState, RunContext
+from loopplane.context import (
+    BackgroundSupervisor,
+    BackgroundSupervisorFactory,
+    PlanModeState,
+    RunContext,
+)
 from loopplane.events.emitter import EventEmitter, EventSink
 from loopplane.events.envelope import (
     AssistantOutputIncrementEvent,
@@ -122,6 +127,8 @@ class RuntimeController:
         hooks: HookDispatcher | None = None,
         plan_mode: bool = False,
         subagent_depth: int = 0,
+        background_supervisor_factory: BackgroundSupervisorFactory | None = None,
+        max_background_tasks: int = 0,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -133,6 +140,12 @@ class RuntimeController:
         # run. A child controller built to run a spawned subagent is given depth+1,
         # stamped onto each run's RunContext in drive(). Default 0 → unchanged.
         self._subagent_depth = subagent_depth
+        # Background tasks (spec 048; ADR 0002): an injected supervisor factory (built
+        # by the host assembly, which owns the tools-layer import) + the count cap, to
+        # build a per-run supervisor on demand; both off by default (None / 0) →
+        # byte-identical. The controller stays tool-agnostic (Constitution V).
+        self._background_supervisor_factory = background_supervisor_factory
+        self._max_background_tasks = max_background_tasks
         # Optional lifecycle hooks (feature 015); absent by default (FR-011).
         # process_setup fires at most once per controller lifetime.
         self._hooks = hooks
@@ -335,11 +348,33 @@ class RuntimeController:
 
         return hook
 
+    @property
+    def max_background_tasks(self) -> int:
+        return self._max_background_tasks
+
+    def make_background_supervisor(
+        self, task_group: anyio.abc.TaskGroup
+    ) -> BackgroundSupervisor | None:
+        """Build a per-run background-task supervisor bound to ``task_group`` (spec 048;
+        ADR 0002), or ``None`` when background tasks are disabled. The scope owner (the
+        Dispatcher / the one-shot ``host.run``) calls this with a task group it owns and
+        passes the result to ``drive``. The concrete supervisor comes from the injected
+        factory (the host assembly owns the tools-layer import), so the controller stays
+        tool-agnostic (Constitution V)."""
+
+        if (
+            self._max_background_tasks < 1
+            or self._background_supervisor_factory is None
+        ):
+            return None
+        return self._background_supervisor_factory(task_group)
+
     async def drive(
         self,
         session_id: str,
         input_blocks: Sequence[ContentBlock],
         output_schema: dict[str, object] | None = None,
+        background_supervisor: BackgroundSupervisor | None = None,
     ) -> None:
         """Run one complete turn cycle; ends with exactly one run-terminated
         event (FR-001).
@@ -380,6 +415,7 @@ class RuntimeController:
             interactions=session.broker,
             plan_mode=PlanModeState(active=True) if self._plan_mode else None,
             output_schema=output_schema,
+            background_tasks=background_supervisor,
         )
         try:
             await session.loop.run(input_blocks, context)

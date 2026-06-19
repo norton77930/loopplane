@@ -141,6 +141,12 @@ class RuntimeConfig:
     # subagents cannot nest without bound (a child runs at parent depth + 1). A value of
     # `1` enables exactly one level. Carries no secret (a bare integer).
     max_subagent_depth: int = 0
+    # Opt-in background tasks (spec 048; ADR 0002): the per-run count cap. Off by
+    # default (`0` → NO background-task tools registered, byte-identical). When a host
+    # sets it >= 1 (with `max_subagent_depth` >= 1 — the 043 depth cap a background
+    # child run is subject to), the five background-task tools are registered and a run
+    # may have up to this many concurrent tasks. A bare integer; carries no secret.
+    max_background_tasks: int = 0
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -171,6 +177,7 @@ class RuntimeConfig:
             ),
             compaction_summarizer=data.get("compaction_summarizer"),
             max_subagent_depth=int(data.get("max_subagent_depth", 0)),
+            max_background_tasks=int(data.get("max_background_tasks", 0)),
         )
 
 
@@ -309,6 +316,9 @@ def validate_config(config: RuntimeConfig) -> None:
 
     if config.max_subagent_depth < 0:
         raise ConfigError("max_subagent_depth must be a non-negative integer")
+
+    if config.max_background_tasks < 0:
+        raise ConfigError("max_background_tasks must be a non-negative integer")
 
 
 def approval_effects(

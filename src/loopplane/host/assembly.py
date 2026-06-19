@@ -150,6 +150,16 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
                 max_subagent_depth=config.max_subagent_depth,
             )
         )
+    # Opt-in background tasks (spec 048; ADR 0002): register the five background-task
+    # tools only when a non-zero count cap is set (0 → no tools, byte-identical). The
+    # supervisor is built per-run by the scope owner (Dispatcher / host.run) from the
+    # controller; the tools read it via RunContext.background_tasks. Lazy import.
+    if config.max_background_tasks >= 1:
+        from loopplane.tools.background import BackgroundTasksAdapter
+
+        gateway.register_adapter(
+            BackgroundTasksAdapter(max_subagent_depth=config.max_subagent_depth)
+        )
 
     sink = RunSink()
     if config.observability:
@@ -172,6 +182,13 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         controller_kwargs["auto_compact_threshold"] = config.auto_compact_threshold
     if config.compaction_summarizer is not None:
         controller_kwargs["compaction_summarizer"] = config.compaction_summarizer
+    if config.max_background_tasks >= 1:
+        from loopplane.tools.background import make_supervisor_factory
+
+        controller_kwargs["background_supervisor_factory"] = make_supervisor_factory(
+            _make_child_host_builder(config), config.max_background_tasks
+        )
+        controller_kwargs["max_background_tasks"] = config.max_background_tasks
 
     controller = RuntimeController(
         model=config.model,

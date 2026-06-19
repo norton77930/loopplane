@@ -4,14 +4,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Protocol
 
 import anyio
 
 if TYPE_CHECKING:
     from loopplane.approval.interactions import InteractionBroker
+    from loopplane.tools.background import BackgroundTask
 
 
 @dataclass
@@ -24,6 +26,38 @@ class PlanModeState:
     """
 
     active: bool = True
+
+
+class BackgroundSupervisor(Protocol):
+    """The per-run background-task supervisor interface (spec 048; ADR 0002).
+
+    The concrete ``BackgroundTaskSupervisor`` (``loopplane.tools.background``)
+    implements it structurally; it is declared here so the controller and
+    ``RunContext`` can name it WITHOUT importing the tools layer (Constitution V: the
+    controller/loop never import tool sources). The scope owner (the Dispatcher's task
+    group / the one-shot ``host.run``) builds a concrete supervisor and stamps it on the
+    run's context.
+    """
+
+    def create(
+        self,
+        instruction: str,
+        *,
+        allowed_tools: tuple[str, ...] | None,
+        child_depth: int,
+        working_scope: Path,
+    ) -> str | None: ...
+    def get(self, task_id: str) -> BackgroundTask | None: ...
+    def list_tasks(self) -> list[BackgroundTask]: ...
+    def stop(self, task_id: str) -> bool: ...
+    def cancel_all(self) -> None: ...
+
+
+# A scope owner builds a supervisor from a task group it owns; typed without the tools
+# layer so the controller can reference it (Constitution V).
+BackgroundSupervisorFactory = Callable[
+    ["anyio.abc.TaskGroup"], "BackgroundSupervisor | None"
+]
 
 
 @dataclass
@@ -53,3 +87,8 @@ class RunContext:
     # construction site) from the run request, then forwarded to the assembled
     # ``ModelRequest``. Per-run, never process-global.
     output_schema: dict[str, object] | None = None
+    # Per-run background-task supervisor (spec 048; ADR 0002). ``None`` means background
+    # tasks are off (the tools return a normalized "not enabled" error). Built by the
+    # scope owner (the Dispatcher's task group / the one-shot ``host.run``) and set only
+    # in ``RuntimeController.drive()``; per-run.
+    background_tasks: BackgroundSupervisor | None = None

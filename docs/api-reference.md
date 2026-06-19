@@ -146,6 +146,8 @@ The internal, web, and subagent-spawn tool adapters.
 - `SearchResult` — a single web-search result (title, url, snippet).
 - `ReferenceSearchProvider` — a bundled keyless reference web-search provider for `web_search` (spec 047).
 - `SpawnSubagentAdapter` — the adapter for the model-driven one-shot `spawn_subagent` tool (depth-capped).
+- `BackgroundTasksAdapter` — the adapter for the background-task tools (create/get/list/stop/output; spec 048).
+- `BackgroundTaskSupervisor` — the per-run supervisor that owns + tracks background tasks (spec 048).
 
 ### `loopplane.adapters.mcp`
 
