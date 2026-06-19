@@ -83,4 +83,14 @@ Reuses the 043 child-run + depth cap.
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-20) — 0 critical, 0 high, 2 low (informational). 100%
+requirement coverage (FR-001..FR-009 and SC-001..004 each map to ≥1 task); every task traces
+to a requirement/design item; spec ↔ plan ↔ **ADR 0002** ↔ data-model ↔ contract ↔ tasks
+agree (per-run `BackgroundTaskSupervisor`; five Gateway tools; `RunContext.background_tasks`
+threading via `drive`; `RuntimeConfig.max_background_tasks` gate; reuse of the 043 child-run +
+depth cap; caps / containment / lifecycle). The one boundary crossing (a new in-run
+concurrency pattern) is **maintainer-approved and recorded in ADR 0002**, implemented
+additively and default-off — no Constitution violation (III/IV/V/VI/X) and no breaking
+001/002 contract change. Low notes are informational: deferred streaming/persistent/
+distributed tasks (per spec + ADR 0002); the implement is large/cross-cutting (controller/
+dispatcher/host) and may use a fork. **Cleared for `/speckit-implement`.**
