@@ -179,6 +179,21 @@ button.danger { color: var(--danger); border-color: var(--danger); }
 .hljs-number, .hljs-literal, .hljs-type { color: var(--running); }
 .hljs-title, .hljs-section { color: var(--accent); }
 .hljs-deletion { color: var(--danger); }
+
+/* ---- Session management (030) ---- */
+.session-group { margin-bottom: 8px; }
+.session-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); padding: 8px 12px 2px; }
+.session-group ul { list-style: none; margin: 0; padding: 0; }
+.session-item { display: flex; align-items: center; gap: 4px; }
+.session-item .session-open { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-menu { position: relative; }
+.session-menu > button { border: none; background: none; color: var(--text-muted); padding: 2px 6px; cursor: pointer; border-radius: var(--radius-sm); }
+.session-menu > button:hover { background: var(--accent-soft); color: var(--text); }
+.menu-popup { position: absolute; right: 0; top: 100%; z-index: 10; list-style: none; margin: 2px 0 0; padding: 4px; min-width: 120px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elev); box-shadow: var(--shadow); }
+.menu-popup li button { width: 100%; text-align: left; border: none; background: none; padding: 6px 10px; border-radius: var(--radius-sm); cursor: pointer; color: var(--text); }
+.menu-popup li button:hover { background: var(--accent-soft); }
+.session-rename { width: 100%; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); font-size: 13px; }
+
 .composer textarea { flex: 1; resize: none; font: inherit; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-input); color: var(--text); max-height: 200px; }
 .composer textarea:focus { outline: none; border-color: var(--accent); }
 

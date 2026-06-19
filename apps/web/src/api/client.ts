@@ -127,6 +127,18 @@ export class ApiClient {
     return this.json(`/v1/sessions/${id}/history`);
   }
 
+  // 030 — session management.
+  async renameSession(id: string, title: string): Promise<void> {
+    await this.json(`/v1/sessions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    });
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    await this.json(`/v1/sessions/${id}`, { method: "DELETE" });
+  }
+
   // 027 — read-only inspection (metadata-only).
   async inspectSkills(): Promise<SkillsResponse> {
     return this.json("/v1/inspect/skills");

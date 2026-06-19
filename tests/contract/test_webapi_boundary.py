@@ -95,7 +95,12 @@ def test_webapi_response_models_are_metadata_only() -> None:
         "history",
         "consumer_failures",
     }
-    assert set(SessionSummaryView.model_fields) == {"session_id", "label"}
+    assert set(SessionSummaryView.model_fields) == {
+        "session_id",
+        "label",
+        "last_active_at",
+        "created_at",
+    }
     assert set(ErrorResponse.model_fields) == {"detail"}
 
 

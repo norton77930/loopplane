@@ -7,9 +7,10 @@ Response bodies never carry conversation content: history is projected to
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from loopplane.host import RunOutcome
 from loopplane.host.inspect import (
@@ -31,6 +32,12 @@ class _SummaryLike(Protocol):
     @property
     def label(self) -> str | None: ...
 
+    @property
+    def created_at(self) -> datetime: ...
+
+    @property
+    def last_active_at(self) -> datetime: ...
+
 
 # --- requests ----------------------------------------------------------------
 
@@ -40,6 +47,20 @@ class RunRequest(BaseModel):
     model: str | None = (
         None  # 028 — optional model id; routed to the chosen host (one per run)
     )
+
+
+class RenameRequest(BaseModel):
+    """A session rename (030): a non-blank title (trimmed)."""
+
+    title: str = Field(min_length=1)
+
+    @field_validator("title")
+    @classmethod
+    def _non_blank(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("title must not be blank")
+        return trimmed
 
 
 class SessionAnswer(BaseModel):
@@ -87,10 +108,17 @@ class RunResult(BaseModel):
 class SessionSummaryView(BaseModel):
     session_id: str
     label: str | None
+    last_active_at: datetime
+    created_at: datetime
 
     @classmethod
     def from_summary(cls, summary: _SummaryLike) -> SessionSummaryView:
-        return cls(session_id=summary.session_id, label=summary.label)
+        return cls(
+            session_id=summary.session_id,
+            label=summary.label,
+            last_active_at=summary.last_active_at,
+            created_at=summary.created_at,
+        )
 
 
 class OpenedSession(BaseModel):

@@ -25,6 +25,7 @@ from loopplane.checkpoint import (
     SessionMetaRecord,
     SqliteCheckpointStore,
     UserInputRecord,
+    rebuild_session,
 )
 from loopplane.model.content import TextBlock
 
@@ -192,3 +193,34 @@ async def test_list_sessions_surfaces_principal_id(backend: _Backend) -> None:
     (summary,) = backend.open().list_sessions()
 
     assert summary.principal_id == "alice"
+
+
+async def test_set_title_latest_wins(backend: _Backend) -> None:
+    # 030: rename appends a fresh session-meta; the latest title wins in the
+    # listing and on rebuild, with creation time + owner preserved.
+    store = backend.open()
+    await store.append(_meta("s1", principal_id="alice"))
+    await store.set_title("s1", "First")
+    await store.set_title("s1", "Second")
+
+    (summary,) = backend.open().list_sessions()
+    assert summary.label == "Second"
+    assert summary.created_at == _T0
+    assert summary.principal_id == "alice"
+
+    records, _ = backend.open().load("s1")
+    assert rebuild_session(records).label == "Second"
+
+
+async def test_delete_session_removes_and_is_idempotent(backend: _Backend) -> None:
+    # 030: deletion is durable and idempotent on an unknown id.
+    store = backend.open()
+    await store.append(_meta("s1"))
+    await store.append(_user("s1", 2, "hello"))
+    assert [s.session_id for s in backend.open().list_sessions()] == ["s1"]
+
+    backend.open().delete_session("s1")
+    assert backend.open().list_sessions() == []
+    assert backend.open().load("s1") == ([], [])
+
+    backend.open().delete_session("s1")  # idempotent — no error on a second delete

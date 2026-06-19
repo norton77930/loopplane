@@ -8,6 +8,7 @@ result (FR-085). Implements the ``CheckpointStore`` Protocol (``base.py``).
 
 from __future__ import annotations
 
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -16,6 +17,7 @@ import anyio
 from loopplane.checkpoint.base import SessionSummary
 from loopplane.checkpoint.records import (
     CheckpointRecord,
+    SessionMetaPayload,
     SessionMetaRecord,
     deserialize_record,
     serialize_record,
@@ -96,10 +98,42 @@ class FileCheckpointStore:
             summaries, key=lambda summary: summary.last_active_at, reverse=True
         )
 
+    async def set_title(self, session_id: str, title: str) -> None:
+        """Append a fresh session-meta carrying the new title (030); latest
+        wins. A no-op on an unknown session."""
+        records, _ = self.load(session_id)
+        original = next(
+            (r for r in records if isinstance(r, SessionMetaRecord)), None
+        )
+        if original is None:
+            return
+        next_sequence = max((r.sequence for r in records), default=-1) + 1
+        await self.append(
+            SessionMetaRecord(
+                session_id=session_id,
+                sequence=next_sequence,
+                recorded_at=datetime.now(UTC),
+                payload=SessionMetaPayload(
+                    created_at=original.payload.created_at,
+                    label=title,
+                    principal_id=original.payload.principal_id,
+                ),
+            )
+        )
+
+    def delete_session(self, session_id: str) -> None:
+        """Remove the session's directory; idempotent if absent (030)."""
+        directory = self._base / session_id
+        if directory.is_dir():
+            shutil.rmtree(directory)
+
     @staticmethod
     def _read_meta(path: Path) -> SessionMetaRecord | None:
+        # The LATEST session-meta wins, so a rename (an appended meta) shows in
+        # the listing (030); rebuild already applies the same last-wins rule.
+        found: SessionMetaRecord | None = None
         for line in path.read_text("utf-8").splitlines():
             record = deserialize_record(line)
             if isinstance(record, SessionMetaRecord):
-                return record
-        return None
+                found = record
+        return found

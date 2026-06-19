@@ -17,7 +17,7 @@ represents most-recent activity (contracts/checkpoint-store.md). Implements the
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from itertools import groupby
 from operator import itemgetter
 from pathlib import Path
@@ -27,6 +27,7 @@ import anyio
 from loopplane.checkpoint.base import SessionSummary
 from loopplane.checkpoint.records import (
     CheckpointRecord,
+    SessionMetaPayload,
     SessionMetaRecord,
     deserialize_record,
     serialize_record,
@@ -125,10 +126,9 @@ class SqliteCheckpointStore:
                 moment = datetime.fromisoformat(recorded_at)
                 if last_active is None or moment > last_active:
                     last_active = moment
-                if meta is None:
-                    record = deserialize_record(data)
-                    if isinstance(record, SessionMetaRecord):
-                        meta = record
+                record = deserialize_record(data)
+                if isinstance(record, SessionMetaRecord):
+                    meta = record  # the latest session-meta wins (030)
             if meta is None or last_active is None:
                 continue
             summaries.append(
@@ -143,3 +143,39 @@ class SqliteCheckpointStore:
         return sorted(
             summaries, key=lambda summary: summary.last_active_at, reverse=True
         )
+
+    async def set_title(self, session_id: str, title: str) -> None:
+        """Insert a fresh session-meta carrying the new title (030); latest
+        wins. A no-op on an unknown session."""
+        records, _ = self.load(session_id)
+        original = next(
+            (r for r in records if isinstance(r, SessionMetaRecord)), None
+        )
+        if original is None:
+            return
+        next_sequence = max((r.sequence for r in records), default=-1) + 1
+        await self.append(
+            SessionMetaRecord(
+                session_id=session_id,
+                sequence=next_sequence,
+                recorded_at=datetime.now(UTC),
+                payload=SessionMetaPayload(
+                    created_at=original.payload.created_at,
+                    label=title,
+                    principal_id=original.payload.principal_id,
+                ),
+            )
+        )
+
+    def delete_session(self, session_id: str) -> None:
+        """Remove all rows for the session; idempotent if absent (030)."""
+        if not self._db_path.is_file():
+            return
+        connection = self._connect()
+        try:
+            connection.execute(
+                "DELETE FROM records WHERE session_id = ?", (session_id,)
+            )
+            connection.commit()
+        finally:
+            connection.close()

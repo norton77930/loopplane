@@ -159,6 +159,14 @@ class LoopPlaneHost:
     async def resume(self, session_id: str) -> None:
         await self._assembled.controller.resume(session_id)
 
+    async def set_session_title(self, session_id: str, title: str) -> None:
+        """Persist a new title for a session (030)."""
+        await self._assembled.controller.set_session_title(session_id, title)
+
+    def delete_session(self, session_id: str) -> None:
+        """Delete a session and its durable records (030)."""
+        self._assembled.controller.delete_session(session_id)
+
     def history_snapshot(self, session_id: str) -> tuple[HistoryEntry, ...]:
         """A point-in-time history snapshot for a session (FR-003)."""
 

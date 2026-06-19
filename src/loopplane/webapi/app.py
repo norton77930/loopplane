@@ -39,6 +39,7 @@ from loopplane.webapi.models import (
     ModelInfo,
     OpenedSession,
     QuestionAnswer,
+    RenameRequest,
     Resolved,
     RunRequest,
     RunResult,
@@ -262,6 +263,34 @@ def create_app(
             for summary in host.list_sessions()
             if summary.principal_id == principal.id
         ]
+
+    @router.patch("/sessions/{session_id}")
+    async def rename_session(
+        session_id: str,
+        body: RenameRequest,
+        principal: Principal = Depends(require),
+    ) -> Resolved:
+        # Rename a session the caller owns (030); non-owner / unknown -> 404.
+        _owned_or_404(session_id, principal)
+        try:
+            await host.set_session_title(session_id, body.title)
+        except (KeyError, RuntimeError):
+            raise HTTPException(status_code=404, detail="not found") from None
+        return Resolved(resolved=True)
+
+    @router.delete("/sessions/{session_id}")
+    async def delete_session(
+        session_id: str, principal: Principal = Depends(require)
+    ) -> Resolved:
+        # Delete a session the caller owns (030): cancel a live entry first, then
+        # remove the durable records. Non-owner / unknown -> 404.
+        _owned_or_404(session_id, principal)
+        entry = sessions.get(session_id)
+        if entry is not None:
+            entry.session.cancel()
+            entry.close.set()
+        host.delete_session(session_id)
+        return Resolved(resolved=True)
 
     @router.get("/sessions/{session_id}/history")
     async def session_history(

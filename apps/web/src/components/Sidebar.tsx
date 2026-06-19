@@ -1,17 +1,29 @@
+import { useState } from "react";
+
 import type { SessionSummary } from "../api/types";
 import { useTranslation } from "../i18n/i18n";
+import { groupSessions, type GroupKey } from "../lib/sessionGroups";
 
-// The sessions sidebar (FR-008): lists existing sessions with recency and a new-chat action;
-// an empty list shows a clear empty state.
+// The sessions sidebar (FR-008; 030): lists sessions by a human title (label, with a short-id
+// fallback), grouped Today / Yesterday / Earlier, each with a rename + delete affordance.
 interface Props {
   sessions: SessionSummary[];
   activeId: string | null;
   onOpen: (id: string) => void;
   onNew: () => void;
+  onRename?: (id: string, title: string) => void;
+  onDelete?: (id: string) => void;
 }
 
-export function Sidebar({ sessions, activeId, onOpen, onNew }: Props) {
+const GROUP_LABEL: Record<GroupKey, string> = {
+  today: "sidebar.today",
+  yesterday: "sidebar.yesterday",
+  earlier: "sidebar.earlier",
+};
+
+export function Sidebar({ sessions, activeId, onOpen, onNew, onRename, onDelete }: Props) {
   const { t } = useTranslation();
+  const groups = groupSessions(sessions);
   return (
     <>
       <div className="sidebar-title">LoopPlane</div>
@@ -21,21 +33,125 @@ export function Sidebar({ sessions, activeId, onOpen, onNew }: Props) {
       {sessions.length === 0 ? (
         <div className="sidebar-empty">{t("sidebar.empty")}</div>
       ) : (
-        <ul className="session-list" data-testid="sessions">
-          {sessions.map((session) => (
-            <li key={session.session_id} className="session-item">
-              <button
-                type="button"
-                aria-current={session.session_id === activeId}
-                onClick={() => onOpen(session.session_id)}
-              >
-                {session.session_id}
-              </button>
-              <span className="recency">{session.last_active_at}</span>
-            </li>
+        <div className="session-list" data-testid="sessions">
+          {groups.map((group) => (
+            <div key={group.key} className="session-group">
+              <div className="session-group-title">{t(GROUP_LABEL[group.key])}</div>
+              <ul>
+                {group.sessions.map((session) => (
+                  <SessionRow
+                    key={session.session_id}
+                    session={session}
+                    active={session.session_id === activeId}
+                    onOpen={onOpen}
+                    onRename={onRename}
+                    onDelete={onDelete}
+                  />
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </>
+  );
+}
+
+interface RowProps {
+  session: SessionSummary;
+  active: boolean;
+  onOpen: (id: string) => void;
+  onRename?: (id: string, title: string) => void;
+  onDelete?: (id: string) => void;
+}
+
+function SessionRow({ session, active, onOpen, onRename, onDelete }: RowProps) {
+  const { t } = useTranslation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState("");
+  const title = session.label ?? session.session_id.slice(0, 8);
+
+  // Enter saves; Escape or blur (click away) cancels.
+  function save() {
+    const value = draft.trim();
+    if (value) onRename?.(session.session_id, value);
+    setRenaming(false);
+  }
+
+  if (renaming) {
+    return (
+      <li className="session-item">
+        <input
+          className="session-rename"
+          aria-label="rename session"
+          autoFocus
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") save();
+            else if (event.key === "Escape") setRenaming(false);
+          }}
+          onBlur={() => setRenaming(false)}
+        />
+      </li>
+    );
+  }
+
+  return (
+    <li className="session-item">
+      <button
+        type="button"
+        className="session-open"
+        aria-current={active}
+        onClick={() => onOpen(session.session_id)}
+      >
+        {title}
+      </button>
+      {(onRename || onDelete) && (
+        <div className="session-menu">
+          <button
+            type="button"
+            aria-label="session menu"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            ⋯
+          </button>
+          {menuOpen && (
+            <ul className="menu-popup" role="menu">
+              {onRename && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraft(session.label ?? "");
+                      setRenaming(true);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    {t("sidebar.rename")}
+                  </button>
+                </li>
+              )}
+              {onDelete && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      if (window.confirm(t("sidebar.deleteConfirm"))) {
+                        onDelete(session.session_id);
+                      }
+                    }}
+                  >
+                    {t("sidebar.delete")}
+                  </button>
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
+    </li>
   );
 }

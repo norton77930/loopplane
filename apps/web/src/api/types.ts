@@ -66,7 +66,9 @@ export interface TerminatedPayload {
 
 export interface SessionSummary {
   session_id: string;
+  label: string | null;
   last_active_at: string;
+  created_at: string;
 }
 
 // 027 — read-only inspection views (metadata-only).

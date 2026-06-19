@@ -114,6 +114,28 @@ export function App({
     }
   }
 
+  // 030 — session management: rename + delete, then refresh the list.
+  async function renameSession(id: string, title: string) {
+    try {
+      await client.renameSession(id, title);
+      void refreshSessions();
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  async function deleteSession(id: string) {
+    try {
+      await client.deleteSession(id);
+    } catch (error) {
+      fail(error);
+      return;
+    }
+    // Deleting the open session returns the app to an empty/new state (FR-006).
+    if (id === activeId || id === sessionId.current) newChat();
+    void refreshSessions();
+  }
+
   function newChat() {
     sessionId.current = null;
     reading.current = false;
@@ -168,6 +190,8 @@ export function App({
           activeId={activeId}
           onOpen={(id) => void selectSession(id)}
           onNew={newChat}
+          onRename={(id, title) => void renameSession(id, title)}
+          onDelete={(id) => void deleteSession(id)}
         />
       }
       header={

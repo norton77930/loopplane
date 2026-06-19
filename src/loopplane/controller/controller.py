@@ -500,6 +500,22 @@ class RuntimeController:
         ]
         return sorted(summaries, key=lambda s: s.last_active_at, reverse=True)
 
+    async def set_session_title(self, session_id: str, title: str) -> None:
+        """Persist a new title (030): append a fresh session-meta when a
+        checkpoint store is configured, and update a loaded session's label."""
+        if self._checkpoint is not None:
+            await self._checkpoint.set_title(session_id, title)
+        session = self._sessions.get(session_id)
+        if session is not None:
+            session.label = title
+
+    def delete_session(self, session_id: str) -> None:
+        """Delete a session (030): drop the in-memory session and durably
+        remove its records when a checkpoint store is configured."""
+        self._sessions.pop(session_id, None)
+        if self._checkpoint is not None:
+            self._checkpoint.delete_session(session_id)
+
     def cancel(self, session_id: str) -> None:
         """Request cancellation: takes effect pre-turn and mid-stream and
         never raises to the caller (FR-003).

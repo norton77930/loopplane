@@ -40,3 +40,13 @@ class CheckpointStore(Protocol):
         """Identity + recency for every session, most-recent-first; a
         missing/never-written store yields an empty list (FR-085)."""
         ...
+
+    async def set_title(self, session_id: str, title: str) -> None:
+        """Update a session's title by appending a fresh session-meta record
+        (append-only); the latest title wins in ``list_sessions`` and on
+        rebuild. A no-op on an unknown session (030)."""
+        ...
+
+    def delete_session(self, session_id: str) -> None:
+        """Durably remove a session's records; idempotent on an unknown id (030)."""
+        ...

@@ -29,7 +29,10 @@ def test_list_and_history_are_metadata_only(tmp_path: Path) -> None:
     listing = client.get("/v1/sessions")
     assert listing.status_code == 200
     assert session_id in [item["session_id"] for item in listing.json()]
-    assert all(set(item) == {"session_id", "label"} for item in listing.json())
+    assert all(
+        set(item) == {"session_id", "label", "last_active_at", "created_at"}
+        for item in listing.json()
+    )
 
     history = client.get(f"/v1/sessions/{session_id}/history")
     assert history.status_code == 200
