@@ -14,7 +14,7 @@ from loopplane.model.boundary import (
     ToolDescriptor,
     TurnEnd,
 )
-from loopplane.model.capabilities import accepts_media
+from loopplane.model.capabilities import accepts_media, supports_structured_output
 from loopplane.model.content import (
     ContentBlock,
     ImageBlock,
@@ -60,4 +60,5 @@ __all__ = [
     "ToolResultBlock",
     "TurnEnd",
     "accepts_media",
+    "supports_structured_output",
 ]

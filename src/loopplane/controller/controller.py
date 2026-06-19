@@ -336,10 +336,18 @@ class RuntimeController:
         return hook
 
     async def drive(
-        self, session_id: str, input_blocks: Sequence[ContentBlock]
+        self,
+        session_id: str,
+        input_blocks: Sequence[ContentBlock],
+        output_schema: dict[str, object] | None = None,
     ) -> None:
         """Run one complete turn cycle; ends with exactly one run-terminated
         event (FR-001).
+
+        ``output_schema`` is an optional per-run JSON schema for structured output
+        (spec 045); ``None`` (the default) is byte-identical to pre-045. It is
+        stamped onto the run's ``RunContext`` and forwarded to the assembled
+        ``ModelRequest``.
         """
         session = self._require(session_id)
         if session.state == "terminated":
@@ -371,6 +379,7 @@ class RuntimeController:
             subagent_depth=self._subagent_depth,
             interactions=session.broker,
             plan_mode=PlanModeState(active=True) if self._plan_mode else None,
+            output_schema=output_schema,
         )
         try:
             await session.loop.run(input_blocks, context)

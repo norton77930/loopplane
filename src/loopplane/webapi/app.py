@@ -79,6 +79,9 @@ class ModelHost:
     label: str
     host: LoopPlaneHost
     accepts_media: bool = False
+    # 045 — whether the host's model supports native structured output; the catalog
+    # advertises it and the run endpoints reject a schema for a non-supporting model.
+    supports_structured_output: bool = False
 
 
 def create_app(
@@ -89,6 +92,7 @@ def create_app(
     models: Mapping[str, ModelHost] | None = None,
     uploads: UploadStore | None = None,
     default_accepts_media: bool = False,
+    default_supports_structured_output: bool = False,
     max_image_bytes: int = 5 * 1024 * 1024,
 ) -> FastAPI:
     """Build the web/API host app embedding ``host`` behind the auth boundary.
@@ -107,15 +111,16 @@ def create_app(
     sessions: dict[str, SessionEntry] = {}
     catalog = dict(models or {})
 
-    def _select(model: str | None) -> tuple[LoopPlaneHost, bool]:
+    def _select(model: str | None) -> tuple[LoopPlaneHost, bool, bool]:
         # Route to the chosen single-model host (028); one model per run. Returns
-        # the host and whether it accepts image input (036).
+        # the host, whether it accepts image input (036), and whether it supports
+        # native structured output (045).
         if not model:
-            return host, default_accepts_media
+            return host, default_accepts_media, default_supports_structured_output
         entry = catalog.get(model)
         if entry is None:
             raise HTTPException(status_code=400, detail="unknown model")
-        return entry.host, entry.accepts_media
+        return entry.host, entry.accepts_media, entry.supports_structured_output
 
     def _build_blocks(
         body: RunRequest, owner: str, accepts_media: bool
@@ -140,6 +145,22 @@ def create_app(
             raise HTTPException(status_code=413, detail="image too large") from exc
         except (UnknownUpload, MediaNotAccepted) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    def _check_output_schema(
+        output_schema: dict[str, object] | None, supports: bool
+    ) -> None:
+        # 045: validate a supplied structured-output schema before any run starts.
+        # A malformed (empty) schema or a non-supporting model is a clear 400, so a
+        # caller is never silently handed unconstrained output presented as structured.
+        if output_schema is None:
+            return
+        if not output_schema:
+            raise HTTPException(status_code=400, detail="malformed output_schema")
+        if not supports:
+            raise HTTPException(
+                status_code=400,
+                detail="model does not support structured output",
+            )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -197,10 +218,16 @@ def create_app(
     async def post_run(
         body: RunRequest, principal: Principal = Depends(require)
     ) -> RunResult:
-        chosen, accepts_media = _select(body.model)
+        chosen, accepts_media, supports_so = _select(body.model)
+        _check_output_schema(body.output_schema, supports_so)
         blocks = _build_blocks(body, principal.id, accepts_media)
         try:
-            outcome = await chosen.run(blocks, _discard, principal_id=principal.id)
+            outcome = await chosen.run(
+                blocks,
+                _discard,
+                principal_id=principal.id,
+                output_schema=body.output_schema,
+            )
         except RuntimeError as exc:
             raise HTTPException(
                 status_code=409, detail="a run is already active"
@@ -213,10 +240,11 @@ def create_app(
     async def post_run_events(
         body: RunRequest, principal: Principal = Depends(require)
     ) -> StreamingResponse:
-        chosen, accepts_media = _select(body.model)
+        chosen, accepts_media, supports_so = _select(body.model)
+        _check_output_schema(body.output_schema, supports_so)
         blocks = _build_blocks(body, principal.id, accepts_media)
         return StreamingResponse(
-            run_event_stream(chosen, blocks, principal.id),
+            run_event_stream(chosen, blocks, principal.id, body.output_schema),
             media_type="text/event-stream",
         )
 
@@ -226,11 +254,18 @@ def create_app(
     async def open_session(
         model: str | None = None, principal: Principal = Depends(require)
     ) -> OpenedSession:
-        chosen, accepts_media = _select(model)
+        chosen, accepts_media, supports_so = _select(model)
         ready = anyio.Event()
         box: dict[str, str] = {}
         app.state.session_tg.start_soon(
-            run_session, chosen, sessions, ready, box, principal.id, accepts_media
+            run_session,
+            chosen,
+            sessions,
+            ready,
+            box,
+            principal.id,
+            accepts_media,
+            supports_so,
         )
         await ready.wait()
         if box.get("error"):
@@ -257,8 +292,9 @@ def create_app(
         # answered out-of-band by a concurrent request; a client that prefers to
         # observe progress incrementally reads the session events stream (FR-007).
         entry = _require(session_id, principal)
+        _check_output_schema(body.output_schema, entry.supports_structured_output)
         blocks = _build_blocks(body, principal.id, entry.accepts_media)
-        outcome = await entry.session.submit(blocks)
+        outcome = await entry.session.submit(blocks, output_schema=body.output_schema)
         return RunResult.from_outcome(outcome)
 
     @router.post("/sessions/{session_id}/approvals/{request_id}")
@@ -399,7 +435,12 @@ def create_app(
         principal: Principal = Depends(require),
     ) -> list[ModelInfo]:
         return [
-            ModelInfo(id=mid, label=entry.label, accepts_media=entry.accepts_media)
+            ModelInfo(
+                id=mid,
+                label=entry.label,
+                accepts_media=entry.accepts_media,
+                supports_structured_output=entry.supports_structured_output,
+            )
             for mid, entry in catalog.items()
         ]
 

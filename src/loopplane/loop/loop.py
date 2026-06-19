@@ -141,7 +141,7 @@ class AgentLoop:
             retried_after_overflow = False
             while True:
                 before = self._history.snapshot()
-                request = self._assemble(prompt)
+                request = self._assemble(prompt, context.output_schema)
                 # Proactive compaction (spec 041) happens inside the synchronous
                 # `assemble`; if a summarizer is configured and a compaction just
                 # occurred, augment the fresh marker with a model summary and
@@ -152,7 +152,7 @@ class AgentLoop:
                     and self._assembler.take_compacted()
                 ):
                     await self._summarize_compaction(before)
-                    request = self._assemble(prompt)
+                    request = self._assemble(prompt, context.output_schema)
                 try:
                     outcome = await self._stream_model_turn(
                         request, turn_index, context
@@ -225,7 +225,9 @@ class AgentLoop:
             await self._history.append("user", results)
             turn_index += 1
 
-    def _assemble(self, prompt: str) -> ModelRequest:
+    def _assemble(
+        self, prompt: str, output_schema: dict[str, object] | None = None
+    ) -> ModelRequest:
         tools = self._gateway.descriptors()
         if self._assembler is None:
             return ModelRequest(
@@ -234,12 +236,14 @@ class AgentLoop:
                     for entry in self._history.snapshot()
                 ],
                 tools=tools,
+                output_schema=output_schema,
             )
         return self._assembler.assemble(
             history=self._history,
             tools=tools,
             capacity=self._model.context_capacity(),
             prompt=prompt,
+            output_schema=output_schema,
         )
 
     async def _summarize_compaction(self, before: tuple[HistoryEntry, ...]) -> None:

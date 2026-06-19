@@ -204,7 +204,10 @@ def test_catalog_advertises_accepts_media(tmp_path: Path) -> None:
     by_id = {m["id"]: m for m in listing.json()}
     assert by_id["vision"]["accepts_media"] is True
     assert by_id["text"]["accepts_media"] is False
-    assert all({"id", "label", "accepts_media"} == set(m) for m in listing.json())
+    assert all(
+        {"id", "label", "accepts_media", "supports_structured_output"} == set(m)
+        for m in listing.json()
+    )
 
 
 def test_image_to_text_only_model_is_rejected(tmp_path: Path) -> None:

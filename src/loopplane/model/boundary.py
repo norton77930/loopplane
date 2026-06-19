@@ -54,6 +54,11 @@ class ModelRequest(_Shape):
     context: list[Message]
     tools: list[ToolDescriptor] = []
     limits: GenerationLimits = GenerationLimits()
+    # Optional JSON schema constraining the model's response (spec 045). Default
+    # None = unconstrained (byte-identical to pre-045). An adapter that supports
+    # native structured output maps this to the provider's request; others ignore
+    # it (the web/API layer rejects a schema for a non-supporting model upfront).
+    output_schema: dict[str, object] | None = None
 
 
 class TextIncrement(_Shape):

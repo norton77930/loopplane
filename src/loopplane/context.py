@@ -48,3 +48,8 @@ class RunContext:
     # (the plan-mode policy is then a no-op). Shared by reference with the decider and
     # the ``exit_plan_mode`` tool, which both receive this same per-run context.
     plan_mode: PlanModeState | None = None
+    # Optional per-run JSON schema for structured output (spec 045); ``None`` means
+    # unconstrained. Set only in ``RuntimeController.drive()`` (the single RunContext
+    # construction site) from the run request, then forwarded to the assembled
+    # ``ModelRequest``. Per-run, never process-global.
+    output_schema: dict[str, object] | None = None

@@ -46,6 +46,7 @@ model for offline tests.
 - `ScriptedFailure` — a scripted failure injection.
 - `ScriptedOverflow` — a scripted context-overflow injection.
 - `accepts_media` — whether a model accepts image input (duck-typed probe).
+- `supports_structured_output` — whether a model supports native structured output (duck-typed probe).
 
 ### `loopplane.events`
 

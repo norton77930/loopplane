@@ -43,3 +43,7 @@ class OpenAIConfig:
     # models are vision-capable, so the default is True; set False for a text-only
     # model so the web/API layer degrades gracefully.
     accepts_media: bool = True
+    # Whether this model supports native structured output (spec 045). The OpenAI
+    # chat-completions API maps a supplied schema to `response_format` json_schema,
+    # so the default is True; set False so the web/API layer degrades gracefully.
+    supports_structured_output: bool = True

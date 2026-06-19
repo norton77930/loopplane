@@ -51,6 +51,7 @@ def openrouter_model(
     max_output_tokens: int | None = None,
     client: Any = None,
     accepts_media: bool = True,
+    supports_structured_output: bool = True,
 ) -> OpenAIModel:
     """Build an :class:`OpenAIModel` pointed at OpenRouter.
 
@@ -70,6 +71,7 @@ def openrouter_model(
             client=client,
             client_factory=_base_url_client_factory(OPENROUTER_BASE_URL),
             accepts_media=accepts_media,
+            supports_structured_output=supports_structured_output,
         )
     )
 
@@ -82,6 +84,7 @@ def ollama_model(
     max_output_tokens: int | None = None,
     client: Any = None,
     accepts_media: bool = False,
+    supports_structured_output: bool = False,
 ) -> OpenAIModel:
     """Build an :class:`OpenAIModel` pointed at a local Ollama OpenAI-compatible
     endpoint. Ollama ignores the API key, so a placeholder satisfies the SDK
@@ -100,6 +103,7 @@ def ollama_model(
             client=client,
             client_factory=_base_url_client_factory(base_url),
             accepts_media=accepts_media,
+            supports_structured_output=supports_structured_output,
         )
     )
 

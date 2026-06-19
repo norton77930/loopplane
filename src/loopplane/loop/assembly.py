@@ -75,6 +75,7 @@ class PromptAssembler:
         tools: Sequence[ToolDescriptor],
         capacity: int,
         prompt: str,
+        output_schema: dict[str, object] | None = None,
     ) -> ModelRequest:
         fresh = [
             text
@@ -85,7 +86,7 @@ class PromptAssembler:
         if self._needs_reestablish:
             self._needs_reestablish = False
             re_established = self._collect_reestablished()
-        request = self._compose(history, tools, re_established + fresh)
+        request = self._compose(history, tools, re_established + fresh, output_schema)
 
         # Proactive compaction: when the assembled context approaches the
         # model's (effective) capacity, compact and rebuild once (FR-008). The
@@ -99,7 +100,9 @@ class PromptAssembler:
             # already in history and stands if no summarizer is configured.
             self._just_compacted = True
             re_established = self._collect_reestablished()
-            request = self._compose(history, tools, re_established + fresh)
+            request = self._compose(
+                history, tools, re_established + fresh, output_schema
+            )
         return request
 
     def _collect_reestablished(self) -> list[str]:
@@ -112,6 +115,7 @@ class PromptAssembler:
         history: SessionHistory,
         tools: Sequence[ToolDescriptor],
         sections: Sequence[str],
+        output_schema: dict[str, object] | None = None,
     ) -> ModelRequest:
         messages: list[Message] = []
         if sections:
@@ -126,7 +130,9 @@ class PromptAssembler:
                 self._apply_replacement(block, previews) for block in entry.blocks
             ]
             messages.append(Message(role=entry.role, blocks=blocks))
-        return ModelRequest(context=messages, tools=list(tools))
+        return ModelRequest(
+            context=messages, tools=list(tools), output_schema=output_schema
+        )
 
     @staticmethod
     def _apply_replacement(

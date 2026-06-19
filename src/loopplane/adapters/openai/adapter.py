@@ -60,6 +60,10 @@ class OpenAIModel:
         """Whether this model accepts image input (spec 036; ADR 0001 D5)."""
         return self._config.accepts_media
 
+    def supports_structured_output(self) -> bool:
+        """Whether this model supports native structured output (spec 045)."""
+        return self._config.supports_structured_output
+
     async def stream_turn(self, request: ModelRequest) -> AsyncIterator[ModelIncrement]:
         kwargs: dict[str, Any] = {
             "model": self._config.model,
@@ -73,6 +77,18 @@ class OpenAIModel:
         max_output = request.limits.max_output_tokens or self._config.max_output_tokens
         if max_output:
             kwargs["max_tokens"] = max_output
+        if request.output_schema is not None:
+            # Native structured output (spec 045): constrain the response to the
+            # supplied JSON schema. Omitted entirely when no schema is set, so the
+            # request is byte-identical to pre-045.
+            kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "response",
+                    "schema": request.output_schema,
+                    "strict": True,
+                },
+            }
 
         try:
             stream = await self._client.chat.completions.create(**kwargs)

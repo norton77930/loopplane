@@ -114,9 +114,12 @@ class LoopPlaneHost:
         on_approval: OnApproval | None = None,
         working_scope: Path | None = None,
         principal_id: str | None = None,
+        output_schema: dict[str, object] | None = None,
     ) -> RunOutcome:
         """Start a run and return its outcome (FR-003). ``on_event`` receives
-        every normalized event in order (FR-004)."""
+        every normalized event in order (FR-004). ``output_schema`` is an optional
+        per-run JSON schema for structured output (spec 045; default None =
+        unconstrained)."""
 
         self._enter_run()
         controller = self._assembled.controller
@@ -127,7 +130,9 @@ class LoopPlaneHost:
         )
         self._bind(sink, controller, session_id, on_event, on_approval)
         try:
-            await controller.drive(session_id, _coerce_blocks(prompt))
+            await controller.drive(
+                session_id, _coerce_blocks(prompt), output_schema=output_schema
+            )
             outcome = _build_outcome(controller, session_id, sink)
         finally:
             sink.unbind()
@@ -271,8 +276,12 @@ class Session:
     def session_id(self) -> str:
         return self._session_id
 
-    async def submit(self, prompt: Prompt) -> RunOutcome:
-        await self._controller.drive(self._session_id, _coerce_blocks(prompt))
+    async def submit(
+        self, prompt: Prompt, output_schema: dict[str, object] | None = None
+    ) -> RunOutcome:
+        await self._controller.drive(
+            self._session_id, _coerce_blocks(prompt), output_schema=output_schema
+        )
         self._outcome = _build_outcome(self._controller, self._session_id, self._sink)
         return self._outcome
 

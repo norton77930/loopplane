@@ -33,6 +33,7 @@ class SessionEntry:
     close: anyio.Event
     owner: str
     accepts_media: bool = False
+    supports_structured_output: bool = False  # 045 — for the submit degradation check
 
 
 async def run_session(
@@ -42,6 +43,7 @@ async def run_session(
     box: dict[str, str],
     owner: str,
     accepts_media: bool = False,
+    supports_structured_output: bool = False,
 ) -> None:
     """Hold a ``host.session`` open until closed; register its handle + SSE
     channel under its owning principal. On a sequential-host conflict, signal the
@@ -60,7 +62,12 @@ async def run_session(
         async with host.session(sink, principal_id=owner) as session:
             box["sid"] = session.session_id
             sessions[session.session_id] = SessionEntry(
-                session, receive, close, owner, accepts_media
+                session,
+                receive,
+                close,
+                owner,
+                accepts_media,
+                supports_structured_output,
             )
             ready.set()
             await close.wait()

@@ -59,6 +59,9 @@ class RunRequest(BaseModel):
     uploads: list[
         UploadRef
     ] = []  # 036 — optional upload refs; image uploads become leading ImageBlocks
+    # 045 — optional JSON schema constraining the response (structured output);
+    # rejected upfront if the selected model does not support it.
+    output_schema: dict[str, object] | None = None
 
 
 class RenameRequest(BaseModel):
@@ -229,6 +232,8 @@ class ModelInfo(BaseModel):
     id: str
     label: str
     accepts_media: bool = False  # 036 — whether the model accepts image input
+    # 045 — whether the model supports native structured output
+    supports_structured_output: bool = False
 
 
 class UploadResult(BaseModel):

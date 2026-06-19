@@ -36,3 +36,26 @@ def accepts_media(model: object) -> bool:
     if isinstance(model, MediaCapableModel):
         return bool(model.accepts_media())
     return False
+
+
+@runtime_checkable
+class StructuredOutputModel(Protocol):
+    """A model advertising native structured-output support (spec 045)."""
+
+    def supports_structured_output(self) -> bool: ...
+
+
+def supports_structured_output(model: object) -> bool:
+    """Whether ``model`` supports native structured output (a schema-constrained
+    response; spec 045).
+
+    Returns ``model.supports_structured_output()`` when the model advertises the
+    capability; otherwise a conservative ``False`` (a non-advertising model is
+    treated as not supporting it). Pure; no I/O. Capability *negotiation* (rejecting
+    a schema sent to a non-supporting model) lives at the model-selecting boundary —
+    the web/API layer — not in the Agent Loop (Constitution IV).
+    """
+
+    if isinstance(model, StructuredOutputModel):
+        return bool(model.supports_structured_output())
+    return False
