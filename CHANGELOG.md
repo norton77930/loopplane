@@ -111,5 +111,15 @@ additive layers (units 001-013), brought to release quality by unit 014.
   commands out of scope); and a **client-side cost estimate** (the unit-026 usage × a bundled price
   table for the unit-028 model, clearly labeled an estimate, graceful when no price). Each degrades
   gracefully; the backend is untouched. With 029, the web-UI extension (025–029) is complete.
+- **030** Web session management (`loopplane.checkpoint` / `loopplane.controller` / `loopplane.host` /
+  `loopplane.webapi` + `apps/web`) — additive, **no ADR**, the first unit of the product-polish sprint
+  (030–032). Sessions can be **renamed** and **deleted**, and the sidebar shows **titles** (not raw
+  ids) grouped by recency. `CheckpointStore` gains `set_title` (append a fresh session-meta; the latest
+  title wins in the listing and on rebuild) and `delete_session` (real removal), on both the file and
+  SQLite backends; `RuntimeController` / `LoopPlaneHost` delegate (working with or without a checkpoint
+  store). The web/API host adds owner-scoped `PATCH` / `DELETE /v1/sessions/{id}` (a non-owner → 404),
+  and `SessionSummaryView` gains `last_active_at` / `created_at`. The frontend sidebar renders titles +
+  Today / Yesterday / Earlier groups with a per-session rename/delete menu, and deleting the open
+  session returns to an empty state. The Tool Gateway, Event Bus, and content model are unchanged.
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0
