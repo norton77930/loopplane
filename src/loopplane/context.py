@@ -14,6 +14,7 @@ import anyio
 if TYPE_CHECKING:
     from loopplane.approval.interactions import InteractionBroker
     from loopplane.tools.background import BackgroundTask
+    from loopplane.tools.scheduling import Schedule
 
 
 @dataclass
@@ -60,6 +61,37 @@ BackgroundSupervisorFactory = Callable[
 ]
 
 
+class ScheduleSupervisor(Protocol):
+    """The per-run scheduling supervisor interface (spec 049).
+
+    The concrete ``ScheduleSupervisor`` (``loopplane.tools.scheduling``) implements it
+    structurally; declared here so the controller and ``RunContext`` can name it WITHOUT
+    importing the tools layer (Constitution V). The scope owner (the Dispatcher's task
+    group / the one-shot ``host.run``) builds a concrete supervisor and stamps it on the
+    run's context.
+    """
+
+    def create(
+        self,
+        instruction: str,
+        *,
+        delay_seconds: float | None,
+        interval_seconds: float | None,
+        allowed_tools: tuple[str, ...] | None,
+        child_depth: int,
+        working_scope: Path,
+    ) -> str | None: ...
+    def get(self, schedule_id: str) -> Schedule | None: ...
+    def list_schedules(self) -> list[Schedule]: ...
+    def cancel(self, schedule_id: str) -> bool: ...
+    def cancel_all(self) -> None: ...
+
+
+ScheduleSupervisorFactory = Callable[
+    ["anyio.abc.TaskGroup"], "ScheduleSupervisor | None"
+]
+
+
 @dataclass
 class RunContext:
     session_id: str
@@ -92,3 +124,8 @@ class RunContext:
     # scope owner (the Dispatcher's task group / the one-shot ``host.run``) and set only
     # in ``RuntimeController.drive()``; per-run.
     background_tasks: BackgroundSupervisor | None = None
+    # Per-run scheduling supervisor (spec 049). ``None`` means scheduling is off (the
+    # tools return a normalized "not enabled" error). Built by the scope owner (the
+    # Dispatcher's task group / the one-shot ``host.run``) and set only in
+    # ``RuntimeController.drive()``; per-run.
+    schedules: ScheduleSupervisor | None = None

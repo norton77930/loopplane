@@ -34,6 +34,8 @@ from loopplane.context import (
     BackgroundSupervisorFactory,
     PlanModeState,
     RunContext,
+    ScheduleSupervisor,
+    ScheduleSupervisorFactory,
 )
 from loopplane.events.emitter import EventEmitter, EventSink
 from loopplane.events.envelope import (
@@ -129,6 +131,8 @@ class RuntimeController:
         subagent_depth: int = 0,
         background_supervisor_factory: BackgroundSupervisorFactory | None = None,
         max_background_tasks: int = 0,
+        schedule_supervisor_factory: ScheduleSupervisorFactory | None = None,
+        max_schedules: int = 0,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -146,6 +150,11 @@ class RuntimeController:
         # byte-identical. The controller stays tool-agnostic (Constitution V).
         self._background_supervisor_factory = background_supervisor_factory
         self._max_background_tasks = max_background_tasks
+        # Agent scheduling (spec 049): an injected supervisor factory + count cap, used
+        # to build a per-run schedule supervisor on demand; off by default (None / 0) →
+        # byte-identical. The controller stays tool-agnostic (Constitution V).
+        self._schedule_supervisor_factory = schedule_supervisor_factory
+        self._max_schedules = max_schedules
         # Optional lifecycle hooks (feature 015); absent by default (FR-011).
         # process_setup fires at most once per controller lifetime.
         self._hooks = hooks
@@ -369,12 +378,30 @@ class RuntimeController:
             return None
         return self._background_supervisor_factory(task_group)
 
+    @property
+    def max_schedules(self) -> int:
+        return self._max_schedules
+
+    def make_schedule_supervisor(
+        self, task_group: anyio.abc.TaskGroup
+    ) -> ScheduleSupervisor | None:
+        """Build a per-run schedule supervisor bound to ``task_group`` (spec 049), or
+        ``None`` when scheduling is disabled. The scope owner (the Dispatcher / the
+        one-shot ``host.run``) calls this with a task group it owns and passes the
+        result to ``drive``; the concrete supervisor comes from the injected factory,
+        so the controller stays tool-agnostic (Constitution V)."""
+
+        if self._max_schedules < 1 or self._schedule_supervisor_factory is None:
+            return None
+        return self._schedule_supervisor_factory(task_group)
+
     async def drive(
         self,
         session_id: str,
         input_blocks: Sequence[ContentBlock],
         output_schema: dict[str, object] | None = None,
         background_supervisor: BackgroundSupervisor | None = None,
+        schedule_supervisor: ScheduleSupervisor | None = None,
     ) -> None:
         """Run one complete turn cycle; ends with exactly one run-terminated
         event (FR-001).
@@ -416,6 +443,7 @@ class RuntimeController:
             plan_mode=PlanModeState(active=True) if self._plan_mode else None,
             output_schema=output_schema,
             background_tasks=background_supervisor,
+            schedules=schedule_supervisor,
         )
         try:
             await session.loop.run(input_blocks, context)

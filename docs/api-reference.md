@@ -148,6 +148,8 @@ The internal, web, and subagent-spawn tool adapters.
 - `SpawnSubagentAdapter` — the adapter for the model-driven one-shot `spawn_subagent` tool (depth-capped).
 - `BackgroundTasksAdapter` — the adapter for the background-task tools (create/get/list/stop/output; spec 048).
 - `BackgroundTaskSupervisor` — the per-run supervisor that owns + tracks background tasks (spec 048).
+- `SchedulingToolsAdapter` — the adapter for the scheduling tools (create/get/list/cancel; spec 049).
+- `ScheduleSupervisor` — the per-run supervisor that owns + fires scheduled child runs (spec 049).
 
 ### `loopplane.adapters.mcp`
 

@@ -132,19 +132,27 @@ class LoopPlaneHost:
         )
         self._bind(sink, controller, session_id, on_event, on_approval)
         try:
-            if controller.max_background_tasks >= 1:
-                # Background tasks (spec 048; ADR 0002): own a task group for this run,
-                # so task_create can launch child runs; cancel any still pending at end.
+            if controller.max_background_tasks >= 1 or controller.max_schedules >= 1:
+                # Background tasks (048) + schedules (049): own a task group for this
+                # run so the tools can launch child runs; cancel any still-pending task
+                # and any active schedule timer at end (an infinite interval timer would
+                # otherwise keep the task group from exiting).
                 async with anyio.create_task_group() as task_group:
                     supervisor = controller.make_background_supervisor(task_group)
+                    schedule_supervisor = controller.make_schedule_supervisor(
+                        task_group
+                    )
                     await controller.drive(
                         session_id,
                         _coerce_blocks(prompt),
                         output_schema=output_schema,
                         background_supervisor=supervisor,
+                        schedule_supervisor=schedule_supervisor,
                     )
                     if supervisor is not None:
                         supervisor.cancel_all()
+                    if schedule_supervisor is not None:
+                        schedule_supervisor.cancel_all()
             else:
                 await controller.drive(
                     session_id, _coerce_blocks(prompt), output_schema=output_schema

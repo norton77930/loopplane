@@ -21,7 +21,7 @@ from loopplane.events.envelope import RuntimeEvent
 from loopplane.model.content import ContentBlock
 
 if TYPE_CHECKING:
-    from loopplane.context import BackgroundSupervisor
+    from loopplane.context import BackgroundSupervisor, ScheduleSupervisor
 
 _INCREMENT_TYPES = ("assistant-output-increment", "assistant-reasoning-increment")
 
@@ -94,6 +94,7 @@ class Dispatcher:
         self._inbound = inbound
         self._driving = False
         self._supervisor: BackgroundSupervisor | None = None
+        self._schedule_supervisor: ScheduleSupervisor | None = None
 
     async def run(self) -> None:
         """Drive the round-trip until the inbound channel closes. On close
@@ -105,6 +106,9 @@ class Dispatcher:
             # Background tasks (spec 048; ADR 0002): build a supervisor from this
             # session's task group when enabled; task_create starts child runs there.
             self._supervisor = self._controller.make_background_supervisor(task_group)
+            self._schedule_supervisor = self._controller.make_schedule_supervisor(
+                task_group
+            )
             try:
                 async for request in self._inbound:
                     await self._handle(request, task_group)
@@ -113,6 +117,8 @@ class Dispatcher:
                     self._controller.cancel(self._session_id)
                 if self._supervisor is not None:
                     self._supervisor.cancel_all()
+                if self._schedule_supervisor is not None:
+                    self._schedule_supervisor.cancel_all()
                 self._controller.on_reviewer_disconnect(self._session_id)
 
     async def _handle(
@@ -163,7 +169,10 @@ class Dispatcher:
     async def _drive_one(self, blocks: Sequence[ContentBlock]) -> None:
         try:
             await self._controller.drive(
-                self._session_id, blocks, background_supervisor=self._supervisor
+                self._session_id,
+                blocks,
+                background_supervisor=self._supervisor,
+                schedule_supervisor=self._schedule_supervisor,
             )
         finally:
             self._driving = False

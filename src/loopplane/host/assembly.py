@@ -160,6 +160,15 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         gateway.register_adapter(
             BackgroundTasksAdapter(max_subagent_depth=config.max_subagent_depth)
         )
+    # Opt-in agent scheduling (spec 049): register the four scheduling tools only when a
+    # non-zero count cap is set (0 → no tools, byte-identical). The supervisor is built
+    # per-run by the scope owner; the tools read it via RunContext.schedules.
+    if config.max_schedules >= 1:
+        from loopplane.tools.scheduling import SchedulingToolsAdapter
+
+        gateway.register_adapter(
+            SchedulingToolsAdapter(max_subagent_depth=config.max_subagent_depth)
+        )
 
     sink = RunSink()
     if config.observability:
@@ -189,6 +198,15 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
             _make_child_host_builder(config), config.max_background_tasks
         )
         controller_kwargs["max_background_tasks"] = config.max_background_tasks
+    if config.max_schedules >= 1:
+        from loopplane.tools.scheduling import make_schedule_supervisor_factory
+
+        controller_kwargs["schedule_supervisor_factory"] = (
+            make_schedule_supervisor_factory(
+                _make_child_host_builder(config), config.max_schedules
+            )
+        )
+        controller_kwargs["max_schedules"] = config.max_schedules
 
     controller = RuntimeController(
         model=config.model,

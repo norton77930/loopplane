@@ -147,6 +147,12 @@ class RuntimeConfig:
     # child run is subject to), the five background-task tools are registered and a run
     # may have up to this many concurrent tasks. A bare integer; carries no secret.
     max_background_tasks: int = 0
+    # Opt-in agent scheduling (spec 049): the per-run schedule count cap. Off by default
+    # (`0` → NO scheduling tools registered, byte-identical). When a host sets it >= 1
+    # (with `max_subagent_depth` >= 1, the depth cap a scheduled child obeys), the four
+    # scheduling tools are registered and a run may have up to this many active
+    # schedules. A bare integer; carries no secret.
+    max_schedules: int = 0
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -178,6 +184,7 @@ class RuntimeConfig:
             compaction_summarizer=data.get("compaction_summarizer"),
             max_subagent_depth=int(data.get("max_subagent_depth", 0)),
             max_background_tasks=int(data.get("max_background_tasks", 0)),
+            max_schedules=int(data.get("max_schedules", 0)),
         )
 
 
@@ -319,6 +326,9 @@ def validate_config(config: RuntimeConfig) -> None:
 
     if config.max_background_tasks < 0:
         raise ConfigError("max_background_tasks must be a non-negative integer")
+
+    if config.max_schedules < 0:
+        raise ConfigError("max_schedules must be a non-negative integer")
 
 
 def approval_effects(
