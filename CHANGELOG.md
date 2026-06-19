@@ -268,7 +268,10 @@ unchanged (no `SCHEMA_VERSION` bump).
 ## [0.1.0] - 2026-06-18
 
 The initial LoopPlane line: a spec-first, embeddable agent-harness runtime and its
-additive layers (units 001-013), brought to release quality by unit 014.
+additive layers (units 001-013), the hook and plugin extensibility (015-016), the
+CLI / web / desktop hosts (017-019), real model providers, storage, auth, and
+packaging (020-024), and the web-UI build-out (025-032) — all brought to release
+quality by unit 014.
 
 ### Added
 
@@ -303,6 +306,34 @@ additive layers (units 001-013), brought to release quality by unit 014.
   PEP 561 `py.typed` marker, the public API reference, the getting-started guide,
   docs and examples indexes, this changelog, the release-readiness checklist, and
   CI build verification.
+- **015** Lifecycle hook system (`loopplane.hooks`) — a hook registry plus eleven
+  lifecycle points (pre/post tool use, prompt submit, session start/end, subagent
+  start/stop, file changed, model stop) that let host and plugin code observe — and, at
+  the two gating points (before-tool, prompt-submit), gate or modify — agent behavior
+  without forking the runtime. In-process; honors the single Tool Gateway (V) and
+  Runtime Event Bus (VI); fail-safe (a raising or unrecognized hook denies, never
+  silently allows). Zero default behavior when no hook is registered.
+- **016** Plugin system (`loopplane.plugins`) — a public-safe `plugin.json` manifest
+  that bundles skills + namespaced MCP servers (`<plugin>__<server>`) + hooks into a
+  discoverable, host-loadable unit; an enable-list gates loading (default none → zero
+  default behavior). Loads through the existing skills, toolkit (008), and hook (015)
+  seams with no new runtime coupling; a malformed manifest is skipped whole while the
+  others still load.
+- **017** CLI host (`loopplane.cli`) — a thin terminal host over the Host Application
+  Interface (`loopplane.host`): an interactive REPL/chat loop, a one-shot `run` command,
+  session list/resume when durable storage is configured, normalized-event rendering (no
+  raw tracebacks), and an optional credential-gated real model behind a seam. Executes no
+  tool itself (V) and consumes the normalized event stream (VI); adds a `loopplane`
+  console entry point. Runtime core unchanged.
+- **018** Web frontend (`apps/web`) — a from-scratch single-page UI over the unit-011
+  web/API host (REST + SSE): live streamed chat, an event/run timeline, approval and
+  question dialogs, and a session list. Written fresh with no private legacy UI (VII);
+  the JS toolchain is isolated under `apps/` with its own CI gate (React + Vite +
+  Vitest). No change to the Python runtime.
+- **019** Desktop GUI (`apps/desktop`) — a local Electron desktop shell that embeds the
+  unit-018 frontend and drives a local unit-012 studio sidecar over a bridge (no network
+  server); approval/question round-trips go over the bridge; credential-free by default.
+  Reuses unit-018 unchanged — launch and shell only; the runtime is unchanged.
 - **020** Model-provider adapters (`loopplane.adapters.anthropic`,
   `loopplane.adapters.openai`) — real Anthropic and OpenAI adapters implementing the
   model boundary, each behind its own optional extra (`anthropic`, `openai`), with
