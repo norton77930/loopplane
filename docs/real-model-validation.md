@@ -73,3 +73,16 @@ Run one, e.g.:
 ```powershell
 $env:GEMINI_API_KEY="..."; $env:LOOPPLANE_GEMINI_MODEL="gemini-2.5-flash"; uv run pytest tests/live -q
 ```
+
+### Prompt-cache savings (opt-in observation, spec 040)
+
+Prompt caching is observable through the existing usage — no extra harness. The
+Anthropic adapter attaches explicit cache breakpoints to the stable request
+prefix by default (`AnthropicConfig.prompt_caching`, default `True`); OpenAI /
+OpenRouter / Ollama cache automatically with no request change. To watch a real
+cache hit, run a provider's opt-in live turn twice with the **same** large
+leading prefix (tools + first turn ≥ the model's ~4096-token minimum on Opus
+4.x) and inspect `TurnEnd.usage.cached_tokens` — it is `0` on the first
+(cache-writing) turn and rises on the second (cache-reading) turn. This is an
+opt-in observation only; the default gates remain fully offline and assert
+breakpoint placement / byte-identity, not live savings.

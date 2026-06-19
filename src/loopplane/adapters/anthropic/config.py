@@ -44,3 +44,9 @@ class AnthropicConfig:
     # flagship families are vision-capable, so the default is True; set False for a
     # text-only model so the web/API layer degrades gracefully.
     accepts_media: bool = True
+    # Whether to attach explicit Anthropic prompt-cache breakpoints to the stable
+    # request prefix (spec 040). When True (the default), repeated turns re-read
+    # the cached prefix at ~0.1x instead of full price; when False, the assembled
+    # request is byte-identical to the pre-caching request. Caching is observed
+    # through the existing TokenUsage.cached_tokens (cache_read_input_tokens).
+    prompt_caching: bool = True

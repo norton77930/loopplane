@@ -15,6 +15,7 @@ from loopplane.adapters._model_errors import ModelProviderError, error_text
 from loopplane.adapters.anthropic.config import AnthropicConfig
 from loopplane.adapters.anthropic.mapping import (
     AnthropicStreamDecoder,
+    apply_prompt_caching,
     build_messages,
     build_tools,
 )
@@ -55,14 +56,21 @@ class AnthropicModel:
         return self._config.accepts_media
 
     async def stream_turn(self, request: ModelRequest) -> AsyncIterator[ModelIncrement]:
+        messages = build_messages(request.context)
+        tools = build_tools(request.tools)
+        if self._config.prompt_caching:
+            # Attach cache breakpoints to the stable prefix only (spec 040). When
+            # disabled, messages/tools stay byte-identical to the pre-caching
+            # request.
+            messages, tools = apply_prompt_caching(messages, tools)
+
         kwargs: dict[str, Any] = {
             "model": self._config.model,
             "max_tokens": request.limits.max_output_tokens
             or self._config.max_output_tokens,
-            "messages": build_messages(request.context),
+            "messages": messages,
             "stream": True,
         }
-        tools = build_tools(request.tools)
         if tools:
             kwargs["tools"] = tools
 

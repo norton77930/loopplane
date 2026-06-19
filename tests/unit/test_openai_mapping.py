@@ -111,6 +111,29 @@ def test_decoder_text_and_usage() -> None:
     assert end.usage.reasoning_tokens == 2
 
 
+def test_decoder_reports_cached_tokens_from_usage_chunk() -> None:
+    # Spec 040: OpenAI prompt caching is automatic/server-side — the adapter
+    # sends no cache parameter — and the cached_tokens it reports already flows
+    # into TokenUsage.cached_tokens via the existing stream decoder. (OpenRouter
+    # and Ollama inherit this through the reused OpenAIModel + mapping, unit 035.)
+    ns = SimpleNamespace
+    decoder = OpenAIStreamDecoder()
+    decoder.feed(
+        ns(
+            usage=ns(
+                prompt_tokens=100,
+                completion_tokens=10,
+                prompt_tokens_details=ns(cached_tokens=80),
+                completion_tokens_details=None,
+            ),
+            choices=[ns(delta=ns(content=None, tool_calls=None), finish_reason="stop")],
+        )
+    )
+    end = decoder.finish()[-1]
+    assert isinstance(end, TurnEnd)
+    assert end.usage.cached_tokens == 80
+
+
 def test_decoder_tool_call_accumulates_arguments() -> None:
     ns = SimpleNamespace
     decoder = OpenAIStreamDecoder()

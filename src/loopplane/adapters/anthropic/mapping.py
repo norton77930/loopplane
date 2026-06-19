@@ -111,6 +111,55 @@ def _tool_result(block: ToolResultBlock) -> dict[str, Any]:
     return result
 
 
+_CACHE_CONTROL: dict[str, Any] = {"type": "ephemeral"}
+
+
+def apply_prompt_caching(
+    messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Attach Anthropic cache breakpoints to the request's STABLE prefix (040).
+
+    Returns new ``messages``/``tools`` lists with ``cache_control: {"type":
+    "ephemeral"}`` attached to the last tool definition (the end of the stable
+    tools segment, which renders first) and to the last content block of the
+    first message (a stable leading-history prefix) — but never the rolling last
+    message. The render order is ``tools -> system -> messages`` and the cache is
+    a prefix match, so a breakpoint only pays off on a *stable* boundary; this
+    emits at most two markers (well under the Anthropic 4-breakpoint maximum).
+    Inputs are not mutated — only the dicts that are marked are copied.
+    """
+
+    cached_tools = _mark_last_tool(tools)
+    cached_messages = _mark_stable_message_prefix(messages)
+    return cached_messages, cached_tools
+
+
+def _mark_last_tool(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not tools:
+        return tools
+    marked = list(tools)
+    marked[-1] = {**marked[-1], "cache_control": _CACHE_CONTROL}
+    return marked
+
+
+def _mark_stable_message_prefix(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    # Mark the first message only when there is a later (rolling) message after
+    # it, so the breakpoint is never on the rolling tail.
+    if len(messages) < 2:
+        return messages
+    first = messages[0]
+    content = first.get("content")
+    if not isinstance(content, list) or not content:
+        return messages
+    new_content = list(content)
+    new_content[-1] = {**new_content[-1], "cache_control": _CACHE_CONTROL}
+    marked = list(messages)
+    marked[0] = {**first, "content": new_content}
+    return marked
+
+
 class AnthropicStreamDecoder:
     """Turns the Anthropic raw message stream into normalized increments.
 

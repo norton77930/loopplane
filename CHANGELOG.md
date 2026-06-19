@@ -270,5 +270,39 @@ additive layers (units 001-013), brought to release quality by unit 014.
   existing tool, descriptor, policy, and the approval boundary are unchanged. Deterministic
   offline tests (the governance helpers; a scripted `InteractionBroker` for the `ask`
   round-trip; additive assembly-wiring tests). A Tier-2 governance unit.
+- **040** Anthropic prompt caching (`loopplane.adapters.anthropic`) — explicit
+  prompt-cache breakpoints so repeated agent-loop turns re-read a stable request
+  prefix at ~0.1x input price instead of full price; additive, reuse-first, **no
+  ADR**, the **first Tier-3 (cost/efficiency) unit**. A pure, opt-in overlay
+  `apply_prompt_caching(messages, tools)` in `anthropic/mapping.py` attaches
+  `cache_control: {"type": "ephemeral"}` to the **stable prefix only** — the last
+  tool definition (the end of the stable tools segment, which renders first) and
+  the last content block of the **first** message (a stable leading-history
+  prefix, gated on ≥2 messages so it is **never** the rolling tail) — emitting at
+  most 2 of the Anthropic-max 4 breakpoints. A new additive
+  `AnthropicConfig.prompt_caching: bool` (default **True** — caching is a
+  near-pure win for repeated turns) gates it; the adapter runs the overlay only
+  when the toggle is on. When **off**, the assembled request is **byte-identical**
+  to the pre-caching request (the overlay is not called; `build_messages` /
+  `build_tools` are unchanged, so the unit-020 mapping tests stay green and the
+  off path is proven identical by a dedicated test). **Transparent to the loop**:
+  caching changes only the provider request shape, not the loop's behavior or the
+  normalized event stream — **no event-schema, content-model, or `TokenUsage`
+  shape change** (caching is observed through the existing
+  `TokenUsage.cached_tokens`, mapped from Anthropic's `cache_read_input_tokens`).
+  **OpenAI / OpenRouter / Ollama caching is automatic** and needs **no request
+  change** — the adapter sends no cache parameter and
+  `prompt_tokens_details.cached_tokens` is already mapped to
+  `TokenUsage.cached_tokens` by the existing stream decoder (confirmed + a focused
+  test); Gemini's implicit caching is likewise provider-managed and out of scope.
+  No new public package / `__all__` name (the toggle is a field on
+  `AnthropicConfig`; the helper is a non-exported module function), so the
+  unit-014 api-reference bijection stays green with no doc edit. **No change to
+  the loop, runtime core, Tool Gateway, or Event Bus.** Deterministic offline
+  tests (breakpoint placement / 4-max / never-the-tail / off-path byte-identity /
+  purity, plus the OpenAI `cached_tokens` confirmation); any live cache-savings
+  observation is opt-in (`docs/real-model-validation.md` §5). Rollback:
+  `prompt_caching=False`, or revert the helper + the one adapter call. The next
+  Tier-3 follow-on is **041** (configurable compaction).
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0
