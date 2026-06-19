@@ -101,6 +101,11 @@ class RuntimeConfig:
     # is denied at the Gateway's decide stage unless the host turns this on. Carries
     # no secret — a search provider's credential lives in the host-supplied provider.
     allow_network: bool = False
+    # Opt-in plan mode (spec 038): off by default. When on, a run starts in plan mode
+    # — the agent may only use read-only tools (plus ask_user / exit_plan_mode) until a
+    # human approves a submitted plan, enforced at the Gateway's decide stage. Carries
+    # no secret. Default off → existing runs are unchanged.
+    plan_mode: bool = False
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -124,6 +129,7 @@ class RuntimeConfig:
             skills=_coerce_skills(data.get("skills")),
             observability=bool(data.get("observability", False)),
             allow_network=bool(data.get("allow_network", False)),
+            plan_mode=bool(data.get("plan_mode", False)),
         )
 
 

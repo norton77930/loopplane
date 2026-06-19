@@ -29,7 +29,7 @@ from loopplane.artifacts.store import ArtifactStore
 from loopplane.checkpoint.base import CheckpointStore, SessionSummary
 from loopplane.checkpoint.rebuild import rebuild_session
 from loopplane.checkpoint.recorder import RecordingSink, SessionRecorder
-from loopplane.context import RunContext
+from loopplane.context import PlanModeState, RunContext
 from loopplane.events.emitter import EventEmitter, EventSink
 from loopplane.events.envelope import (
     AssistantOutputIncrementEvent,
@@ -118,10 +118,14 @@ class RuntimeController:
         enable_assembly: bool | None = None,
         assembly_keep_last: int = 4,
         hooks: HookDispatcher | None = None,
+        plan_mode: bool = False,
     ) -> None:
         self._model = model
         self._gateway = gateway
         self._event_sink = event_sink
+        # Whether runs start in plan mode (spec 038); off by default. The per-run
+        # holder is created in drive() — the single place RunContext is constructed.
+        self._plan_mode = plan_mode
         # Optional lifecycle hooks (feature 015); absent by default (FR-011).
         # process_setup fires at most once per controller lifetime.
         self._hooks = hooks
@@ -348,6 +352,7 @@ class RuntimeController:
             turn_budget=session.turn_budget,
             session_approval_memory=session.approval_memory,
             interactions=session.broker,
+            plan_mode=PlanModeState(active=True) if self._plan_mode else None,
         )
         try:
             await session.loop.run(input_blocks, context)

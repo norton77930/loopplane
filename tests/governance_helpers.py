@@ -42,3 +42,16 @@ async def decide(
     them) and return the verdict."""
 
     return await policy(the_call, the_descriptor, None, None)
+
+
+async def decide_with_context(
+    policy: Any,
+    the_call: ToolCallRequest,
+    the_descriptor: ToolDescriptor,
+    context: Any,
+) -> Any:
+    """Await a policy decider with a real run context (and a no-op emitter) and return
+    the verdict — for policies that read per-run state off the ``RunContext`` (spec
+    038's ``plan_mode_policy``)."""
+
+    return await policy(the_call, the_descriptor, context, None)

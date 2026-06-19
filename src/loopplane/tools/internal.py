@@ -168,6 +168,24 @@ _DESCRIPTORS = [
             "additionalProperties": False,
         },
     ),
+    ToolDescriptor(
+        name="exit_plan_mode",
+        description=(
+            "Submit a proposed plan for the user to approve before executing. "
+            "Use this only after read-only investigation: pass the plan as text; "
+            "on approval the agent leaves plan mode and may use all tools, on "
+            "rejection it stays in plan mode."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"plan": {"type": "string"}},
+            "required": ["plan"],
+            "additionalProperties": False,
+        },
+        # Not read-only: it mutates run state (clears plan mode on approval) and
+        # requests a human decision. The plan-mode policy allowlists it by name so it
+        # stays callable while planning (spec 038).
+    ),
 ]
 
 
@@ -220,6 +238,7 @@ class InternalToolAdapter:
             "grep": self._grep,
             "run_command": self._run_command,
             "ask_user": self._ask_user,
+            "exit_plan_mode": self._exit_plan_mode,
             "memory_write": self._memory_write,
         }
         async for output in handlers[name](call_input, context):
@@ -579,3 +598,36 @@ class InternalToolAdapter:
             )
             return
         yield TextBlock(text="\n".join(answers))
+
+    async def _exit_plan_mode(
+        self, call_input: dict[str, object], context: RunContext
+    ) -> AsyncIterator[AdapterOutput]:
+        """Submit a plan for a human approve/reject decision (spec 038, FR-005-FR-007).
+
+        Reuses the existing human round-trip (``context.interactions.ask_question`` —
+        the same broker ``ask_user`` uses), so it inherits the no-reviewer / disconnect
+        semantics and emits the existing question/answer events (no new approval path,
+        no event-schema change). On approve it clears the per-run plan-mode holder so
+        subsequent non-read-only tools are allowed; on reject or no human it leaves
+        plan mode active and returns a clear normalized outcome.
+        """
+        plan = str(call_input["plan"])
+        broker = context.interactions
+        if broker is None:
+            yield ErrorOutput(message="no user is available to approve the plan")
+            return
+        question = Question(
+            text=f"Approve this plan?\n\n{plan}", options=["approve", "reject"]
+        )
+        answers = await broker.ask_question([question])
+        if answers is None:
+            # No reviewer attached, or the question was cancelled (e.g. disconnect):
+            # stay in plan mode, mirroring ask_user's no-user outcome.
+            yield ErrorOutput(message="no user is available to approve the plan")
+            return
+        if answers and answers[0].strip().lower() == "approve":
+            if context.plan_mode is not None:
+                context.plan_mode.active = False
+            yield TextBlock(text="plan approved; proceeding to execute")
+            return
+        yield TextBlock(text="plan not approved; remaining in plan mode")

@@ -218,5 +218,30 @@ additive layers (units 001-013), brought to release quality by unit 014.
   stream decoding + a tool round-trip; the shared parametrized overflow/failure/usage suites now
   exercise "gemini") + an opt-in, secret-gated live turn. The deferred follow-up from spec 035 (research
   Decision 2) and ADR 0001 (Follow-up #3).
+- **038** Plan mode (`loopplane.governance` / `loopplane.context` / `loopplane.tools` /
+  `loopplane.host` / `loopplane.controller`) — a LoopPlane-native **plan mode** (read-only
+  investigation → human approval → execute), additive and **no ADR**, the **first Tier-2
+  unit** (agentic workflow depth). A `plan_mode_policy` decide-stage decider denies any
+  tool whose `ToolDescriptor.read_only` is `False` while plan mode is active, **except** a
+  small allowlist (`ask_user`, `exit_plan_mode`) that must stay usable to make and submit a
+  plan; read-only tools stay allowed; a **no-op** when inactive. It is composed through the
+  **existing** decide-stage combinators (`safe_failure(all_of(...))` — deny-wins +
+  fail-closed) in `_build_decider` — **no new gateway stage** (V). Plan-mode activity is a
+  minimal per-run holder `PlanModeState(active)` carried on an additive
+  `RunContext.plan_mode` field: the **single sharing channel** between the decider (which
+  reads it) and a new **`exit_plan_mode`** Internal Tool Adapter tool (which flips it on
+  approval) — both receive the **same** per-run `RunContext`, so no process-global state.
+  `exit_plan_mode` (input `plan`, `read_only=False`, allowlisted) submits the plan for a
+  human decision by **reusing the existing human round-trip** (`InteractionBroker.ask_question`,
+  the same path `ask_user` uses): on **approve** it clears plan mode (subsequent non-read-only
+  tools become allowed) and returns success; on **reject / no human** it leaves plan mode
+  active and returns a normalized outcome — never a raised exception across the boundary (V).
+  Entering plan mode is an additive, default-off `RuntimeConfig.plan_mode` flag wired through
+  the controller (one additive constructor kwarg + the per-run `drive()` line — the **only**
+  per-run wiring; the core agent loop / turn cycle is untouched). **No event-schema change**
+  (the round-trip reuses the existing question/answer events; no `SCHEMA_VERSION` bump, VI);
+  every existing tool, descriptor, and policy is unchanged. Deterministic offline tests (a
+  scripted `InteractionBroker`; the governance + internal-tool harnesses). First unit of the
+  Tier-2 (agentic workflow depth) line.
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

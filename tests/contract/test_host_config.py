@@ -226,3 +226,86 @@ def test_allow_network_round_trips_from_mapping_and_has_no_secret() -> None:
     config = RuntimeConfig.from_mapping({"model": _model(), "allow_network": True})
     assert config.allow_network is True
     assert RuntimeConfig.from_mapping({"model": _model()}).allow_network is False
+
+
+# --- plan-mode wiring (spec 038) ---------------------------------------------
+
+
+def _write_file_descriptor() -> ToolDescriptor:
+    return ToolDescriptor(
+        name="write_file",
+        description="",
+        input_schema={
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+        read_only=False,
+    )
+
+
+async def _plan_verdict(decider: object, in_plan_mode: bool) -> object:
+    """Decide a non-read-only tool (write_file) against a RunContext whose plan_mode
+    is active or absent — proving the installed policy denies only when the per-run
+    holder is active."""
+    import pathlib
+
+    from loopplane.context import PlanModeState, RunContext
+    from loopplane.model import ToolCallRequest
+
+    request = ToolCallRequest(call_id="c", tool_name="write_file", input={})
+    context = RunContext(
+        session_id="s",
+        working_scope=pathlib.Path("."),
+        plan_mode=PlanModeState(active=True) if in_plan_mode else None,
+    )
+    return await decider(request, _write_file_descriptor(), context, None)  # type: ignore[operator]
+
+
+def _write_tool() -> ToolSpec:
+    return ToolSpec(descriptor=_write_file_descriptor(), handler=_handler)
+
+
+@pytest.mark.anyio
+async def test_plan_mode_decider_denies_non_read_only_when_holder_active() -> None:
+    from loopplane.approval import PolicyAllow, PolicyDeny
+    from loopplane.host.assembly import _build_decider
+
+    config = RuntimeConfig(model=_model(), tools=(_write_tool(),), plan_mode=True)
+    decider = _build_decider(config, ["write_file"], None)
+    assert decider is not None
+    # Active per-run holder → write_file denied; absent holder → the installed policy
+    # is a no-op (allowed), proving installing it never changes a non-plan-mode run.
+    assert isinstance(await _plan_verdict(decider, True), PolicyDeny)
+    assert isinstance(await _plan_verdict(decider, False), PolicyAllow)
+
+
+@pytest.mark.anyio
+async def test_plan_mode_off_installs_no_plan_mode_policy() -> None:
+    from loopplane.approval import PolicyAllow
+    from loopplane.host.assembly import _build_decider
+
+    # With plan mode off, no plan-mode policy is installed: even a context with an
+    # active plan-mode holder gets write_file ALLOWED (the existing posture — only the
+    # default network gate applies, which a non-network tool passes). This proves
+    # plan-mode-off is byte-identical to today for an existing run.
+    config = RuntimeConfig(model=_model(), tools=(_write_tool(),))
+    decider = _build_decider(config, ["write_file"], None)
+    assert decider is not None  # the default network gate is present (egress off)
+    assert isinstance(await _plan_verdict(decider, True), PolicyAllow)
+
+
+def test_plan_mode_off_with_egress_on_keeps_the_allow_all_fast_path() -> None:
+    from loopplane.host.assembly import _build_decider
+
+    # With plan mode off, egress on, and no approval/skills, the builder keeps the
+    # allow-all fast-path (None) — the existing posture is unchanged (plan mode adds
+    # nothing to the gate decision).
+    config = RuntimeConfig(model=_model(), tools=(_write_tool(),), allow_network=True)
+    assert _build_decider(config, ["write_file"], None) is None
+
+
+def test_plan_mode_round_trips_from_mapping_and_has_no_secret() -> None:
+    config = RuntimeConfig.from_mapping({"model": _model(), "plan_mode": True})
+    assert config.plan_mode is True
+    assert RuntimeConfig.from_mapping({"model": _model()}).plan_mode is False

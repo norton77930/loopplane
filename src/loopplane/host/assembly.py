@@ -24,7 +24,7 @@ from loopplane.checkpoint import (
 from loopplane.controller.controller import RuntimeController
 from loopplane.events import RuntimeEvent
 from loopplane.gateway import PolicyDecider, ToolGateway
-from loopplane.governance import all_of, network_policy, safe_failure
+from loopplane.governance import all_of, network_policy, plan_mode_policy, safe_failure
 from loopplane.host.config import (
     RuntimeConfig,
     approval_effects,
@@ -141,6 +141,7 @@ def assemble(config: RuntimeConfig) -> AssembledRuntime:
         model=config.model,
         gateway=gateway,
         event_sink=sink,
+        plan_mode=config.plan_mode,
         **controller_kwargs,
     )
     return AssembledRuntime(
@@ -167,16 +168,20 @@ def _build_decider(
     The network gate reuses the existing decide-stage combinators (spec 034): when
     egress is disabled it must be present to deny a network-flagged tool by default,
     so the composed decider is ``safe_failure(all_of(<approval?>, network_policy))``
-    — deny-wins + fail-closed. The ``None`` fast-path is preserved only when there is
-    no approval/skills *and* egress is enabled (the network policy would be a harmless
-    allow), so an existing non-network run's allow-all posture is unchanged.
+    — deny-wins + fail-closed. The plan-mode gate (spec 038) adds one more decider
+    when ``config.plan_mode`` is on; it reads the per-run ``RunContext.plan_mode``
+    holder at decide time, so it is a no-op for any run whose holder is absent/inactive
+    (installing it never changes a non-plan-mode run's verdicts). The ``None`` fast-path
+    is preserved only when there is no approval/skills *and* egress is enabled *and*
+    plan mode is off, so an existing non-network run's allow-all posture is unchanged.
     """
 
     approval_needed = config.approval is not None or bool(skills_map)
     # When egress is off the gate must be installed so network tools deny by default;
     # when on, the policy is a no-op allow and only matters if approval is also wired.
     network_gate_needed = not config.allow_network
-    if not approval_needed and not network_gate_needed:
+    plan_mode_needed = config.plan_mode
+    if not approval_needed and not network_gate_needed and not plan_mode_needed:
         return None
 
     deciders: list[PolicyDecider] = []
@@ -189,6 +194,11 @@ def _build_decider(
         profiles = skill_profiles(skills_map) if skills_map else None
         deciders.append(HumanApproval(rules=rules, skill_profiles=profiles))
     deciders.append(network_policy(allow_network=config.allow_network))
+    if plan_mode_needed:
+        # The context-reading form: it denies non-read-only (non-allowlisted) tools
+        # only while the per-run holder is active (set by the controller when the run
+        # starts in plan mode and cleared by exit_plan_mode on approval).
+        deciders.append(plan_mode_policy())
 
     # Deny-wins composition (all_of) wrapped fail-closed (safe_failure); a single
     # decider composes the same way, so this is uniform whether or not approval is

@@ -17,6 +17,7 @@ from loopplane.governance.combine import all_of, default_deny, safe_failure
 from loopplane.governance.network import network_policy
 from loopplane.governance.path import path_policy
 from loopplane.governance.permission import permission_policy
+from loopplane.governance.plan_mode import plan_mode_policy
 from loopplane.governance.sandbox import sandbox_profile
 
 __all__ = [
@@ -32,6 +33,7 @@ __all__ = [
     "network_policy",
     "path_policy",
     "permission_policy",
+    "plan_mode_policy",
     "quota_policy",
     "safe_failure",
     "sandbox_profile",

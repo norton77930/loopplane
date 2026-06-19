@@ -499,6 +499,7 @@ Sandbox, policy, and cost governance.
 - `as_decider` — adapt a policy to a decider.
 - `all_of` — combine policies (all must allow).
 - `network_policy` — gate tools that require network egress (opt-in).
+- `plan_mode_policy` — gate non-read-only tools during plan-mode investigation.
 
 ### `loopplane.inspect` (unit 010)
 
