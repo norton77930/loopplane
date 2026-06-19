@@ -36,6 +36,8 @@ the [API reference](./api-reference.md).
 
 ## Project
 
+- [Capabilities](./capabilities.md) — the functional-scope overview of what LoopPlane provides today.
+- [Gap analysis & roadmap](./gap-analysis.md) — comparison vs reference agent harnesses + the forward roadmap.
 - [Roadmap autopilot board](./loopplane-agent-board.md) — the roadmap control document.
 - [Release readiness](./release-readiness.md) — the pre-release gate checklist.
 - [Manual QA](./manual-qa.md) — the human acceptance pass (browser, desktop, real model).
