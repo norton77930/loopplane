@@ -144,6 +144,7 @@ The internal, web, and subagent-spawn tool adapters.
 - `WebToolAdapter` — the adapter for the web tools (web_fetch, web_search).
 - `SearchProvider` — the host-injected web-search provider seam.
 - `SearchResult` — a single web-search result (title, url, snippet).
+- `ReferenceSearchProvider` — a bundled keyless reference web-search provider for `web_search` (spec 047).
 - `SpawnSubagentAdapter` — the adapter for the model-driven one-shot `spawn_subagent` tool (depth-capped).
 
 ### `loopplane.adapters.mcp`
