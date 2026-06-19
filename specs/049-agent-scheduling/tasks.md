@@ -92,4 +92,15 @@ interval concepts. **No new ADR; no unit-004 `Clock` contract change.**
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-20) — 0 critical, 0 high, 2 low (informational). 100%
+requirement coverage (FR-001..FR-009 and SC-001..004 each map to ≥1 task); every task traces
+to a requirement/design item; spec ↔ plan ↔ research ↔ data-model ↔ contract ↔ tasks agree
+(per-run `ScheduleSupervisor` + `Sleeper`; four Gateway tools; `RunContext.schedules` threading
+via a neutral context Protocol; `RuntimeConfig.max_schedules` gate; reuse of the unit-048
+supervisor + ADR 0002 + the 043/048 child-run + the unit-004 interval concepts; caps / cadence
+validation / containment / lifecycle). **Boundary review: additive** — no new ADR, no breaking
+001/002 contract change, no unit-004 `Clock` change; the controller/loop reference only the
+context Protocol (no `loopplane.tools` import — the boundary audit). No Constitution violation
+(III/IV/V/VI/X). Low notes are informational: deferred cron-expression / persistent /
+distributed scheduling (per spec); the implement is cross-cutting and may use a fork.
+**Cleared for `/speckit-implement`.**
