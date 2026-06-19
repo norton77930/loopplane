@@ -136,5 +136,11 @@ additive layers (units 001-013), brought to release quality by unit 014.
   outcomes (rename / delete); and the UI gains **loading skeletons**, a **richer empty state**, and
   **first-run example prompts**. With 032, the product-polish sprint (030–032) is complete; the
   backend is untouched throughout (only unit 030 was additive backend, no ADR).
+- **033** File-tool parity (`loopplane.tools`) — three additive baseline tools on the Internal
+  Tool Adapter, reachable only through the Gateway and confined to the run working scope:
+  `edit_file` (surgical unique-string replacement reusing the `write_file` stale-write guard),
+  `glob_files` (filename pattern matching), and `grep` (regex content search with
+  `content` / `files_with_matches` / `count` output modes). `search_files` is unchanged; no new
+  dependency, no frontend, no ADR. First unit of the Tier-1 agent-capability sprint (033–036).
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

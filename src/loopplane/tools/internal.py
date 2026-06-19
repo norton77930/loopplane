@@ -7,6 +7,7 @@ through the Gateway.
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 
@@ -53,6 +54,25 @@ _DESCRIPTORS = [
         },
     ),
     ToolDescriptor(
+        name="edit_file",
+        description=(
+            "Replace a uniquely-occurring substring in an existing text file. "
+            "The file must have been read in this session and be unchanged "
+            "since that read; old_string must occur exactly once and must "
+            "differ from new_string."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "old_string": {"type": "string"},
+                "new_string": {"type": "string"},
+            },
+            "required": ["path", "old_string", "new_string"],
+            "additionalProperties": False,
+        },
+    ),
+    ToolDescriptor(
         name="search_files",
         description=(
             "Search files under a directory for lines containing a substring."
@@ -62,6 +82,48 @@ _DESCRIPTORS = [
             "properties": {
                 "pattern": {"type": "string"},
                 "path": {"type": "string"},
+            },
+            "required": ["pattern"],
+            "additionalProperties": False,
+        },
+        concurrency_safe=True,
+        read_only=True,
+    ),
+    ToolDescriptor(
+        name="glob_files",
+        description=(
+            "List files under the working scope whose path matches a glob "
+            "pattern (for example '**/*.py'); returns scope-relative paths."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string"},
+                "path": {"type": "string"},
+            },
+            "required": ["pattern"],
+            "additionalProperties": False,
+        },
+        concurrency_safe=True,
+        read_only=True,
+    ),
+    ToolDescriptor(
+        name="grep",
+        description=(
+            "Search file contents by regular expression within the working "
+            "scope. output_mode is one of 'content' (matching lines), "
+            "'files_with_matches' (matching paths), or 'count' (number of "
+            "matching lines per file); it defaults to 'content'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "pattern": {"type": "string"},
+                "path": {"type": "string"},
+                "output_mode": {
+                    "type": "string",
+                    "enum": ["content", "files_with_matches", "count"],
+                },
             },
             "required": ["pattern"],
             "additionalProperties": False,
@@ -152,7 +214,10 @@ class InternalToolAdapter:
         handlers = {
             "read_file": self._read_file,
             "write_file": self._write_file,
+            "edit_file": self._edit_file,
             "search_files": self._search_files,
+            "glob_files": self._glob_files,
+            "grep": self._grep,
             "run_command": self._run_command,
             "ask_user": self._ask_user,
             "memory_write": self._memory_write,
@@ -240,6 +305,80 @@ class InternalToolAdapter:
         self._reads[key] = _digest(content.encode("utf-8"))
         yield TextBlock(text=f"wrote {len(content)} characters to {raw}")
 
+    async def _edit_file(
+        self, call_input: dict[str, object], context: RunContext
+    ) -> AsyncIterator[AdapterOutput]:
+        """Replace a uniquely-occurring substring in an existing file, gated by
+        the same stale-write guard as `_write_file` (FR-002, FR-003): the file
+        must have been read this session and be unchanged since.
+        """
+        raw = str(call_input["path"])
+        old_string = str(call_input["old_string"])
+        new_string = str(call_input["new_string"])
+        if old_string == new_string:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=(
+                    "old_string and new_string are identical; no change requested"
+                ),
+            )
+            return
+        try:
+            target = self._resolve(context, raw)
+        except _PathOutsideScopeError as exc:
+            yield ErrorOutput(category=ErrorCategory.VALIDATION, message=str(exc))
+            return
+        try:
+            data = target.read_bytes()
+        except OSError as exc:
+            yield ErrorOutput(message=f"cannot edit {raw}: {exc}")
+            return
+        key = (context.session_id, str(target))
+        recorded = self._reads.get(key)
+        if recorded is None:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=(
+                    f"stale edit rejected: {raw} exists but was not read in "
+                    f"this session"
+                ),
+            )
+            return
+        if _digest(data) != recorded:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=(
+                    f"stale edit rejected: {raw} changed since it was last "
+                    f"read in this session"
+                ),
+            )
+            return
+        text = data.decode("utf-8", errors="replace")
+        occurrences = text.count(old_string)
+        if occurrences == 0:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=f"old_string not found in {raw}",
+            )
+            return
+        if occurrences > 1:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=(
+                    f"old_string is not unique in {raw} ({occurrences} "
+                    f"occurrences); add surrounding context to disambiguate"
+                ),
+            )
+            return
+        updated = text.replace(old_string, new_string, 1)
+        try:
+            target.write_text(updated, encoding="utf-8")
+        except OSError as exc:
+            yield ErrorOutput(message=f"cannot edit {raw}: {exc}")
+            return
+        self._reads[key] = _digest(updated.encode("utf-8"))
+        yield TextBlock(text=f"edited {raw}: replaced 1 occurrence")
+
     async def _search_files(
         self, call_input: dict[str, object], context: RunContext
     ) -> AsyncIterator[AdapterOutput]:
@@ -271,6 +410,116 @@ class InternalToolAdapter:
             yield TextBlock(text="\n".join(matches))
         else:
             yield TextBlock(text=f"no matches for {pattern!r}")
+
+    async def _glob_files(
+        self, call_input: dict[str, object], context: RunContext
+    ) -> AsyncIterator[AdapterOutput]:
+        pattern = str(call_input["pattern"])
+        raw = str(call_input.get("path", "."))
+        try:
+            base = self._resolve(context, raw)
+        except _PathOutsideScopeError as exc:
+            yield ErrorOutput(category=ErrorCategory.VALIDATION, message=str(exc))
+            return
+        if not base.is_dir():
+            yield ErrorOutput(message=f"not a directory: {raw}")
+            return
+        scope = context.working_scope.resolve()
+        matches: list[str] = []
+        try:
+            for path in sorted(base.glob(pattern)):
+                if len(matches) >= _SEARCH_MATCH_LIMIT:
+                    break
+                if not path.is_file():
+                    continue
+                try:
+                    relative = path.resolve().relative_to(scope).as_posix()
+                except ValueError:
+                    continue
+                matches.append(relative)
+        except (ValueError, NotImplementedError) as exc:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=f"invalid glob pattern {pattern!r}: {exc}",
+            )
+            return
+        if matches:
+            yield TextBlock(text="\n".join(matches))
+        else:
+            yield TextBlock(text=f"no files match {pattern!r}")
+
+    async def _grep(
+        self, call_input: dict[str, object], context: RunContext
+    ) -> AsyncIterator[AdapterOutput]:
+        raw_pattern = str(call_input["pattern"])
+        raw = str(call_input.get("path", "."))
+        mode = str(call_input.get("output_mode", "content"))
+        if mode not in ("content", "files_with_matches", "count"):
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=(
+                    f"invalid output_mode {mode!r}; expected content, "
+                    f"files_with_matches, or count"
+                ),
+            )
+            return
+        try:
+            regex = re.compile(raw_pattern)
+        except re.error as exc:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=f"invalid regular expression {raw_pattern!r}: {exc}",
+            )
+            return
+        try:
+            root = self._resolve(context, raw)
+        except _PathOutsideScopeError as exc:
+            yield ErrorOutput(category=ErrorCategory.VALIDATION, message=str(exc))
+            return
+        if not root.is_dir():
+            yield ErrorOutput(message=f"not a directory: {raw}")
+            return
+        scope = context.working_scope.resolve()
+        content_lines: list[str] = []
+        file_matches: list[str] = []
+        counts: list[str] = []
+        capped = False
+        for path in sorted(root.rglob("*")):
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text("utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            relative = path.resolve().relative_to(scope).as_posix()
+            per_file = 0
+            for line_number, line in enumerate(text.splitlines(), start=1):
+                if regex.search(line):
+                    per_file += 1
+                    if mode == "content":
+                        content_lines.append(
+                            f"{relative}:{line_number}: {line.strip()}"
+                        )
+                        if len(content_lines) >= _SEARCH_MATCH_LIMIT:
+                            capped = True
+                            break
+            if per_file:
+                if mode == "files_with_matches":
+                    file_matches.append(relative)
+                elif mode == "count":
+                    counts.append(f"{relative}: {per_file}")
+            if capped or (
+                mode != "content"
+                and max(len(file_matches), len(counts)) >= _SEARCH_MATCH_LIMIT
+            ):
+                break
+        if mode == "files_with_matches":
+            results, empty = file_matches, f"no files match {raw_pattern!r}"
+        elif mode == "count":
+            results, empty = counts, f"no matches for {raw_pattern!r}"
+        else:
+            results, empty = content_lines, f"no matches for {raw_pattern!r}"
+        yield TextBlock(text="\n".join(results) if results else empty)
 
     async def _run_command(
         self, call_input: dict[str, object], context: RunContext

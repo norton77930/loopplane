@@ -112,6 +112,7 @@ git history) — not invented.
 | **030-web-session-management** | `specs/030-web-session-management` | **Verified** | Web Session Management (product-polish sprint): **full-stack, additive, no ADR** — persistent session **title** + **rename** + **delete**. `CheckpointStore.set_title` (append a fresh session-meta; latest wins) + `delete_session` (real removal) on both backends → controller → host → webapi **PATCH/DELETE `/v1/sessions/{id}`** (owner-scoped, non-owner 404); `SessionSummaryView` gains `last_active_at`/`created_at`. Sidebar shows titles grouped Today/Yesterday/Earlier with a rename/delete menu. Tool Gateway (V) / Event Bus (VI) untouched. | 011, 018, 021, 022, 025 | None — implemented & verified on `main` (both checkpoint backends + host/controller + PATCH/DELETE + non-owner 404; **767 pytest** + ruff + mypy + webapi boundary green, **84 Vitest** + build green). |
 | **031-web-message-actions** | `specs/031-web-message-actions` | **Verified** | Web Message Actions (product-polish sprint): **frontend-only** — per-message **copy** + **regenerate** (re-run the last user turn via the existing send path) + a **code-block copy** button (react-markdown `pre` override). No backend change. | 025 | None — implemented & verified on `main` (clipboard helper + MessageList copy/regenerate + Markdown code-copy; **90 Vitest** + tsc + build green; Python unchanged). |
 | **032-web-interaction-resilience** | `specs/032-web-interaction-resilience` | **Verified** | Web Interaction Resilience & States (product-polish sprint): **frontend-only** — approval/question dialogs become **true modals** (`Modal` + `useFocusTrap`; Esc = safe default; keyboard nav); **error retry + toasts**; **loading skeletons + richer empty state + first-run prompts**. No backend change. | 025, 026 | None — implemented & verified on `main` (Modal/useFocusTrap/Toast/Skeleton + dialog/banner/list wiring; **101 Vitest** + tsc + build green; Python unchanged). The product-polish sprint (030–032) is COMPLETE. |
+| **033-file-tool-parity** | `specs/033-file-tool-parity` | **Verified** | File-tool parity (Tier-1 agent-capability sprint, **first unit**): three **additive** baseline tools on the Internal Tool Adapter — `edit_file` (surgical unique-string replacement reusing the `write_file` stale-write guard), `glob_files` (scope-relative filename globbing), and `grep` (regex content search with `content` / `files_with_matches` / `count` modes) — each reachable **only through the Gateway** (V) and confined to the run working scope. `search_files` unchanged; no new dependency, no frontend, no ADR. Closes the "thin built-in toolset" gap vs the reference harnesses. | 001, 009 | None — implemented & verified on `main` (`loopplane.tools.internal`; 21 new offline tests; **788 pytest** + `ruff check` + `mypy`(src, strict) + `ruff format --check` green). |
 
 **Status evidence (for audit):**
 
@@ -519,13 +520,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **None** — the product-polish sprint (**030–032**) is **COMPLETE**; **all units 000–032 are `Verified`** on `main`. |
-| Active feature directory | — (no active feature; `.specify/feature.json` → `specs/032-web-interaction-resilience`, the last completed unit). |
+| Active unit | **Tier-1 agent-capability sprint (033–036)** in progress: **033 file-tool-parity is `Verified`**; **034 web-tools** is next; 035 multi-provider + 036 multimodal remain. |
+| Active feature directory | `.specify/feature.json` → `specs/033-file-tool-parity` (just completed; advance to `specs/034-web-tools` at `034 /speckit.specify`). |
 | Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **032 COMPLETE** (plan → tasks → analyze → implement → Verified). The product-polish sprint (030–032) is fully shipped; the autopilot has **no further unit to advance** and the `/loop` was stopped (CronDelete). |
-| Depends on | — (all dependencies are `Verified`). |
-| Next command | — (no further unit; only reserved/out-of-scope items remain: message edit, in-session search, feedback persistence, visual/brand redesign). |
-| Stop condition status | **Complete** — 030–032 are all `Verified`; no further unit; the loop was stopped. |
+| Current Spec Kit step | **033 COMPLETE** (specify → plan → tasks → implement → Verified). Next: begin **034 web tools** (`web_fetch` / `web_search` + network-egress governance). |
+| Depends on | 034 depends on 001 (internal adapter) + 009 (governance decider seam); 036 hard-depends on 035. |
+| Next command | `034 /speckit.specify` (→ `speckit-specify`) for `web_fetch` / `web_search` + a `network` `ToolDescriptor` flag and a `network_policy` decider. |
+| Stop condition status | **In progress** — Tier-1 sprint (033–036); 033 `Verified`, three units remain. |
 
 ---
 
