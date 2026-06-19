@@ -108,19 +108,19 @@ async def test_default_transport_is_the_lazy_httpx_get() -> None:
 
 
 async def test_api_key_is_not_leaked_on_failure(tmp_path: Path) -> None:
-    secret = "sk-secret-search-key"
+    fake_key = "do-not-leak-token"
 
     async def _raise(url: str) -> tuple[int, str]:
         raise RuntimeError(f"connection failed to {url}")  # the url carries the key
 
     adapter = WebToolAdapter(
-        search_provider=ReferenceSearchProvider(api_key=secret, transport=_raise)
+        search_provider=ReferenceSearchProvider(api_key=fake_key, transport=_raise)
     )
 
     (out,) = await _invoke(adapter, "web_search", {"query": "q"}, _context(tmp_path))
 
     assert isinstance(out, ErrorOutput)
-    assert secret not in out.message
+    assert fake_key not in out.message
 
 
 async def test_custom_endpoint_is_honored() -> None:
