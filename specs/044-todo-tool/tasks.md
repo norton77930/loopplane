@@ -10,8 +10,8 @@ change, no new dependency, no ADR.
 
 ## Phase 1: Foundational (blocking prerequisites)
 
-- [ ] T001 Add a module-level `MAX_TODO_ITEMS = 100` constant and the `todo_write` `ToolDescriptor` (input schema per [contracts/todo_write-tool.md](contracts/todo_write-tool.md): `todos` array of `{content, status∈{pending,in_progress,completed}}`; `read_only=False`; `concurrency_safe=False`) to the `_DESCRIPTORS` list in `src/loopplane/tools/internal.py`
-- [ ] T002 Initialize per-session state `self._todos: dict[str, list[dict[str, str]]] = {}` in `InternalToolAdapter.__init__`, and register `"todo_write": self._todo_write` in the `invoke` dispatch dict, in `src/loopplane/tools/internal.py`
+- [x] T001 Add a module-level `MAX_TODO_ITEMS = 100` constant and the `todo_write` `ToolDescriptor` (input schema per [contracts/todo_write-tool.md](contracts/todo_write-tool.md): `todos` array of `{content, status∈{pending,in_progress,completed}}`; `read_only=False`; `concurrency_safe=False`) to the `_DESCRIPTORS` list in `src/loopplane/tools/internal.py`
+- [x] T002 Initialize per-session state `self._todos: dict[str, list[dict[str, str]]] = {}` in `InternalToolAdapter.__init__`, and register `"todo_write": self._todo_write` in the `invoke` dispatch dict, in `src/loopplane/tools/internal.py`
 
 ## Phase 2: User Story 1 — Agent records and updates a multi-step plan (P1) 🎯 MVP
 
@@ -19,8 +19,8 @@ change, no new dependency, no ADR.
 
 **Independent test**: invoke `todo_write` with a list, then again with changed statuses; the latest list is retained and returned.
 
-- [ ] T003 [US1] Write `tests/unit/test_todo_tool.py` covering: set + returned `TextBlock` reflects items; replace (second call leaves no residue from the first); update-status (item → in_progress/completed retained); empty `todos: []` clears; invalid `status` rejected (VALIDATION, prior list unchanged); item missing `content`/`status` rejected; blank `content` rejected; oversized (101 items) rejected with prior list unchanged. (Red until T004.)
-- [ ] T004 [US1] Implement the `_todo_write` async handler in `src/loopplane/tools/internal.py`: validate the `todos` array shape and each item (non-empty `content`, `status` in the enum) and the `MAX_TODO_ITEMS` bound; on any invalid input yield `ErrorOutput(category=ErrorCategory.VALIDATION, ...)` and do **not** mutate `self._todos`; on valid input replace `self._todos[context.session_id]` with the submitted list (empty clears) and yield a `TextBlock` summarizing the recorded list (status + content per item, in order). Make T003 pass.
+- [x] T003 [US1] Write `tests/unit/test_todo_tool.py` covering: set + returned `TextBlock` reflects items; replace (second call leaves no residue from the first); update-status (item → in_progress/completed retained); empty `todos: []` clears; invalid `status` rejected (VALIDATION, prior list unchanged); item missing `content`/`status` rejected; blank `content` rejected; oversized (101 items) rejected with prior list unchanged. (Red until T004.)
+- [x] T004 [US1] Implement the `_todo_write` async handler in `src/loopplane/tools/internal.py`: validate the `todos` array shape and each item (non-empty `content`, `status` in the enum) and the `MAX_TODO_ITEMS` bound; on any invalid input yield `ErrorOutput(category=ErrorCategory.VALIDATION, ...)` and do **not** mutate `self._todos`; on valid input replace `self._todos[context.session_id]` with the submitted list (empty clears) and yield a `TextBlock` summarizing the recorded list (status + content per item, in order). Make T003 pass.
 
 ## Phase 3: User Story 2 — Host/observer sees the current plan as metadata (P2)
 
@@ -28,7 +28,7 @@ change, no new dependency, no ADR.
 
 **Independent test**: after a write, the result/state exposes only item content + status; two sessions stay independent.
 
-- [ ] T005 [US2] Extend `tests/unit/test_todo_tool.py`: per-session isolation (two distinct `session_id`s keep independent lists) and result-content safety (the result reflects only `content` + `status`, no conversation/secret/path content).
+- [x] T005 [US2] Extend `tests/unit/test_todo_tool.py`: per-session isolation (two distinct `session_id`s keep independent lists) and result-content safety (the result reflects only `content` + `status`, no conversation/secret/path content).
 
 ## Phase 4: User Story 3 — Tool governed like every other tool (P3)
 
@@ -36,12 +36,12 @@ change, no new dependency, no ADR.
 
 **Independent test**: `describe()` advertises `todo_write` with `read_only=False`, so plan-mode/permission deciders treat it as a mutating tool.
 
-- [ ] T006 [US3] Extend `tests/unit/test_todo_tool.py`: assert `InternalToolAdapter().describe()` includes a `todo_write` descriptor with `read_only is False` and the documented input schema (so the plan-mode/permission/hook layers govern it like any tool — no special-casing).
+- [x] T006 [US3] Extend `tests/unit/test_todo_tool.py`: assert `InternalToolAdapter().describe()` includes a `todo_write` descriptor with `read_only is False` and the documented input schema (so the plan-mode/permission/hook layers govern it like any tool — no special-casing).
 
 ## Phase 5: Polish & Cross-Cutting
 
-- [ ] T007 Search `tests/` for any assertion of the exact internal/baseline descriptor name set (e.g. a test listing `read_file`, `write_file`, … `memory_write`) and add `todo_write` so the suite reflects the new baseline tool. If none exists, note that in the task and skip.
-- [ ] T008 Run the four gates and confirm green: `ruff check`, `ruff format --check`, `mypy` (src, strict), `pytest`. Fix any issue introduced by this unit before committing.
+- [x] T007 Search `tests/` for any assertion of the exact internal/baseline descriptor name set (e.g. a test listing `read_file`, `write_file`, … `memory_write`) and add `todo_write` so the suite reflects the new baseline tool. If none exists, note that in the task and skip.
+- [x] T008 Run the four gates and confirm green: `ruff check`, `ruff format --check`, `mypy` (src, strict), `pytest`. Fix any issue introduced by this unit before committing.
 
 ## Dependencies
 

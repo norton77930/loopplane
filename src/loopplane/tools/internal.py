@@ -23,6 +23,10 @@ from loopplane.model.content import TextBlock
 
 _SEARCH_MATCH_LIMIT = 100
 
+_MAX_TODO_ITEMS = 100
+
+_TODO_STATUSES = ("pending", "in_progress", "completed")
+
 _DESCRIPTORS = [
     ToolDescriptor(
         name="read_file",
@@ -186,6 +190,38 @@ _DESCRIPTORS = [
         # requests a human decision. The plan-mode policy allowlists it by name so it
         # stays callable while planning (spec 038).
     ),
+    ToolDescriptor(
+        name="todo_write",
+        description=(
+            "Record the agent's task list for this run. Replaces the current "
+            "list with the provided items; each item has a short 'content' and "
+            "a 'status' of 'pending', 'in_progress', or 'completed'. Submit an "
+            "empty list to clear it."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "todos": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "content": {"type": "string"},
+                            "status": {
+                                "type": "string",
+                                "enum": ["pending", "in_progress", "completed"],
+                            },
+                        },
+                        "required": ["content", "status"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["todos"],
+            "additionalProperties": False,
+        },
+        # Not read-only: it mutates per-run state (the session's todo list).
+    ),
 ]
 
 
@@ -219,6 +255,8 @@ class InternalToolAdapter:
         # (session_id, resolved path) -> content digest at the last read.
         self._reads: dict[tuple[str, str], str] = {}
         self._memory = memory_store
+        # (session_id) -> the session's current todo list (spec 044).
+        self._todos: dict[str, list[dict[str, str]]] = {}
 
     def describe(self) -> Sequence[ToolDescriptor]:
         descriptors = list(_DESCRIPTORS)
@@ -240,6 +278,7 @@ class InternalToolAdapter:
             "ask_user": self._ask_user,
             "exit_plan_mode": self._exit_plan_mode,
             "memory_write": self._memory_write,
+            "todo_write": self._todo_write,
         }
         async for output in handlers[name](call_input, context):
             yield output
@@ -631,3 +670,60 @@ class InternalToolAdapter:
             yield TextBlock(text="plan approved; proceeding to execute")
             return
         yield TextBlock(text="plan not approved; remaining in plan mode")
+
+    async def _todo_write(
+        self, call_input: dict[str, object], context: RunContext
+    ) -> AsyncIterator[AdapterOutput]:
+        """Record the run's todo list (spec 044). Set-the-whole-list: each call
+        replaces the session's list with the validated submission; an empty list
+        clears it. Validation is side-effect-free — on any invalid input the prior
+        list is left unchanged. The list is per-session state, mirroring
+        ``self._reads``; it touches neither the event schema nor the content model.
+        """
+        raw = call_input["todos"]
+        if not isinstance(raw, list):
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION, message="todos must be a list"
+            )
+            return
+        if len(raw) > _MAX_TODO_ITEMS:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=(
+                    f"too many todos: {len(raw)} exceeds the maximum of "
+                    f"{_MAX_TODO_ITEMS}"
+                ),
+            )
+            return
+        validated: list[dict[str, str]] = []
+        for index, item in enumerate(raw):
+            if not isinstance(item, dict):
+                yield ErrorOutput(
+                    category=ErrorCategory.VALIDATION,
+                    message=f"todo {index} must be an object",
+                )
+                return
+            content = item.get("content")
+            status = item.get("status")
+            if not isinstance(content, str) or not content.strip():
+                yield ErrorOutput(
+                    category=ErrorCategory.VALIDATION,
+                    message=f"todo {index} requires a non-empty 'content' string",
+                )
+                return
+            if not isinstance(status, str) or status not in _TODO_STATUSES:
+                yield ErrorOutput(
+                    category=ErrorCategory.VALIDATION,
+                    message=(
+                        f"todo {index} has invalid status {status!r}; expected "
+                        f"one of {', '.join(_TODO_STATUSES)}"
+                    ),
+                )
+                return
+            validated.append({"content": content, "status": status})
+        self._todos[context.session_id] = validated
+        if not validated:
+            yield TextBlock(text="todo list cleared")
+            return
+        lines = [f"[{item['status']}] {item['content']}" for item in validated]
+        yield TextBlock(text=f"Recorded {len(validated)} todos:\n" + "\n".join(lines))
