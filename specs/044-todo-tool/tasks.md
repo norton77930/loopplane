@@ -58,3 +58,15 @@ change, no new dependency, no ADR.
 
 - **MVP = Phase 1 + Phase 2 (US1)**: a working, validated `todo_write` with replace semantics and the core test set. US2 and US3 are thin verification layers over the same handler/descriptor (no new production code expected).
 - Keep all production changes inside `src/loopplane/tools/internal.py`; keep all new tests in `tests/unit/test_todo_tool.py`; the only other allowed edit is the existing descriptor-set assertion (T007).
+
+## Cross-Artifact Analysis (gate)
+
+**Result: PASS** (analyze, 2026-06-20) — 0 critical, 0 high, 2 low (informational). 100%
+requirement coverage (FR-001..FR-011 each mapped to ≥1 task; SC-001..004 covered); every
+task traces to a requirement/design item; spec ↔ plan ↔ data-model ↔ contract ↔ tasks
+agree on the schema (todos array; `content` + `status` enum; `MAX_TODO_ITEMS=100`; replace
+semantics; empty clears; normalized errors that never mutate on failure); no Constitution
+violations (additive X, Gateway-only V, no event-schema/content-model change VI,
+reference-not-clone IX, testable X). Low notes are informational only (FR-005 surfaces the
+list via the tool-result, not the 010 overlay — research D5; `todo_write` is `read_only=False`
+so plan mode denies it, which is the intended governance). **Cleared for `/speckit-implement`.**
