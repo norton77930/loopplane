@@ -144,9 +144,7 @@ def test_in_memory_rename_and_delete_without_storage(tmp_path: Path) -> None:
     client = make_client(create_app(host, authenticator=allow_all))
     sid = _run(client, headers={})
 
-    assert (
-        client.patch(f"/v1/sessions/{sid}", json={"title": "Mem"}).status_code == 200
-    )
+    assert client.patch(f"/v1/sessions/{sid}", json={"title": "Mem"}).status_code == 200
     assert _label(client, sid, headers={}) == "Mem"
     assert client.delete(f"/v1/sessions/{sid}").status_code == 200
     assert sid not in [s["session_id"] for s in client.get("/v1/sessions").json()]

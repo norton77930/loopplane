@@ -148,9 +148,7 @@ class SqliteCheckpointStore:
         """Insert a fresh session-meta carrying the new title (030); latest
         wins. A no-op on an unknown session."""
         records, _ = self.load(session_id)
-        original = next(
-            (r for r in records if isinstance(r, SessionMetaRecord)), None
-        )
+        original = next((r for r in records if isinstance(r, SessionMetaRecord)), None)
         if original is None:
             return
         next_sequence = max((r.sequence for r in records), default=-1) + 1
