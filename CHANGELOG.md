@@ -142,5 +142,21 @@ additive layers (units 001-013), brought to release quality by unit 014.
   `glob_files` (filename pattern matching), and `grep` (regex content search with
   `content` / `files_with_matches` / `count` output modes). `search_files` is unchanged; no new
   dependency, no frontend, no ADR. First unit of the Tier-1 agent-capability sprint (033–036).
+- **034** Web tools (`loopplane.tools` / `loopplane.governance` / `loopplane.host`) — two additive
+  **NETWORK** tools on a new Web Tool Adapter, reachable only through the Gateway: `web_fetch`
+  (fetch an http(s) URL to readable text, with a per-session in-memory cache) and `web_search` (run
+  a query through a **host-injected** `SearchProvider` — LoopPlane bundles **no API key** and **no
+  provider**; unconfigured → a clear normalized error, never a crash). Network egress is gated by an
+  additive `ToolDescriptor.network` flag (default `False`; only the two web tools set it) and a
+  `network_policy` decider that **denies network-flagged tools unless the host opts in**
+  (default-deny / opt-in via `RuntimeConfig.allow_network`), composed through the **existing**
+  decide-stage combinators (`safe_failure(all_of(...))` — deny-wins + fail-closed) in
+  `_build_decider` — **no new gateway stage**. Every failure (bad/non-http(s) URL, timeout,
+  transport error, missing `httpx`, raising provider) is a normalized `ErrorOutput` with no leaked
+  secret/transport internal (V, VII). `httpx` is promoted to a declared **optional extra** (`net`),
+  imported lazily; the core install gains no required dependency. Deterministic offline tests
+  (mocked transport + stub provider) plus an opt-in, secret-gated live fetch; existing tools /
+  descriptors / policies unchanged. No frontend, no ADR. Second unit of the Tier-1
+  agent-capability sprint (033–036).
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

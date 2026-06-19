@@ -136,9 +136,12 @@ tools and normalizes their output.
 
 ### `loopplane.tools`
 
-The internal tool adapter.
+The internal and web tool adapters.
 
 - `InternalToolAdapter` — the adapter for built-in internal tools.
+- `WebToolAdapter` — the adapter for the web tools (web_fetch, web_search).
+- `SearchProvider` — the host-injected web-search provider seam.
+- `SearchResult` — a single web-search result (title, url, snippet).
 
 ### `loopplane.adapters.mcp`
 
@@ -474,6 +477,7 @@ Sandbox, policy, and cost governance.
 - `SimpleDecision` — a simple allow/deny decision.
 - `as_decider` — adapt a policy to a decider.
 - `all_of` — combine policies (all must allow).
+- `network_policy` — gate tools that require network egress (opt-in).
 
 ### `loopplane.inspect` (unit 010)
 

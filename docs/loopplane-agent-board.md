@@ -113,6 +113,7 @@ git history) — not invented.
 | **031-web-message-actions** | `specs/031-web-message-actions` | **Verified** | Web Message Actions (product-polish sprint): **frontend-only** — per-message **copy** + **regenerate** (re-run the last user turn via the existing send path) + a **code-block copy** button (react-markdown `pre` override). No backend change. | 025 | None — implemented & verified on `main` (clipboard helper + MessageList copy/regenerate + Markdown code-copy; **90 Vitest** + tsc + build green; Python unchanged). |
 | **032-web-interaction-resilience** | `specs/032-web-interaction-resilience` | **Verified** | Web Interaction Resilience & States (product-polish sprint): **frontend-only** — approval/question dialogs become **true modals** (`Modal` + `useFocusTrap`; Esc = safe default; keyboard nav); **error retry + toasts**; **loading skeletons + richer empty state + first-run prompts**. No backend change. | 025, 026 | None — implemented & verified on `main` (Modal/useFocusTrap/Toast/Skeleton + dialog/banner/list wiring; **101 Vitest** + tsc + build green; Python unchanged). The product-polish sprint (030–032) is COMPLETE. |
 | **033-file-tool-parity** | `specs/033-file-tool-parity` | **Verified** | File-tool parity (Tier-1 agent-capability sprint, **first unit**): three **additive** baseline tools on the Internal Tool Adapter — `edit_file` (surgical unique-string replacement reusing the `write_file` stale-write guard), `glob_files` (scope-relative filename globbing), and `grep` (regex content search with `content` / `files_with_matches` / `count` modes) — each reachable **only through the Gateway** (V) and confined to the run working scope. `search_files` unchanged; no new dependency, no frontend, no ADR. Closes the "thin built-in toolset" gap vs the reference harnesses. | 001, 009 | None — implemented & verified on `main` (`loopplane.tools.internal`; 21 new offline tests; **788 pytest** + `ruff check` + `mypy`(src, strict) + `ruff format --check` green). |
+| **034-web-tools** | `specs/034-web-tools` | **Verified** | Web tools (Tier-1 agent-capability sprint, **second unit**): two **additive** NETWORK tools on a new Web Tool Adapter — `web_fetch` (fetch an http(s) URL to readable text, with a per-session in-memory cache) and `web_search` (run a query through a **host-injected** `SearchProvider`; **no bundled API key/provider** → unconfigured yields a clear normalized error) — each reachable **only through the Gateway** (V). Network egress is gated by an additive `ToolDescriptor.network` flag (default `False`) + a `network_policy` decider that **denies network-flagged tools unless the host opts in** (`RuntimeConfig.allow_network`, default-deny), composed through the **existing** decide-stage combinators (`safe_failure(all_of(...))` — deny-wins + fail-closed) in `_build_decider` — **no new gateway stage**. All failures normalized to `ErrorOutput` with no leaked secret/transport internal (V, VII). `httpx` promoted to an optional extra (`net`), imported lazily; core install unchanged. No frontend, no ADR. | 001, 009 | None — implemented & verified on `main` (`loopplane.tools.web` + `loopplane.governance.network` + `_build_decider` wiring; 26 new offline tests + an opt-in live fetch; **814 pytest** + `ruff check` + `ruff format --check` + `mypy`(src, strict) green). |
 
 **Status evidence (for audit):**
 
@@ -520,13 +521,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **Tier-1 agent-capability sprint (033–036)** in progress: **033 file-tool-parity is `Verified`**; **034 web-tools** is next; 035 multi-provider + 036 multimodal remain. |
-| Active feature directory | `.specify/feature.json` → `specs/033-file-tool-parity` (just completed; advance to `specs/034-web-tools` at `034 /speckit.specify`). |
+| Active unit | **Tier-1 agent-capability sprint (033–036)** in progress: **033 file-tool-parity** and **034 web-tools** are `Verified`; **035 multi-provider** is next; 036 multimodal remains. |
+| Active feature directory | `.specify/feature.json` → `specs/034-web-tools` (just completed; advance to `specs/035-...` at `035 /speckit.specify`). |
 | Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **033 COMPLETE** (specify → plan → tasks → implement → Verified). Next: begin **034 web tools** (`web_fetch` / `web_search` + network-egress governance). |
-| Depends on | 034 depends on 001 (internal adapter) + 009 (governance decider seam); 036 hard-depends on 035. |
-| Next command | `034 /speckit.specify` (→ `speckit-specify`) for `web_fetch` / `web_search` + a `network` `ToolDescriptor` flag and a `network_policy` decider. |
-| Stop condition status | **In progress** — Tier-1 sprint (033–036); 033 `Verified`, three units remain. |
+| Current Spec Kit step | **034 COMPLETE** (specify → plan → tasks → implement → Verified). Next: begin **035 multi-provider**. |
+| Depends on | 035 builds on 020 (model-provider adapters); 036 multimodal hard-depends on 035. |
+| Next command | `035 /speckit.specify` (→ `speckit-specify`) for the multi-provider unit. |
+| Stop condition status | **In progress** — Tier-1 sprint (033–036); 033 + 034 `Verified`, two units remain. |
 
 ---
 

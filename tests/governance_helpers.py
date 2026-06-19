@@ -22,6 +22,7 @@ def descriptor(
     source: str = "s",
     read_only: bool = False,
     concurrency_safe: bool = False,
+    network: bool = False,
 ) -> ToolDescriptor:
     return ToolDescriptor(
         name=name,
@@ -29,6 +30,7 @@ def descriptor(
         input_schema={},
         concurrency_safe=concurrency_safe,
         read_only=read_only,
+        network=network,
         source=source,
     )
 

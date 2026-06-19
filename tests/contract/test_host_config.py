@@ -114,3 +114,115 @@ def test_runtime_config_declares_no_secret_field() -> None:
         "credentials",
     }
     assert not (names & secrets)
+
+
+# --- network-egress wiring (spec 034; US1) -----------------------------------
+
+
+def _network_descriptor(name: str) -> ToolDescriptor:
+    return ToolDescriptor(
+        name=name,
+        description="network tool",
+        input_schema={
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        },
+        network=True,
+    )
+
+
+async def _verdict(decider: object, the_descriptor: ToolDescriptor) -> object:
+    import pathlib
+
+    from loopplane.context import RunContext
+    from loopplane.model import ToolCallRequest
+
+    request = ToolCallRequest(call_id="c", tool_name=the_descriptor.name, input={})
+    # A real RunContext (HumanApproval reads its session approval memory); the
+    # event emitter is unused on the allow/deny paths these tests exercise.
+    context = RunContext(session_id="s", working_scope=pathlib.Path("."))
+    return await decider(request, the_descriptor, context, None)  # type: ignore[operator]
+
+
+@pytest.mark.anyio
+async def test_network_tool_denied_by_default() -> None:
+    from loopplane.approval import PolicyDeny
+    from loopplane.host.assembly import _build_decider
+
+    config = RuntimeConfig(
+        model=_model(),
+        tools=(
+            ToolSpec(descriptor=_network_descriptor("web_fetch"), handler=_handler),
+        ),
+    )
+    decider = _build_decider(config, ["web_fetch"], None)
+    assert decider is not None
+    verdict = await _verdict(decider, _network_descriptor("web_fetch"))
+    assert isinstance(verdict, PolicyDeny)
+
+
+@pytest.mark.anyio
+async def test_network_tool_allowed_when_egress_enabled() -> None:
+    from loopplane.approval import PolicyAllow
+    from loopplane.host.assembly import _build_decider
+
+    config = RuntimeConfig(
+        model=_model(),
+        tools=(
+            ToolSpec(descriptor=_network_descriptor("web_fetch"), handler=_handler),
+        ),
+        allow_network=True,
+    )
+    decider = _build_decider(config, ["web_fetch"], None)
+    # With egress enabled and no approval/skills, the network policy would be a
+    # harmless allow, so the builder keeps the allow-all fast-path (None) — which
+    # itself allows the network tool. If a decider is built, it must allow.
+    if decider is not None:
+        verdict = await _verdict(decider, _network_descriptor("web_fetch"))
+        assert isinstance(verdict, PolicyAllow)
+
+
+@pytest.mark.anyio
+async def test_network_tool_allowed_when_egress_enabled_with_approval() -> None:
+    from loopplane.approval import PolicyAllow
+    from loopplane.host.assembly import _build_decider
+
+    # With an approval policy present, the composed decider is always built; the
+    # network policy must still allow the network tool when egress is on.
+    config = RuntimeConfig(
+        model=_model(),
+        tools=(
+            ToolSpec(descriptor=_network_descriptor("web_fetch"), handler=_handler),
+        ),
+        approval=ApprovalPolicy(allow=frozenset({"web_fetch"}), default="allow"),
+        allow_network=True,
+    )
+    decider = _build_decider(config, ["web_fetch"], None)
+    assert decider is not None
+    verdict = await _verdict(decider, _network_descriptor("web_fetch"))
+    assert isinstance(verdict, PolicyAllow)
+
+
+@pytest.mark.anyio
+async def test_non_network_tool_unaffected_by_default_egress() -> None:
+    from loopplane.approval import PolicyAllow
+    from loopplane.host.assembly import _build_decider
+
+    config = RuntimeConfig(
+        model=_model(),
+        tools=(
+            ToolSpec(descriptor=_network_descriptor("web_fetch"), handler=_handler),
+        ),
+    )
+    decider = _build_decider(config, ["web_fetch"], None)
+    assert decider is not None
+    # A plain (non-network) tool passes even though egress is off.
+    verdict = await _verdict(decider, _descriptor("echo"))
+    assert isinstance(verdict, PolicyAllow)
+
+
+def test_allow_network_round_trips_from_mapping_and_has_no_secret() -> None:
+    config = RuntimeConfig.from_mapping({"model": _model(), "allow_network": True})
+    assert config.allow_network is True
+    assert RuntimeConfig.from_mapping({"model": _model()}).allow_network is False

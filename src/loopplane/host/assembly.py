@@ -24,6 +24,7 @@ from loopplane.checkpoint import (
 from loopplane.controller.controller import RuntimeController
 from loopplane.events import RuntimeEvent
 from loopplane.gateway import PolicyDecider, ToolGateway
+from loopplane.governance import all_of, network_policy, safe_failure
 from loopplane.host.config import (
     RuntimeConfig,
     approval_effects,
@@ -159,15 +160,37 @@ def _build_decider(
     tool_names: list[str],
     skills_map: Mapping[str, LoadedSkill] | None,
 ) -> PolicyDecider | None:
-    """Translate the approval policy (and skill profiles) into a Phase-1
-    decider; ``None`` leaves the gateway's allow-all default (test posture)."""
+    """Translate the approval policy, the skill profiles, and the network-egress
+    setting into a Phase-1 decider; ``None`` leaves the gateway's allow-all default
+    (test posture).
 
-    if config.approval is None and not skills_map:
+    The network gate reuses the existing decide-stage combinators (spec 034): when
+    egress is disabled it must be present to deny a network-flagged tool by default,
+    so the composed decider is ``safe_failure(all_of(<approval?>, network_policy))``
+    — deny-wins + fail-closed. The ``None`` fast-path is preserved only when there is
+    no approval/skills *and* egress is enabled (the network policy would be a harmless
+    allow), so an existing non-network run's allow-all posture is unchanged.
+    """
+
+    approval_needed = config.approval is not None or bool(skills_map)
+    # When egress is off the gate must be installed so network tools deny by default;
+    # when on, the policy is a no-op allow and only matters if approval is also wired.
+    network_gate_needed = not config.allow_network
+    if not approval_needed and not network_gate_needed:
         return None
-    rules = [
-        PermissionRule(matcher=name, effect=effect, scope="session-local")
-        for name, effect in approval_effects(config, tool_names)
-        if effect is not None
-    ]
-    profiles = skill_profiles(skills_map) if skills_map else None
-    return HumanApproval(rules=rules, skill_profiles=profiles)
+
+    deciders: list[PolicyDecider] = []
+    if approval_needed:
+        rules = [
+            PermissionRule(matcher=name, effect=effect, scope="session-local")
+            for name, effect in approval_effects(config, tool_names)
+            if effect is not None
+        ]
+        profiles = skill_profiles(skills_map) if skills_map else None
+        deciders.append(HumanApproval(rules=rules, skill_profiles=profiles))
+    deciders.append(network_policy(allow_network=config.allow_network))
+
+    # Deny-wins composition (all_of) wrapped fail-closed (safe_failure); a single
+    # decider composes the same way, so this is uniform whether or not approval is
+    # wired.
+    return safe_failure(all_of(*deciders))

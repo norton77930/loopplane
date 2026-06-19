@@ -97,6 +97,10 @@ class RuntimeConfig:
     memory: MemoryConfig | None = None
     skills: SkillsConfig | None = None
     observability: bool = False
+    # Opt-in network egress (spec 034): off by default, so a network-flagged tool
+    # is denied at the Gateway's decide stage unless the host turns this on. Carries
+    # no secret — a search provider's credential lives in the host-supplied provider.
+    allow_network: bool = False
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -119,6 +123,7 @@ class RuntimeConfig:
             memory=_coerce_memory(data.get("memory")),
             skills=_coerce_skills(data.get("skills")),
             observability=bool(data.get("observability", False)),
+            allow_network=bool(data.get("allow_network", False)),
         )
 
 

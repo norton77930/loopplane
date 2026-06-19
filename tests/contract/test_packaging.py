@@ -47,6 +47,7 @@ def test_runtime_dependencies_are_unchanged() -> None:
     assert set(project["optional-dependencies"]) == {
         "anthropic",
         "mcp",
+        "net",
         "openai",
         "otel",
         "web",

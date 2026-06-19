@@ -46,6 +46,7 @@ class ToolDescriptor(_Shape):
     input_schema: dict[str, object]
     concurrency_safe: bool = False
     read_only: bool = False
+    network: bool = False
     source: str = "internal"
 
 
