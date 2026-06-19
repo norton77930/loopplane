@@ -66,4 +66,13 @@ Anthropic/Gemini native structured output deferred (capability flag `False`).
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-20) — 0 critical, 0 high, 2 low (informational). 100%
+requirement coverage (FR-001..FR-008 and SC-001..004 each map to ≥1 task); every task traces
+to a requirement/design item; spec ↔ plan ↔ data-model ↔ contract ↔ tasks agree on the design
+(additive `ModelRequest.output_schema`; `response_format` json_schema mapping; duck-typed
+`supports_structured_output` probe; OpenAI-family v1 with Anthropic/Gemini deferred;
+verification via the unit-005 pack). No Constitution violations — the boundary check (research
+D1) confirms the additive field is backward-compatible, so no §9.5 stop and no ADR (034/036
+precedent). Low notes are informational only (the deliberate v1 deferral of native
+Anthropic/Gemini structured output; T012's conditional api-reference update). **Cleared for
+`/speckit-implement`.**
