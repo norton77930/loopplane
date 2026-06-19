@@ -26,10 +26,13 @@ uv run ruff check .; uv run ruff format --check .; uv run mypy; uv run pytest -q
 ## Using a provider (illustrative)
 
 ```python
+import os
+
 from loopplane.adapters.openai_compat import openrouter_model, ollama_model
 
-# OpenRouter (unlocks Claude, Gemini, Llama, … behind the OpenAI wire format):
-model = openrouter_model("google/gemini-2.0-flash", api_key="<OPENROUTER_KEY>")
+# OpenRouter (unlocks Claude, Gemini, Llama, … behind the OpenAI wire format).
+# The key is injected from the environment, never committed (Constitution VII):
+model = openrouter_model("google/gemini-2.0-flash", api_key=os.environ["OPENROUTER_KEY"])
 
 # Local Ollama (no key):
 model = ollama_model("llama3")  # or base_url="http://remote:11434/v1"

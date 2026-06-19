@@ -53,7 +53,8 @@ def test_models_catalog_lists_entries(tmp_path: Path) -> None:
     listing = client.get("/v1/models")
     assert listing.status_code == 200
     assert {m["id"] for m in listing.json()} == {"alpha", "beta"}
-    assert all(set(m) == {"id", "label"} for m in listing.json())
+    # 036 — the catalog now advertises image-input capability per model.
+    assert all(set(m) == {"id", "label", "accepts_media"} for m in listing.json())
 
 
 def test_run_events_routed_to_the_selected_model(tmp_path: Path) -> None:

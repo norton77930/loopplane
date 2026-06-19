@@ -168,5 +168,29 @@ additive layers (units 001-013), brought to release quality by unit 014.
   hosts like the OpenAI host, so the existing `/v1/models` selector lists them with no frontend
   change. **Native Gemini (direct Google API) is deferred** to a follow-up — reachable via
   OpenRouter today. Third unit of the Tier-1 agent-capability sprint (033–036).
+- **036** Multimodal input (`loopplane.model` / `loopplane.adapters.{anthropic,openai,openai_compat}` /
+  `loopplane.host` / `loopplane.webapi`) — image input end-to-end, settled by the repository's first
+  ADR (`docs/adr/0001-multimodal-content.md`). Image content was already modeled and contract-safe
+  (`ImageBlock` is in `ContentBlock`/`OutputBlock`, round-trips through the event schema, and maps to
+  Anthropic/OpenAI — OpenRouter/Ollama inherit via the OpenAI mapping), so **the content model and the
+  event schema are UNCHANGED** (no `SCHEMA_VERSION` bump; ADR D1). The unit wires the existing upload
+  path (028) into the model at the web edge: an optional `RunRequest.uploads` (`UploadRef`) whose image
+  uploads become **leading `ImageBlock`s** on the user message (a pure `webapi.multimodal.assemble_blocks`
+  helper; image-type sniffing in `webapi.uploads.image_media_type`; non-image uploads stay
+  `read_upload`-readable, 028). **Provider capability negotiation** is an additive, duck-typed
+  `loopplane.model.accepts_media(model)` probe (the `ModelBoundary` Protocol is unchanged — not a new
+  required method; ADR D5) + an `accepts_media` flag on `AnthropicConfig`/`OpenAIConfig` (default `True`)
+  and the `openrouter_model` (default `True`) / `ollama_model` (default `False`) constructors; the
+  web/API layer (which owns model selection, 028) rejects an image sent to a text-only model with a
+  clear normalized error (HTTP 400) and `/v1/models` advertises `accepts_media` per model. A media size
+  cap rejects an oversized image at the conversion point (HTTP 413; ADR D6). The content vocabulary for
+  building multimodal input (`Prompt`, `ContentBlock`, `TextBlock`, `ImageBlock`) is exposed through the
+  `loopplane.host` seam. **PDF (a `DocumentBlock`) is deferred** — it does not map through OpenAI
+  chat-completions and would pull in binary artifact durability + a non-text gateway handoff (the ADR's
+  recommended follow-up, D2/D3/D4); the artifact store and the Tool Gateway are **unchanged**. Native
+  Gemini remains a separate deferred 035 follow-up. Deterministic offline tests (a scripted/recording
+  model + an in-process client + a real PNG); the event serde round-trip now asserts an
+  `ImageBlock`-bearing `UserInputEvent` is lossless (Constitution VI). No new dependency, no frontend.
+  Fourth and final unit of the Tier-1 agent-capability sprint (033–036).
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

@@ -42,11 +42,23 @@ class _SummaryLike(Protocol):
 # --- requests ----------------------------------------------------------------
 
 
+class UploadRef(BaseModel):
+    """A reference to an uploaded file a turn carries (036). Each is resolved
+    through the per-principal ``UploadStore`` (028); an image upload is assembled
+    into an ``ImageBlock`` on the user message, a non-image stays
+    ``read_upload``-readable."""
+
+    reference: str = Field(min_length=1)
+
+
 class RunRequest(BaseModel):
     prompt: str = Field(min_length=1)
     model: str | None = (
         None  # 028 — optional model id; routed to the chosen host (one per run)
     )
+    uploads: list[
+        UploadRef
+    ] = []  # 036 — optional upload refs; image uploads become leading ImageBlocks
 
 
 class RenameRequest(BaseModel):
@@ -216,6 +228,7 @@ class ModelInfo(BaseModel):
 
     id: str
     label: str
+    accepts_media: bool = False  # 036 — whether the model accepts image input
 
 
 class UploadResult(BaseModel):

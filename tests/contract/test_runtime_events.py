@@ -35,7 +35,7 @@ from loopplane.events import (
 )
 from loopplane.events.envelope import RUNTIME_EVENT_TYPES
 from loopplane.model.boundary import TokenUsage
-from loopplane.model.content import TextBlock
+from loopplane.model.content import ImageBlock, TextBlock
 
 EXPECTED_VOCABULARY = {
     "user-input",
@@ -181,6 +181,30 @@ def test_serde_round_trip_is_lossless() -> None:
         serialized = serialize_event(event)
         restored = deserialize_event(serialized)
         assert restored == event, f"round trip changed a {event.type} event"
+
+
+def test_user_input_with_an_image_block_round_trips() -> None:
+    # 036: image input reaches the model via the existing UserInputEvent.blocks,
+    # with NO schema change. A content-block change MUST be tested (Constitution
+    # VI): assert an ImageBlock-bearing user-input event is lossless and that the
+    # schema version is unchanged.
+    event = UserInputEvent(
+        **_envelope(1),
+        payload={
+            "blocks": [
+                ImageBlock(media="aGVsbG8=", format="image/png"),
+                TextBlock(text="what is in this image?"),
+            ]
+        },
+    )
+    restored = deserialize_event(serialize_event(event))
+    assert restored == event
+    document = json.loads(serialize_event(event))
+    assert document["schema_version"] == SCHEMA_VERSION
+    image = document["payload"]["blocks"][0]
+    assert image["kind"] == "image"
+    assert image["format"] == "image/png"
+    assert image["media"] == "aGVsbG8="
 
 
 def test_serialized_form_is_self_describing() -> None:

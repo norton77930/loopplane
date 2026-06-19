@@ -50,6 +50,10 @@ class AnthropicModel:
     def context_capacity(self) -> int:
         return self._config.context_capacity
 
+    def accepts_media(self) -> bool:
+        """Whether this model accepts image input (spec 036; ADR 0001 D5)."""
+        return self._config.accepts_media
+
     async def stream_turn(self, request: ModelRequest) -> AsyncIterator[ModelIncrement]:
         kwargs: dict[str, Any] = {
             "model": self._config.model,

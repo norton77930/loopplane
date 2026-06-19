@@ -25,6 +25,7 @@ from loopplane.webapi.models import (
     RunResult,
     SessionAnswer,
     SessionSummaryView,
+    UploadRef,
 )
 
 __all__ = [
@@ -40,6 +41,7 @@ __all__ = [
     "RunResult",
     "SessionAnswer",
     "SessionSummaryView",
+    "UploadRef",
     "create_app",
     "token_authenticator",
 ]

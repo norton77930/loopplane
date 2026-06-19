@@ -25,12 +25,14 @@ _STREAM_CLOSED = (anyio.BrokenResourceError, anyio.ClosedResourceError)
 @dataclass
 class SessionEntry:
     """A live interactive session: its handle, its SSE event channel, the event
-    that closes it, and the principal id that owns it (022)."""
+    that closes it, the principal id that owns it (022), and whether its model
+    accepts image input (036, for the submit endpoint's degradation check)."""
 
     session: Session
     events: MemoryObjectReceiveStream[str]
     close: anyio.Event
     owner: str
+    accepts_media: bool = False
 
 
 async def run_session(
@@ -39,6 +41,7 @@ async def run_session(
     ready: anyio.Event,
     box: dict[str, str],
     owner: str,
+    accepts_media: bool = False,
 ) -> None:
     """Hold a ``host.session`` open until closed; register its handle + SSE
     channel under its owning principal. On a sequential-host conflict, signal the
@@ -56,7 +59,9 @@ async def run_session(
     try:
         async with host.session(sink, principal_id=owner) as session:
             box["sid"] = session.session_id
-            sessions[session.session_id] = SessionEntry(session, receive, close, owner)
+            sessions[session.session_id] = SessionEntry(
+                session, receive, close, owner, accepts_media
+            )
             ready.set()
             await close.wait()
     except RuntimeError:

@@ -50,12 +50,15 @@ def openrouter_model(
     context_capacity: int = _DEFAULT_CONTEXT_CAPACITY,
     max_output_tokens: int | None = None,
     client: Any = None,
+    accepts_media: bool = True,
 ) -> OpenAIModel:
     """Build an :class:`OpenAIModel` pointed at OpenRouter.
 
     The OpenAI chat-completions mapping is reused unchanged; only the client's
     ``base_url`` (and the injected key) differ. ``client`` lets a test inject a
-    ready stand-in, bypassing the factory.
+    ready stand-in, bypassing the factory. ``accepts_media`` defaults to ``True``
+    because OpenRouter brokers vision models (spec 036; ADR 0001 D5); set it
+    ``False`` when routing to a text-only model.
     """
 
     return OpenAIModel(
@@ -66,6 +69,7 @@ def openrouter_model(
             api_key=api_key,
             client=client,
             client_factory=_base_url_client_factory(OPENROUTER_BASE_URL),
+            accepts_media=accepts_media,
         )
     )
 
@@ -77,10 +81,14 @@ def ollama_model(
     context_capacity: int = _DEFAULT_CONTEXT_CAPACITY,
     max_output_tokens: int | None = None,
     client: Any = None,
+    accepts_media: bool = False,
 ) -> OpenAIModel:
     """Build an :class:`OpenAIModel` pointed at a local Ollama OpenAI-compatible
     endpoint. Ollama ignores the API key, so a placeholder satisfies the SDK
     client; ``base_url`` defaults to the local daemon and is overridable.
+    ``accepts_media`` defaults to ``False`` because local Ollama models are
+    commonly text-only (spec 036; ADR 0001 D5); set it ``True`` for a local
+    vision model.
     """
 
     return OpenAIModel(
@@ -91,6 +99,7 @@ def ollama_model(
             api_key="ollama",
             client=client,
             client_factory=_base_url_client_factory(base_url),
+            accepts_media=accepts_media,
         )
     )
 

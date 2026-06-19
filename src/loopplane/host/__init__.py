@@ -26,23 +26,29 @@ from loopplane.host.config import (
 from loopplane.host.host import (
     ApprovalDecision,
     LoopPlaneHost,
+    Prompt,
     RunOutcome,
     Session,
     build_host,
 )
+from loopplane.model import ContentBlock, ImageBlock, TextBlock
 
 __all__ = [
     "ApprovalDecision",
     "ApprovalPolicy",
     "AssembledRuntime",
     "ConfigError",
+    "ContentBlock",
+    "ImageBlock",
     "LoopPlaneHost",
     "MemoryConfig",
+    "Prompt",
     "RunOutcome",
     "RuntimeConfig",
     "Session",
     "SkillsConfig",
     "StorageConfig",
+    "TextBlock",
     "ToolSpec",
     "assemble",
     "build_host",

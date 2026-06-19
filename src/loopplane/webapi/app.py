@@ -23,7 +23,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from loopplane.events import RuntimeEvent
-from loopplane.host import LoopPlaneHost
+from loopplane.host import ContentBlock, LoopPlaneHost, TextBlock
 from loopplane.webapi.auth import (
     DENY_ALL,
     Authenticator,
@@ -50,6 +50,12 @@ from loopplane.webapi.models import (
     ToolView,
     UploadResult,
 )
+from loopplane.webapi.multimodal import (
+    MediaNotAccepted,
+    MediaTooLarge,
+    UnknownUpload,
+    assemble_blocks,
+)
 from loopplane.webapi.sessions import SessionEntry, run_session
 from loopplane.webapi.streaming import run_event_stream
 from loopplane.webapi.uploads import UploadStore, UploadTooLarge
@@ -64,10 +70,15 @@ async def _discard(event: RuntimeEvent) -> None:
 @dataclass(frozen=True)
 class ModelHost:
     """A model-catalog entry (028): a label + a single-model host. Catalog hosts share
-    one checkpoint root (021) so a routed run resumes the shared session."""
+    one checkpoint root (021) so a routed run resumes the shared session.
+
+    ``accepts_media`` (036) declares whether the host's model accepts image input;
+    the catalog advertises it on ``/v1/models`` and the run endpoints reject an
+    image sent to a text-only model with a clear normalized error (ADR 0001 D5)."""
 
     label: str
     host: LoopPlaneHost
+    accepts_media: bool = False
 
 
 def create_app(
@@ -77,6 +88,8 @@ def create_app(
     api_prefix: str = "/v1",
     models: Mapping[str, ModelHost] | None = None,
     uploads: UploadStore | None = None,
+    default_accepts_media: bool = False,
+    max_image_bytes: int = 5 * 1024 * 1024,
 ) -> FastAPI:
     """Build the web/API host app embedding ``host`` behind the auth boundary.
 
@@ -85,6 +98,8 @@ def create_app(
     and scopes sessions to it (022). ``models`` is an optional catalog of single-model
     hosts a run can route to (028, one model per run); ``uploads`` is an optional
     per-principal blob store for the upload endpoint + the ``read_upload`` tool.
+    ``default_accepts_media`` declares whether the bare default ``host`` accepts
+    image input (036); ``max_image_bytes`` caps an embedded image (ADR 0001 D6).
     """
 
     auth = authenticator or DENY_ALL
@@ -92,14 +107,39 @@ def create_app(
     sessions: dict[str, SessionEntry] = {}
     catalog = dict(models or {})
 
-    def _select_host(model: str | None) -> LoopPlaneHost:
-        # Route to the chosen single-model host (028); one model per run.
+    def _select(model: str | None) -> tuple[LoopPlaneHost, bool]:
+        # Route to the chosen single-model host (028); one model per run. Returns
+        # the host and whether it accepts image input (036).
         if not model:
-            return host
+            return host, default_accepts_media
         entry = catalog.get(model)
         if entry is None:
             raise HTTPException(status_code=400, detail="unknown model")
-        return entry.host
+        return entry.host, entry.accepts_media
+
+    def _build_blocks(
+        body: RunRequest, owner: str, accepts_media: bool
+    ) -> list[ContentBlock]:
+        # Assemble the user message: image uploads (036) become leading ImageBlocks
+        # ahead of the prompt; failures degrade to a public-safe normalized error
+        # before any run starts (ADR 0001 D5/D6). No uploads -> a single TextBlock.
+        if not body.uploads:
+            return [TextBlock(text=body.prompt)]
+        if uploads is None:
+            raise HTTPException(status_code=400, detail="uploads not configured")
+        try:
+            return assemble_blocks(
+                body.prompt,
+                [ref.reference for ref in body.uploads],
+                uploads,
+                owner,
+                accepts_media=accepts_media,
+                max_image_bytes=max_image_bytes,
+            )
+        except MediaTooLarge as exc:
+            raise HTTPException(status_code=413, detail="image too large") from exc
+        except (UnknownUpload, MediaNotAccepted) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -157,10 +197,10 @@ def create_app(
     async def post_run(
         body: RunRequest, principal: Principal = Depends(require)
     ) -> RunResult:
+        chosen, accepts_media = _select(body.model)
+        blocks = _build_blocks(body, principal.id, accepts_media)
         try:
-            outcome = await _select_host(body.model).run(
-                body.prompt, _discard, principal_id=principal.id
-            )
+            outcome = await chosen.run(blocks, _discard, principal_id=principal.id)
         except RuntimeError as exc:
             raise HTTPException(
                 status_code=409, detail="a run is already active"
@@ -173,9 +213,10 @@ def create_app(
     async def post_run_events(
         body: RunRequest, principal: Principal = Depends(require)
     ) -> StreamingResponse:
-        chosen = _select_host(body.model)
+        chosen, accepts_media = _select(body.model)
+        blocks = _build_blocks(body, principal.id, accepts_media)
         return StreamingResponse(
-            run_event_stream(chosen, body.prompt, principal.id),
+            run_event_stream(chosen, blocks, principal.id),
             media_type="text/event-stream",
         )
 
@@ -185,11 +226,11 @@ def create_app(
     async def open_session(
         model: str | None = None, principal: Principal = Depends(require)
     ) -> OpenedSession:
-        chosen = _select_host(model)
+        chosen, accepts_media = _select(model)
         ready = anyio.Event()
         box: dict[str, str] = {}
         app.state.session_tg.start_soon(
-            run_session, chosen, sessions, ready, box, principal.id
+            run_session, chosen, sessions, ready, box, principal.id, accepts_media
         )
         await ready.wait()
         if box.get("error"):
@@ -216,7 +257,8 @@ def create_app(
         # answered out-of-band by a concurrent request; a client that prefers to
         # observe progress incrementally reads the session events stream (FR-007).
         entry = _require(session_id, principal)
-        outcome = await entry.session.submit(body.prompt)
+        blocks = _build_blocks(body, principal.id, entry.accepts_media)
+        outcome = await entry.session.submit(blocks)
         return RunResult.from_outcome(outcome)
 
     @router.post("/sessions/{session_id}/approvals/{request_id}")
@@ -356,7 +398,10 @@ def create_app(
     async def list_models(
         principal: Principal = Depends(require),
     ) -> list[ModelInfo]:
-        return [ModelInfo(id=mid, label=entry.label) for mid, entry in catalog.items()]
+        return [
+            ModelInfo(id=mid, label=entry.label, accepts_media=entry.accepts_media)
+            for mid, entry in catalog.items()
+        ]
 
     @router.post("/uploads")
     async def upload_file(

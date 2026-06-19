@@ -45,6 +45,7 @@ model for offline tests.
 - `ScriptEntry` — an entry in a model script.
 - `ScriptedFailure` — a scripted failure injection.
 - `ScriptedOverflow` — a scripted context-overflow injection.
+- `accepts_media` — whether a model accepts image input (duck-typed probe).
 
 ### `loopplane.events`
 
@@ -286,6 +287,10 @@ The Host Application Interface that exposes the runtime to host applications.
 - `ToolSpec` — a tool specification for the host.
 - `ApprovalPolicy` — the host approval policy.
 - `ApprovalDecision` — a host approval decision.
+- `Prompt` — a run's input: text or a content-block sequence (036).
+- `ContentBlock` — base type for a run's input content blocks (036).
+- `TextBlock` — a text input block (036).
+- `ImageBlock` — an image input block (036).
 
 ## Loop-engineering & layers (units 003-013)
 
@@ -516,6 +521,7 @@ The web/API host transport over the Host Application Interface.
 - `Principal` — an authenticated caller's identity (session ownership, 022).
 - `token_authenticator` — a reference token→principal verifier (dev/tests).
 - `RunRequest` — a run request body.
+- `UploadRef` — a reference to an uploaded file a run carries (036).
 - `RunResult` — a run result (metadata only).
 - `OpenedSession` — an opened session handle.
 - `SessionAnswer` — an answer submitted to a session.

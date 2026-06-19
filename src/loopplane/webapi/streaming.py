@@ -17,7 +17,7 @@ from contextlib import suppress
 import anyio
 
 from loopplane.events import RuntimeEvent, serialize_event
-from loopplane.host import LoopPlaneHost
+from loopplane.host import LoopPlaneHost, Prompt
 from loopplane.webapi.models import ErrorResponse, RunResult
 
 _STREAM_CLOSED = (anyio.BrokenResourceError, anyio.ClosedResourceError)
@@ -29,10 +29,13 @@ def _frame(data_json: str, *, event: str | None = None) -> str:
 
 
 async def run_event_stream(
-    host: LoopPlaneHost, prompt: str, principal_id: str | None = None
+    host: LoopPlaneHost, prompt: Prompt, principal_id: str | None = None
 ) -> AsyncIterator[str]:
     """Drive one run and yield its normalized events as SSE frames in recorded
-    order, then a final ``outcome`` frame (or an ``error`` frame on conflict)."""
+    order, then a final ``outcome`` frame (or an ``error`` frame on conflict).
+
+    ``prompt`` is the assembled run input — either text, or a block sequence
+    carrying image input (036)."""
 
     send, receive = anyio.create_memory_object_stream[str](math.inf)
 

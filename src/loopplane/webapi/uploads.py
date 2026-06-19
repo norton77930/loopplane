@@ -35,6 +35,39 @@ def _safe_name(name: str) -> str:
     return base or "upload"
 
 
+# Image media types this host recognizes for embedding (spec 036). The set is
+# intentionally the ones the provider image mappings accept; anything else is a
+# non-image attachment (read_upload-readable, 028), never guessed into an image.
+_EXTENSION_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+}
+
+
+def image_media_type(name: str, data: bytes) -> str | None:
+    """The image media type of an upload, or ``None`` if it is not an image.
+
+    Sniffs the leading magic bytes first (authoritative); falls back to the stored
+    name's extension when the bytes are inconclusive. A non-image upload always
+    returns ``None`` so it is never embedded as an ``ImageBlock`` (spec 036; it
+    stays a ``read_upload``-readable attachment, 028). Standard library only.
+    """
+
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    return _EXTENSION_TYPES.get(extension)
+
+
 class UploadStore:
     """A blob store keyed by an unguessable reference; the owner is recorded in a
     sidecar. Reads are by reference (the capability); the store is never listed."""

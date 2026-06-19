@@ -39,3 +39,7 @@ class OpenAIConfig:
     api_key: str | None = None
     client: Any = None
     client_factory: Callable[[str | None], Any] = default_client_factory
+    # Whether this model accepts image input (spec 036; ADR 0001 D5). GPT-4o-class
+    # models are vision-capable, so the default is True; set False for a text-only
+    # model so the web/API layer degrades gracefully.
+    accepts_media: bool = True
