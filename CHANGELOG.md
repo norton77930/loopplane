@@ -4,138 +4,19 @@ All notable changes to LoopPlane are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 Semantic Versioning.
 
-## [0.1.0] - 2026-06-18
+## [0.2.0] - 2026-06-19
 
-The initial LoopPlane line: a spec-first, embeddable agent-harness runtime and its
-additive layers (units 001-013), brought to release quality by unit 014.
+The agent-capability line: a single, additive sprint that grows what a LoopPlane
+agent can do — Tier-1 capabilities (033 file tools, 034 web tools + network
+governance, 035 OpenAI-compatible providers, 036 multimodal image input settled by
+the project's first ADR, 037 native Gemini), Tier-2 workflow depth (038 plan mode,
+039 a declarative permission rule DSL), and Tier-3 cost/efficiency (040 Anthropic
+prompt caching, 041 configurable auto-compaction). Every unit is additive and
+reuse-first: the runtime core, the content model, and the event schema are
+unchanged (no `SCHEMA_VERSION` bump).
 
 ### Added
 
-- **001** Runtime foundation — the agent loop, runtime controller, dispatcher, the
-  tool gateway, internal and MCP tool adapters, skill execution profiles, the
-  normalized runtime event bus, memory, checkpointing, artifact storage, the
-  observability overlay, and the human-approval boundary.
-- **002** Host interface (`loopplane.host`) — the Host Application Interface, a
-  programmatic runtime configuration object, and a reference runner.
-- **003** Loop engineering (`loopplane.engineering`) — loop definitions, the loop
-  controller, triggers, validators, evaluators, retry/repair, reconstructable loop
-  state, and loop events.
-- **004** Scheduling (`loopplane.scheduling`) — the local scheduler and trigger
-  engine with an injectable clock.
-- **005** Validator & evaluator packs (`loopplane.packs`) — reusable validators and
-  scoring evaluators.
-- **006** Human review (`loopplane.review`) — human-review workflows over the
-  approval boundary.
-- **007** Memory recall & knowledge (`loopplane.recall`) — recall and knowledge
-  indexing as loop-aware context sources.
-- **008** Advanced tool gateway (`loopplane.toolkit`) — tool discovery, registry,
-  packages, manifests, versioning, and diagnostics.
-- **009** Sandbox, policy & governance (`loopplane.governance`) — sandbox, path,
-  permission, budget, quota, and cost policies.
-- **010** Observability & debug (`loopplane.inspect`) — read-only trace, timeline,
-  replay, and diagnostics data contracts.
-- **011** Web/API host (`loopplane.webapi`) — the web/API host transport.
-- **012** Desktop/studio host (`loopplane.studio`) — the local desktop/studio host.
-- **013** Multi-agent orchestration (`loopplane.orchestration`) — subagents, a
-  coordinator, delegation, and aggregated event/artifact views.
-- **014** Release packaging & docs — packaging metadata, a single-source version, a
-  PEP 561 `py.typed` marker, the public API reference, the getting-started guide,
-  docs and examples indexes, this changelog, the release-readiness checklist, and
-  CI build verification.
-- **020** Model-provider adapters (`loopplane.adapters.anthropic`,
-  `loopplane.adapters.openai`) — real Anthropic and OpenAI adapters implementing the
-  model boundary, each behind its own optional extra (`anthropic`, `openai`), with
-  duck-typed stream mapping, offline stub-based tests, and an opt-in live check.
-- **021** Checkpoint store backends — the checkpoint store is now a `CheckpointStore`
-  interface (Protocol) with two interchangeable implementations: `FileCheckpointStore`
-  (the unchanged default) and an optional `SqliteCheckpointStore` (standard-library
-  `sqlite3`, no new dependency), selected via `StorageConfig(checkpoint_backend=...)`.
-  Multi-user/`principal_id` and a networked database remain deferred.
-- **022** Web principal authentication & per-principal session scoping
-  (`loopplane.webapi`) — the web/API auth boundary now identifies the caller (a
-  `Principal`) instead of only admitting/denying, and every session is scoped to the
-  principal that opened it (the listing is filtered; a non-owner gets a `404`). The owner
-  is recorded in the checkpoint metadata (`principal_id`) so scoping survives restarts,
-  and a reference `token_authenticator` ships for dev/tests. **Breaking:** the web/API
-  `Authenticator` return type changes from a bool to `Principal | None` (the unit-011
-  web/API surface; embedders with a boolean verifier must return a principal or `None`).
-  No new runtime dependency; the runtime core is unchanged.
-- **023** Web frontend login UI (`apps/web`) — a login screen captures an access token and
-  gates the single-page app over the unit-022 secured backend: the token is sent as a
-  bearer credential, persisted in `sessionStorage` (cleared on tab close), and cleared on
-  logout or an authorization failure (a 401 returns the user to login). Frontend only; the
-  runtime and the existing unit-018 app are unchanged.
-- **024** Desktop packaging (`apps/desktop`) — the Electron app can be packaged into a
-  distributable installer that bundles a **PyInstaller-frozen** sidecar, so an end-user
-  needs no system Python: a freeze spec, an electron-builder config, and a unit-tested
-  spawn resolver that runs the bundled frozen sidecar in a packaged app and
-  `python bridge.py` in development. Desktop-only; the runtime is unchanged; producing and
-  signing the per-OS installer is a reserved manual / CI step.
-- **025** Web agent UI (`apps/web`) — a frontend-only visual + UX overhaul of the
-  single-page app into a modern agent UI: a two-pane shell (sessions sidebar + a chat
-  column with a sticky header and composer), assistant **markdown** rendering (safe — no
-  raw HTML), inline **collapsible tool cards** (running -> success/failure), styled
-  approval/question dialogs, a run-status indicator + a **Stop** control, a non-blocking
-  error banner, auto-scroll with jump-to-latest, a **light/dark theme** (persisted, system
-  default), and a restyled login. The reducer now folds events into one **ordered entry
-  list** so tool cards interleave with messages. Reuses the api layer + the unit-023 auth
-  gate unchanged; no backend change.
-- **026** Web agent signals (`apps/web`) — a frontend-only extension that surfaces three signals
-  the backend **already emits** but the UI ignored: a distinct, de-emphasized, **collapsible
-  thinking block** (`assistant-reasoning-increment`), **selectable question options** with a
-  free-text fallback (the question payload's `text` + `options`; corrects the unit-018 `prompt`
-  mis-mapping), and a **per-turn + session token-usage** indicator (`turn-completed`). Each
-  degrades gracefully when its data is absent. No backend change.
-- **027** Web agent inspection panels (`loopplane.host` / `loopplane.webapi` + `apps/web`) —
-  additive, read-only, metadata-only inspection of the agent's capabilities/context: four
-  `GET /v1/inspect/{skills,tools,mcp,memory}` endpoints (auth-gated) backed by `LoopPlaneHost`
-  query methods that compose the existing skills / gateway / MCP / memory layers, rendered as a
-  tabbed inspection panel in the web UI. MCP servers are derived from the `external-server:`
-  descriptor source (never the config's args/url); no tool is executed and no state is mutated
-  (the Tool Gateway and the Event Bus are untouched). No ADR.
-- **028** Web agent model selection & file attachments (`loopplane.webapi` / `loopplane.host` +
-  `apps/web`) — additive, web/API-layer, **no ADR**. A model catalog (`GET /v1/models`) of
-  pre-configured single-model hosts sharing the unit-021 checkpoint root; runs/sessions accept a
-  `model` id routed to the chosen host (one model per run). An upload endpoint
-  (`POST /v1/uploads`, auth-gated, per-principal, size-limited) + a per-reference `UploadStore` +
-  a `read_upload` Tool Gateway tool (`loopplane.host.upload_tool`) the agent calls to read a file
-  on demand — transient input by id, never embedded into the content model. The composer gains a
-  model selector + file attachments. The runtime, content model, Tool Gateway, and Event Bus are
-  unchanged.
-- **029** Web agent parity extras (`apps/web`) — frontend-only polish, no backend, no ADR:
-  **i18n** (an in-house `t()` over en + zh-TW string maps, an `I18nProvider` persisting the choice,
-  a `LanguageSwitcher`, with an English fallback; UI chrome localized, assistant content
-  untranslated); **code syntax highlighting** (`rehype-highlight` on the unit-025 markdown, with
-  theme-bound tokens + a plain fallback); a composer **command palette** (a `/` toggle-inspection
-  command + `@skill`/`@tool` autocomplete from the unit-027 inspection data; backend-semantic
-  commands out of scope); and a **client-side cost estimate** (the unit-026 usage × a bundled price
-  table for the unit-028 model, clearly labeled an estimate, graceful when no price). Each degrades
-  gracefully; the backend is untouched. With 029, the web-UI extension (025–029) is complete.
-- **030** Web session management (`loopplane.checkpoint` / `loopplane.controller` / `loopplane.host` /
-  `loopplane.webapi` + `apps/web`) — additive, **no ADR**, the first unit of the product-polish sprint
-  (030–032). Sessions can be **renamed** and **deleted**, and the sidebar shows **titles** (not raw
-  ids) grouped by recency. `CheckpointStore` gains `set_title` (append a fresh session-meta; the latest
-  title wins in the listing and on rebuild) and `delete_session` (real removal), on both the file and
-  SQLite backends; `RuntimeController` / `LoopPlaneHost` delegate (working with or without a checkpoint
-  store). The web/API host adds owner-scoped `PATCH` / `DELETE /v1/sessions/{id}` (a non-owner → 404),
-  and `SessionSummaryView` gains `last_active_at` / `created_at`. The frontend sidebar renders titles +
-  Today / Yesterday / Earlier groups with a per-session rename/delete menu, and deleting the open
-  session returns to an empty state. The Tool Gateway, Event Bus, and content model are unchanged.
-- **031** Web message actions (`apps/web`) — frontend-only, no backend, no ADR. Each message gains
-  **copy** + **regenerate** actions, and fenced code blocks gain a **copy button**: a `lib/clipboard`
-  helper (the async Clipboard API + an `execCommand` fallback, never throwing); per-message Copy +
-  Regenerate in `MessageList` (Regenerate sits on the latest assistant message, is disabled while a
-  run is in flight, and re-runs the last user turn via the existing send path); and a code-block copy
-  button via react-markdown's `pre` override (the unit-029 highlighting is unchanged). Second unit of
-  the product-polish sprint (030–032); the backend is untouched.
-- **032** Web interaction resilience & states (`apps/web`) — frontend-only, no backend, no ADR, the
-  final unit of the product-polish sprint (030–032). The approval/question dialogs become **true
-  modals** (a `Modal` wrapper + a `useFocusTrap` hook — backdrop, focus trap, Esc resolving to the
-  safe default, keyboard-navigable options, focus restored on close); the connection-error banner
-  gains a **Retry** that re-establishes the stream; a small **toast** system surfaces transient
-  outcomes (rename / delete); and the UI gains **loading skeletons**, a **richer empty state**, and
-  **first-run example prompts**. With 032, the product-polish sprint (030–032) is complete; the
-  backend is untouched throughout (only unit 030 was additive backend, no ADR).
 - **033** File-tool parity (`loopplane.tools`) — three additive baseline tools on the Internal
   Tool Adapter, reachable only through the Gateway and confined to the run working scope:
   `edit_file` (surgical unique-string replacement reusing the `write_file` stale-write guard),
@@ -347,4 +228,138 @@ additive layers (units 001-013), brought to release quality by unit 014.
   Rollback: `auto_compact_threshold = None`, or revert the assembler/controller/
   config additions → exact pre-threshold behavior.
 
+## [0.1.0] - 2026-06-18
+
+The initial LoopPlane line: a spec-first, embeddable agent-harness runtime and its
+additive layers (units 001-013), brought to release quality by unit 014.
+
+### Added
+
+- **001** Runtime foundation — the agent loop, runtime controller, dispatcher, the
+  tool gateway, internal and MCP tool adapters, skill execution profiles, the
+  normalized runtime event bus, memory, checkpointing, artifact storage, the
+  observability overlay, and the human-approval boundary.
+- **002** Host interface (`loopplane.host`) — the Host Application Interface, a
+  programmatic runtime configuration object, and a reference runner.
+- **003** Loop engineering (`loopplane.engineering`) — loop definitions, the loop
+  controller, triggers, validators, evaluators, retry/repair, reconstructable loop
+  state, and loop events.
+- **004** Scheduling (`loopplane.scheduling`) — the local scheduler and trigger
+  engine with an injectable clock.
+- **005** Validator & evaluator packs (`loopplane.packs`) — reusable validators and
+  scoring evaluators.
+- **006** Human review (`loopplane.review`) — human-review workflows over the
+  approval boundary.
+- **007** Memory recall & knowledge (`loopplane.recall`) — recall and knowledge
+  indexing as loop-aware context sources.
+- **008** Advanced tool gateway (`loopplane.toolkit`) — tool discovery, registry,
+  packages, manifests, versioning, and diagnostics.
+- **009** Sandbox, policy & governance (`loopplane.governance`) — sandbox, path,
+  permission, budget, quota, and cost policies.
+- **010** Observability & debug (`loopplane.inspect`) — read-only trace, timeline,
+  replay, and diagnostics data contracts.
+- **011** Web/API host (`loopplane.webapi`) — the web/API host transport.
+- **012** Desktop/studio host (`loopplane.studio`) — the local desktop/studio host.
+- **013** Multi-agent orchestration (`loopplane.orchestration`) — subagents, a
+  coordinator, delegation, and aggregated event/artifact views.
+- **014** Release packaging & docs — packaging metadata, a single-source version, a
+  PEP 561 `py.typed` marker, the public API reference, the getting-started guide,
+  docs and examples indexes, this changelog, the release-readiness checklist, and
+  CI build verification.
+- **020** Model-provider adapters (`loopplane.adapters.anthropic`,
+  `loopplane.adapters.openai`) — real Anthropic and OpenAI adapters implementing the
+  model boundary, each behind its own optional extra (`anthropic`, `openai`), with
+  duck-typed stream mapping, offline stub-based tests, and an opt-in live check.
+- **021** Checkpoint store backends — the checkpoint store is now a `CheckpointStore`
+  interface (Protocol) with two interchangeable implementations: `FileCheckpointStore`
+  (the unchanged default) and an optional `SqliteCheckpointStore` (standard-library
+  `sqlite3`, no new dependency), selected via `StorageConfig(checkpoint_backend=...)`.
+  Multi-user/`principal_id` and a networked database remain deferred.
+- **022** Web principal authentication & per-principal session scoping
+  (`loopplane.webapi`) — the web/API auth boundary now identifies the caller (a
+  `Principal`) instead of only admitting/denying, and every session is scoped to the
+  principal that opened it (the listing is filtered; a non-owner gets a `404`). The owner
+  is recorded in the checkpoint metadata (`principal_id`) so scoping survives restarts,
+  and a reference `token_authenticator` ships for dev/tests. **Breaking:** the web/API
+  `Authenticator` return type changes from a bool to `Principal | None` (the unit-011
+  web/API surface; embedders with a boolean verifier must return a principal or `None`).
+  No new runtime dependency; the runtime core is unchanged.
+- **023** Web frontend login UI (`apps/web`) — a login screen captures an access token and
+  gates the single-page app over the unit-022 secured backend: the token is sent as a
+  bearer credential, persisted in `sessionStorage` (cleared on tab close), and cleared on
+  logout or an authorization failure (a 401 returns the user to login). Frontend only; the
+  runtime and the existing unit-018 app are unchanged.
+- **024** Desktop packaging (`apps/desktop`) — the Electron app can be packaged into a
+  distributable installer that bundles a **PyInstaller-frozen** sidecar, so an end-user
+  needs no system Python: a freeze spec, an electron-builder config, and a unit-tested
+  spawn resolver that runs the bundled frozen sidecar in a packaged app and
+  `python bridge.py` in development. Desktop-only; the runtime is unchanged; producing and
+  signing the per-OS installer is a reserved manual / CI step.
+- **025** Web agent UI (`apps/web`) — a frontend-only visual + UX overhaul of the
+  single-page app into a modern agent UI: a two-pane shell (sessions sidebar + a chat
+  column with a sticky header and composer), assistant **markdown** rendering (safe — no
+  raw HTML), inline **collapsible tool cards** (running -> success/failure), styled
+  approval/question dialogs, a run-status indicator + a **Stop** control, a non-blocking
+  error banner, auto-scroll with jump-to-latest, a **light/dark theme** (persisted, system
+  default), and a restyled login. The reducer now folds events into one **ordered entry
+  list** so tool cards interleave with messages. Reuses the api layer + the unit-023 auth
+  gate unchanged; no backend change.
+- **026** Web agent signals (`apps/web`) — a frontend-only extension that surfaces three signals
+  the backend **already emits** but the UI ignored: a distinct, de-emphasized, **collapsible
+  thinking block** (`assistant-reasoning-increment`), **selectable question options** with a
+  free-text fallback (the question payload's `text` + `options`; corrects the unit-018 `prompt`
+  mis-mapping), and a **per-turn + session token-usage** indicator (`turn-completed`). Each
+  degrades gracefully when its data is absent. No backend change.
+- **027** Web agent inspection panels (`loopplane.host` / `loopplane.webapi` + `apps/web`) —
+  additive, read-only, metadata-only inspection of the agent's capabilities/context: four
+  `GET /v1/inspect/{skills,tools,mcp,memory}` endpoints (auth-gated) backed by `LoopPlaneHost`
+  query methods that compose the existing skills / gateway / MCP / memory layers, rendered as a
+  tabbed inspection panel in the web UI. MCP servers are derived from the `external-server:`
+  descriptor source (never the config's args/url); no tool is executed and no state is mutated
+  (the Tool Gateway and the Event Bus are untouched). No ADR.
+- **028** Web agent model selection & file attachments (`loopplane.webapi` / `loopplane.host` +
+  `apps/web`) — additive, web/API-layer, **no ADR**. A model catalog (`GET /v1/models`) of
+  pre-configured single-model hosts sharing the unit-021 checkpoint root; runs/sessions accept a
+  `model` id routed to the chosen host (one model per run). An upload endpoint
+  (`POST /v1/uploads`, auth-gated, per-principal, size-limited) + a per-reference `UploadStore` +
+  a `read_upload` Tool Gateway tool (`loopplane.host.upload_tool`) the agent calls to read a file
+  on demand — transient input by id, never embedded into the content model. The composer gains a
+  model selector + file attachments. The runtime, content model, Tool Gateway, and Event Bus are
+  unchanged.
+- **029** Web agent parity extras (`apps/web`) — frontend-only polish, no backend, no ADR:
+  **i18n** (an in-house `t()` over en + zh-TW string maps, an `I18nProvider` persisting the choice,
+  a `LanguageSwitcher`, with an English fallback; UI chrome localized, assistant content
+  untranslated); **code syntax highlighting** (`rehype-highlight` on the unit-025 markdown, with
+  theme-bound tokens + a plain fallback); a composer **command palette** (a `/` toggle-inspection
+  command + `@skill`/`@tool` autocomplete from the unit-027 inspection data; backend-semantic
+  commands out of scope); and a **client-side cost estimate** (the unit-026 usage × a bundled price
+  table for the unit-028 model, clearly labeled an estimate, graceful when no price). Each degrades
+  gracefully; the backend is untouched. With 029, the web-UI extension (025–029) is complete.
+- **030** Web session management (`loopplane.checkpoint` / `loopplane.controller` / `loopplane.host` /
+  `loopplane.webapi` + `apps/web`) — additive, **no ADR**, the first unit of the product-polish sprint
+  (030–032). Sessions can be **renamed** and **deleted**, and the sidebar shows **titles** (not raw
+  ids) grouped by recency. `CheckpointStore` gains `set_title` (append a fresh session-meta; the latest
+  title wins in the listing and on rebuild) and `delete_session` (real removal), on both the file and
+  SQLite backends; `RuntimeController` / `LoopPlaneHost` delegate (working with or without a checkpoint
+  store). The web/API host adds owner-scoped `PATCH` / `DELETE /v1/sessions/{id}` (a non-owner → 404),
+  and `SessionSummaryView` gains `last_active_at` / `created_at`. The frontend sidebar renders titles +
+  Today / Yesterday / Earlier groups with a per-session rename/delete menu, and deleting the open
+  session returns to an empty state. The Tool Gateway, Event Bus, and content model are unchanged.
+- **031** Web message actions (`apps/web`) — frontend-only, no backend, no ADR. Each message gains
+  **copy** + **regenerate** actions, and fenced code blocks gain a **copy button**: a `lib/clipboard`
+  helper (the async Clipboard API + an `execCommand` fallback, never throwing); per-message Copy +
+  Regenerate in `MessageList` (Regenerate sits on the latest assistant message, is disabled while a
+  run is in flight, and re-runs the last user turn via the existing send path); and a code-block copy
+  button via react-markdown's `pre` override (the unit-029 highlighting is unchanged). Second unit of
+  the product-polish sprint (030–032); the backend is untouched.
+- **032** Web interaction resilience & states (`apps/web`) — frontend-only, no backend, no ADR, the
+  final unit of the product-polish sprint (030–032). The approval/question dialogs become **true
+  modals** (a `Modal` wrapper + a `useFocusTrap` hook — backdrop, focus trap, Esc resolving to the
+  safe default, keyboard-navigable options, focus restored on close); the connection-error banner
+  gains a **Retry** that re-establishes the stream; a small **toast** system surfaces transient
+  outcomes (rename / delete); and the UI gains **loading skeletons**, a **richer empty state**, and
+  **first-run example prompts**. With 032, the product-polish sprint (030–032) is complete; the
+  backend is untouched throughout (only unit 030 was additive backend, no ADR).
+
+[0.2.0]: https://github.com/norton77930/loopplane/releases/tag/v0.2.0
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

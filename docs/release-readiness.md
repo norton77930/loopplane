@@ -10,6 +10,13 @@ providers, a pluggable checkpoint persistence layer, per-principal web authentic
 a login UI, and a desktop packaging pipeline. All units are `Verified` on `main`; the gates
 below hold at this state.
 
+**v0.2.0** then packages the additive agent-capability line (units 033–041): Tier-1
+capabilities (file tools, web tools + network governance, OpenAI-compatible providers,
+multimodal image input with the project's first ADR, native Gemini), Tier-2 workflow depth
+(plan mode, a permission rule DSL), and Tier-3 cost/efficiency (Anthropic prompt caching,
+configurable auto-compaction). Each is additive — the runtime core, content model, and event
+schema are unchanged — so the same gates below hold unchanged at the 0.2.0 state.
+
 ## Gates — Python package
 
 - [ ] **Distribution builds** — `uv build` produces an sdist and a wheel; the wheel
@@ -23,8 +30,8 @@ below hold at this state.
 - [ ] **Docs consistent** — the API reference matches every package's `__all__`, and
   the docs/examples indexes match the file tree.
   (`tests/contract/test_api_reference.py`, `tests/contract/test_docs_examples_index.py`)
-- [ ] **Changelog current** — `CHANGELOG.md` records the release under its version
-  (entries through unit 024). (`tests/contract/test_changelog.py`)
+- [ ] **Changelog current** — `CHANGELOG.md` records each release under its version
+  (0.1.0: units 001–032; 0.2.0: units 033–041). (`tests/contract/test_changelog.py`)
 - [x] **LICENSE present** — the project is licensed under **MIT**: a `LICENSE` file
   is at the repository root, `pyproject.toml` declares `license = "MIT"` with
   `license-files = ["LICENSE"]` (PEP 639; the wheel carries `License-Expression: MIT`),
