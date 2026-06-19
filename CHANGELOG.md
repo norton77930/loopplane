@@ -121,5 +121,12 @@ additive layers (units 001-013), brought to release quality by unit 014.
   and `SessionSummaryView` gains `last_active_at` / `created_at`. The frontend sidebar renders titles +
   Today / Yesterday / Earlier groups with a per-session rename/delete menu, and deleting the open
   session returns to an empty state. The Tool Gateway, Event Bus, and content model are unchanged.
+- **031** Web message actions (`apps/web`) — frontend-only, no backend, no ADR. Each message gains
+  **copy** + **regenerate** actions, and fenced code blocks gain a **copy button**: a `lib/clipboard`
+  helper (the async Clipboard API + an `execCommand` fallback, never throwing); per-message Copy +
+  Regenerate in `MessageList` (Regenerate sits on the latest assistant message, is disabled while a
+  run is in flight, and re-runs the last user turn via the existing send path); and a code-block copy
+  button via react-markdown's `pre` override (the unit-029 highlighting is unchanged). Second unit of
+  the product-polish sprint (030–032); the backend is untouched.
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0
