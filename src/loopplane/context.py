@@ -36,6 +36,13 @@ class RunContext:
         default_factory=dict
     )
     feature_toggles: dict[str, bool] = field(default_factory=dict)
+    # Per-run subagent recursion depth (spec 043): ``0`` for a top-level
+    # (host-driven) run; a child run spawned by the ``spawn_subagent`` gateway tool
+    # carries ``parent.subagent_depth + 1``. The tool compares this against the
+    # configured ``max_subagent_depth`` cap and denies a spawn at/over it, so
+    # subagents cannot nest without bound. Set only in ``RuntimeController.drive()``
+    # (the single ``RunContext`` construction site); per-run, never process-global.
+    subagent_depth: int = 0
     interactions: InteractionBroker | None = None
     # Per-run plan-mode holder (spec 038); ``None`` means the run is not in plan mode
     # (the plan-mode policy is then a no-op). Shared by reference with the decider and

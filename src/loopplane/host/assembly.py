@@ -10,9 +10,11 @@ components only through their declared interfaces and re-implements none of them
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from loopplane.approval import HumanApproval, PermissionRule
 from loopplane.artifacts import ArtifactStore, make_artifact_handoff
@@ -43,6 +45,10 @@ from loopplane.observability import maybe_attach
 from loopplane.skills import SkillToolAdapter, load_skills, skill_profiles
 from loopplane.skills.loader import LoadedSkill
 
+if TYPE_CHECKING:
+    from loopplane.host.host import LoopPlaneHost
+    from loopplane.tools.subagent import ChildHostFactory
+
 
 async def _noop_sink(event: RuntimeEvent) -> None:
     """A do-nothing inner sink for the observability overlay: the overlay records
@@ -66,8 +72,14 @@ class AssembledRuntime:
     memory_store: MemoryStore | None
 
 
-def assemble(config: RuntimeConfig) -> AssembledRuntime:
-    """Validate and wire a runtime from a configuration (FR-020, FR-005)."""
+def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRuntime:
+    """Validate and wire a runtime from a configuration (FR-020, FR-005).
+
+    ``subagent_depth`` (spec 043) is this runtime's recursion depth, stamped onto each
+    run's ``RunContext`` by the controller; ``0`` for a top-level host. A child host
+    built to run a spawned subagent is assembled at ``parent + 1`` so its own
+    ``spawn_subagent`` is capped one level deeper. Default ``0`` → unchanged.
+    """
 
     validate_config(config)
 
@@ -124,6 +136,20 @@ def assemble(config: RuntimeConfig) -> AssembledRuntime:
         gateway.register_adapter(adapter)
     if skill_adapter is not None:
         gateway.register_adapter(skill_adapter)
+    # Opt-in model-driven subagent spawning (spec 043): register the spawn tool only
+    # when a non-zero recursion cap is configured (cap 0 → no tool, byte-identical to
+    # today). The child host is built lazily, at parent depth + 1, from this config.
+    # Imported lazily here (not at module scope) to avoid an import cycle:
+    # engineering → host → assembly → tools.subagent → engineering.
+    if config.max_subagent_depth >= 1:
+        from loopplane.tools.subagent import SpawnSubagentAdapter
+
+        gateway.register_adapter(
+            SpawnSubagentAdapter(
+                build_child_host=_make_child_host_builder(config),
+                max_subagent_depth=config.max_subagent_depth,
+            )
+        )
 
     sink = RunSink()
     if config.observability:
@@ -152,6 +178,7 @@ def assemble(config: RuntimeConfig) -> AssembledRuntime:
         gateway=gateway,
         event_sink=sink,
         plan_mode=config.plan_mode,
+        subagent_depth=subagent_depth,
         **controller_kwargs,
     )
     return AssembledRuntime(
@@ -232,3 +259,61 @@ def _build_decider(
     # decider composes the same way, so this is uniform whether or not approval is
     # wired.
     return safe_failure(all_of(*deciders))
+
+
+def _make_child_host_builder(parent_config: RuntimeConfig) -> ChildHostFactory:
+    """Build the closure the spawn tool uses to create a fresh child host (spec 043).
+
+    The child host is a full ``LoopPlaneHost`` assembled from the parent configuration
+    (same model + tools + storage), at ``subagent_depth = depth`` (parent + 1), with an
+    optional ``allowed_tools`` restriction. Returning a fresh host per spawn means each
+    child run is isolated and starts its own session — no cross-run state leakage.
+    """
+
+    def build_child_host(
+        depth: int, allowed_tools: tuple[str, ...] | None, working_scope: Path
+    ) -> LoopPlaneHost:
+        # Imported here (not at module scope) to break the
+        # engineering → host → assembly import cycle.
+        from loopplane.host.host import LoopPlaneHost
+
+        child_config = _restrict_config(parent_config, allowed_tools)
+        return LoopPlaneHost(
+            child_config, working_scope=working_scope, subagent_depth=depth
+        )
+
+    return build_child_host
+
+
+def _restrict_config(
+    config: RuntimeConfig, allowed_tools: tuple[str, ...] | None
+) -> RuntimeConfig:
+    """A child ``RuntimeConfig`` restricted to ``allowed_tools`` (FR-040).
+
+    When ``allowed_tools`` is ``None`` the child inherits the parent's tools unchanged
+    (still subject to the depth cap on its own ``spawn_subagent``). Otherwise the
+    child's tool set is the intersection of the parent's tools and the allowlist:
+    host-declared ``ToolSpec`` tools are filtered by name, and a multi-tool
+    ``ToolAdapter`` is kept only when **every** tool it advertises is allowlisted (else
+    dropped whole — least privilege errs safe; the child never sees a tool outside its
+    allowlist). The Tool Gateway stays the single owner of tool dispatch (Constitution
+    V) — no out-of-gateway adapter wrapping. ``spawn_subagent`` is granted to the child
+    only when the allowlist names it (and then the depth cap still applies).
+    """
+
+    if allowed_tools is None:
+        return config
+    allowed = set(allowed_tools)
+    tools = tuple(spec for spec in config.tools if spec.descriptor.name in allowed)
+    adapters = tuple(
+        adapter
+        for adapter in config.tool_adapters
+        if adapter.describe()
+        and all(descriptor.name in allowed for descriptor in adapter.describe())
+    )
+    # The spawn tool is auto-registered by ``assemble`` from ``max_subagent_depth``;
+    # drop it for the child unless explicitly allowlisted.
+    max_depth = config.max_subagent_depth if "spawn_subagent" in allowed else 0
+    return dataclasses.replace(
+        config, tools=tools, tool_adapters=adapters, max_subagent_depth=max_depth
+    )

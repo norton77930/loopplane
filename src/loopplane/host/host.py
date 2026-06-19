@@ -86,10 +86,18 @@ class LoopPlaneHost:
     sequential runs/sessions with no cross-run state leakage (FR-006)."""
 
     def __init__(
-        self, config: RuntimeConfig, *, working_scope: Path | None = None
+        self,
+        config: RuntimeConfig,
+        *,
+        working_scope: Path | None = None,
+        subagent_depth: int = 0,
     ) -> None:
         # Assembly validates the config and fails fast before any run (FR-005).
-        self._assembled: AssembledRuntime = assemble(config)
+        # ``subagent_depth`` (spec 043) is this host's recursion depth; 0 for a
+        # top-level host, parent + 1 for a child host built to run a spawned subagent.
+        self._assembled: AssembledRuntime = assemble(
+            config, subagent_depth=subagent_depth
+        )
         self._config = config
         self._working_scope = working_scope or Path.cwd()
         self._active = False

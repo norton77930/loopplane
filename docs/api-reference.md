@@ -137,12 +137,13 @@ tools and normalizes their output.
 
 ### `loopplane.tools`
 
-The internal and web tool adapters.
+The internal, web, and subagent-spawn tool adapters.
 
 - `InternalToolAdapter` — the adapter for built-in internal tools.
 - `WebToolAdapter` — the adapter for the web tools (web_fetch, web_search).
 - `SearchProvider` — the host-injected web-search provider seam.
 - `SearchResult` — a single web-search result (title, url, snippet).
+- `SpawnSubagentAdapter` — the adapter for the model-driven one-shot `spawn_subagent` tool (depth-capped).
 
 ### `loopplane.adapters.mcp`
 

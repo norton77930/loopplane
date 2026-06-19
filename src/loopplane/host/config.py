@@ -132,6 +132,15 @@ class RuntimeConfig:
     # An object collaborator like `model`; carries no secret (a summarizer's
     # credential lives in the host-supplied model object, never here).
     compaction_summarizer: ModelBoundary | None = None
+    # Opt-in model-driven subagent spawning (spec 043): the hard recursion-depth cap.
+    # Off by default (`0` → NO `spawn_subagent` tool is registered, so a run is
+    # byte-identical to today). When a host sets it >= 1, a `spawn_subagent` gateway
+    # tool is registered that runs ONE bounded child agent through the existing Phase-3
+    # run_loop and returns its final text; the tool DENIES a spawn (a normalized error,
+    # no child run) once a run's `RunContext.subagent_depth` reaches this cap, so
+    # subagents cannot nest without bound (a child runs at parent depth + 1). A value of
+    # `1` enables exactly one level. Carries no secret (a bare integer).
+    max_subagent_depth: int = 0
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -161,6 +170,7 @@ class RuntimeConfig:
                 data.get("auto_compact_threshold")
             ),
             compaction_summarizer=data.get("compaction_summarizer"),
+            max_subagent_depth=int(data.get("max_subagent_depth", 0)),
         )
 
 
@@ -296,6 +306,9 @@ def validate_config(config: RuntimeConfig) -> None:
     threshold = config.auto_compact_threshold
     if threshold is not None and not (math.isfinite(threshold) and 0 < threshold <= 1):
         raise ConfigError("auto_compact_threshold must be a number in (0, 1]")
+
+    if config.max_subagent_depth < 0:
+        raise ConfigError("max_subagent_depth must be a non-negative integer")
 
 
 def approval_effects(

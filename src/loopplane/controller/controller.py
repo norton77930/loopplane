@@ -121,6 +121,7 @@ class RuntimeController:
         compaction_summarizer: ModelBoundary | None = None,
         hooks: HookDispatcher | None = None,
         plan_mode: bool = False,
+        subagent_depth: int = 0,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -128,6 +129,10 @@ class RuntimeController:
         # Whether runs start in plan mode (spec 038); off by default. The per-run
         # holder is created in drive() — the single place RunContext is constructed.
         self._plan_mode = plan_mode
+        # This controller's subagent recursion depth (spec 043); 0 for a top-level
+        # run. A child controller built to run a spawned subagent is given depth+1,
+        # stamped onto each run's RunContext in drive(). Default 0 → unchanged.
+        self._subagent_depth = subagent_depth
         # Optional lifecycle hooks (feature 015); absent by default (FR-011).
         # process_setup fires at most once per controller lifetime.
         self._hooks = hooks
@@ -363,6 +368,7 @@ class RuntimeController:
             cancellation=session.cancellation,
             turn_budget=session.turn_budget,
             session_approval_memory=session.approval_memory,
+            subagent_depth=self._subagent_depth,
             interactions=session.broker,
             plan_mode=PlanModeState(active=True) if self._plan_mode else None,
         )

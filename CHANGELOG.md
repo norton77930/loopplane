@@ -16,6 +16,24 @@ Semantic Versioning.
   so a run is never broken. Default `None` is byte-identical; the loop turn-cycle,
   `compact_history`, the content model, and the event schema are unchanged. Committed after
   the v0.2.0 tag (ships in the next release).
+- **043** Model-driven one-shot subagents (`loopplane.tools` / `loopplane.context` / `loopplane.host`) —
+  an additive, opt-in `spawn_subagent` **Tool-Gateway** tool (a new `SpawnSubagentAdapter`) that lets the
+  model delegate a focused sub-task: it runs **one** bounded child agent through the **existing** Phase-3
+  `loopplane.engineering.run_loop` (the same seam unit-013's host-driven coordinator composes — **no
+  agent-loop, orchestration-core, gateway-pipeline, or event-schema change**) and returns the child's
+  **final assistant text** to the parent. SAFE under a **hard recursion-depth cap**: an additive
+  `RunContext.subagent_depth` (default 0; a child runs at parent + 1) and a configurable
+  `RuntimeConfig.max_subagent_depth` (default `1`); the tool **DENIES** a spawn (a normalized error, **no**
+  child run started) once `subagent_depth >= max_subagent_depth`, so subagents cannot nest without bound
+  (default `max_subagent_depth = 0` registers **no** tool — feature off, byte-identical to today; a host
+  sets it to `1` to enable exactly one level). A failing /
+  over-running / empty-answer child is **contained** (a normalized, public-safe error to the parent — never
+  a raw exception; the parent run continues), mirroring the 013 fail-safe coordinator. The child's events
+  are **captured** (driven with no live sink) and surfaced only as metadata-only aggregation (reusing 013's
+  `aggregate_events`) — never re-emitted onto the parent's live bus (VI). An optional `allowed_tools`
+  restricts the child to a least-privilege subset of the parent's tools. Enforced at the Gateway (V); no new
+  dependency, no frontend, no ADR. A Tier-2 autonomy unit. Agent-to-agent messaging, swarm / peer
+  coordination, and persistent / named / background subagents are deferred.
 
 ## [0.2.0] - 2026-06-19
 
