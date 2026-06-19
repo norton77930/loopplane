@@ -243,5 +243,32 @@ additive layers (units 001-013), brought to release quality by unit 014.
   every existing tool, descriptor, and policy is unchanged. Deterministic offline tests (a
   scripted `InteractionBroker`; the governance + internal-tool harnesses). First unit of the
   Tier-2 (agentic workflow depth) line.
+- **039** Declarative permission rule DSL (`loopplane.governance` / `loopplane.host`) — a
+  **host-suppliable** declarative permission rule set enforced at the Tool Gateway decide
+  stage, additive and **no ADR**. A host supplies an ordered `PermissionRuleSet`: each
+  `PermissionRuleSpec` names a `tool` (an exact name or an `fnmatch` pattern in the **existing**
+  matcher syntax, e.g. `mcp:*`), an optional `match` (a map of input-field → pattern: a
+  **path-glob** for path-shaped fields — `path`/`file`/`*_path` — a **regex** otherwise, e.g.
+  `{command: "^rm -rf"}`), and a `decision` of `allow` | `deny` | `ask`; a top-level `default`
+  applies on no match. A `rule_dsl_policy` decide-stage decider selects the rules whose `tool`
+  matcher **and** every `match` pattern match the call (`call.tool_name` + the string form of
+  `call.input` fields), combines them **deny-wins** (deny > ask > allow — reusing
+  `resolve_rules`' deny-wins for the name dimension), falls back to `default`, and returns the
+  **existing** `PolicyVerdict`: `allow` → `PolicyAllow`, `deny` → `PolicyDeny`, **`ask` reuses
+  the existing approval round-trip** (`InteractionBroker.request_approval`, the same path the
+  Human Approval boundary uses) and maps the human's resolution to allow/deny — **no new
+  verdict type, no new approval mechanism, no event-schema change** (the verdict model is
+  binary — `PolicyAllow | PolicyDeny`; there is no `PolicyAsk`). It is composed through the
+  **existing** decide-stage combinators (`safe_failure(all_of(...))` — deny-wins + fail-closed)
+  in `_build_decider` — **no new gateway stage** (V). `match` regexes / path-globs are
+  **compiled eagerly at construction**, so a malformed pattern is a clear config error there
+  (fail-closed), never a silently-allowed call at decide time. The rules are an additive,
+  default-empty, public-safe `RuntimeConfig.permission_rules` field (a tool name + patterns +
+  a decision; **no secret**), coerced from a plain mapping in `from_mapping`; absent/empty →
+  no DSL policy installed and existing runs are **byte-identical**. No per-run/controller
+  change (`ask` reads the per-run `RunContext` the Gateway already hands the decider); every
+  existing tool, descriptor, policy, and the approval boundary are unchanged. Deterministic
+  offline tests (the governance helpers; a scripted `InteractionBroker` for the `ask`
+  round-trip; additive assembly-wiring tests). A Tier-2 governance unit.
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

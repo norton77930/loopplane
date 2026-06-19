@@ -309,3 +309,99 @@ def test_plan_mode_round_trips_from_mapping_and_has_no_secret() -> None:
     config = RuntimeConfig.from_mapping({"model": _model(), "plan_mode": True})
     assert config.plan_mode is True
     assert RuntimeConfig.from_mapping({"model": _model()}).plan_mode is False
+
+
+# --- permission-rule DSL wiring (spec 039) -----------------------------------
+
+
+def _run_command_tool() -> ToolSpec:
+    return ToolSpec(descriptor=_descriptor("run_command"), handler=_handler)
+
+
+async def _rule_verdict(decider: object, command: str) -> object:
+    """Decide a run_command call with the given `command` input against a real
+    RunContext — proving the installed DSL policy denies only the matching call."""
+    import pathlib
+
+    from loopplane.context import RunContext
+    from loopplane.model import ToolCallRequest
+
+    request = ToolCallRequest(
+        call_id="c", tool_name="run_command", input={"command": command}
+    )
+    context = RunContext(session_id="s", working_scope=pathlib.Path("."))
+    return await decider(request, _descriptor("run_command"), context, None)  # type: ignore[operator]
+
+
+@pytest.mark.anyio
+async def test_permission_rules_decider_denies_the_matching_call() -> None:
+    from loopplane.approval import PolicyAllow, PolicyDeny
+    from loopplane.governance import PermissionRuleSet, PermissionRuleSpec
+    from loopplane.host.assembly import _build_decider
+
+    config = RuntimeConfig(
+        model=_model(),
+        tools=(_run_command_tool(),),
+        permission_rules=PermissionRuleSet(
+            rules=(
+                PermissionRuleSpec(
+                    tool="run_command", match={"command": "^rm -rf"}, decision="deny"
+                ),
+            ),
+            default="allow",
+        ),
+    )
+    decider = _build_decider(config, ["run_command"], None)
+    assert decider is not None
+    assert isinstance(await _rule_verdict(decider, "rm -rf /"), PolicyDeny)
+    assert isinstance(await _rule_verdict(decider, "ls -la"), PolicyAllow)
+
+
+def test_no_permission_rules_keeps_the_allow_all_fast_path() -> None:
+    from loopplane.host.assembly import _build_decider
+
+    # With no permission rules (and no other gate; egress on), the builder keeps the
+    # allow-all fast-path (None) — the existing posture is unchanged.
+    config = RuntimeConfig(
+        model=_model(), tools=(_run_command_tool(),), allow_network=True
+    )
+    assert _build_decider(config, ["run_command"], None) is None
+
+
+def test_empty_permission_rules_keeps_the_allow_all_fast_path() -> None:
+    from loopplane.governance import PermissionRuleSet
+    from loopplane.host.assembly import _build_decider
+
+    # A PermissionRuleSet with no rules installs no DSL policy (empty set = no-op).
+    config = RuntimeConfig(
+        model=_model(),
+        tools=(_run_command_tool(),),
+        allow_network=True,
+        permission_rules=PermissionRuleSet(default="allow"),
+    )
+    assert _build_decider(config, ["run_command"], None) is None
+
+
+def test_permission_rules_round_trip_from_mapping_and_have_no_secret() -> None:
+    from loopplane.governance import PermissionRuleSet
+
+    config = RuntimeConfig.from_mapping(
+        {
+            "model": _model(),
+            "permission_rules": {
+                "rules": [
+                    {
+                        "tool": "run_command",
+                        "match": {"command": "^rm -rf"},
+                        "decision": "deny",
+                    }
+                ],
+                "default": "allow",
+            },
+        }
+    )
+    assert isinstance(config.permission_rules, PermissionRuleSet)
+    assert len(config.permission_rules.rules) == 1
+    assert config.permission_rules.rules[0].tool == "run_command"
+    assert config.permission_rules.default == "allow"
+    assert RuntimeConfig.from_mapping({"model": _model()}).permission_rules is None

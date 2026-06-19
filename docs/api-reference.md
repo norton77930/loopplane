@@ -500,6 +500,9 @@ Sandbox, policy, and cost governance.
 - `all_of` — combine policies (all must allow).
 - `network_policy` — gate tools that require network egress (opt-in).
 - `plan_mode_policy` — gate non-read-only tools during plan-mode investigation.
+- `rule_dsl_policy` — enforce a host-suppliable declarative permission rule set (allow/deny/ask).
+- `PermissionRuleSet` — a host-suppliable permission rule set with a default decision.
+- `PermissionRuleSpec` — one declarative permission rule (tool matcher, optional input match, decision).
 
 ### `loopplane.inspect` (unit 010)
 

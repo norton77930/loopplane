@@ -24,7 +24,13 @@ from loopplane.checkpoint import (
 from loopplane.controller.controller import RuntimeController
 from loopplane.events import RuntimeEvent
 from loopplane.gateway import PolicyDecider, ToolGateway
-from loopplane.governance import all_of, network_policy, plan_mode_policy, safe_failure
+from loopplane.governance import (
+    all_of,
+    network_policy,
+    plan_mode_policy,
+    rule_dsl_policy,
+    safe_failure,
+)
 from loopplane.host.config import (
     RuntimeConfig,
     approval_effects,
@@ -171,9 +177,13 @@ def _build_decider(
     — deny-wins + fail-closed. The plan-mode gate (spec 038) adds one more decider
     when ``config.plan_mode`` is on; it reads the per-run ``RunContext.plan_mode``
     holder at decide time, so it is a no-op for any run whose holder is absent/inactive
-    (installing it never changes a non-plan-mode run's verdicts). The ``None`` fast-path
-    is preserved only when there is no approval/skills *and* egress is enabled *and*
-    plan mode is off, so an existing non-network run's allow-all posture is unchanged.
+    (installing it never changes a non-plan-mode run's verdicts). The permission-rule
+    DSL (spec 039) adds one more decider when ``config.permission_rules`` carries any
+    rule; it allows/denies/asks each call by the host's declarative rules (deny-wins,
+    and ``ask`` reuses the existing approval round-trip). The ``None`` fast-path is
+    preserved only when there is no approval/skills *and* egress is enabled *and* plan
+    mode is off *and* no permission rules, so an existing non-network run's allow-all
+    posture is unchanged.
     """
 
     approval_needed = config.approval is not None or bool(skills_map)
@@ -181,7 +191,15 @@ def _build_decider(
     # when on, the policy is a no-op allow and only matters if approval is also wired.
     network_gate_needed = not config.allow_network
     plan_mode_needed = config.plan_mode
-    if not approval_needed and not network_gate_needed and not plan_mode_needed:
+    rules_needed = config.permission_rules is not None and bool(
+        config.permission_rules.rules
+    )
+    if (
+        not approval_needed
+        and not network_gate_needed
+        and not plan_mode_needed
+        and not rules_needed
+    ):
         return None
 
     deciders: list[PolicyDecider] = []
@@ -199,6 +217,12 @@ def _build_decider(
         # only while the per-run holder is active (set by the controller when the run
         # starts in plan mode and cleared by exit_plan_mode on approval).
         deciders.append(plan_mode_policy())
+    if rules_needed:
+        # The declarative permission rules (spec 039): allow/deny/ask each call by the
+        # host's rules; an `ask` reuses the per-run RunContext's approval round-trip.
+        # Regexes are compiled here, so a malformed rule fails the build (fail-closed).
+        assert config.permission_rules is not None
+        deciders.append(rule_dsl_policy(config.permission_rules))
 
     # Deny-wins composition (all_of) wrapped fail-closed (safe_failure); a single
     # decider composes the same way, so this is uniform whether or not approval is

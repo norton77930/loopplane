@@ -18,10 +18,17 @@ from loopplane.governance.network import network_policy
 from loopplane.governance.path import path_policy
 from loopplane.governance.permission import permission_policy
 from loopplane.governance.plan_mode import plan_mode_policy
+from loopplane.governance.rule_dsl import (
+    PermissionRuleSet,
+    PermissionRuleSpec,
+    rule_dsl_policy,
+)
 from loopplane.governance.sandbox import sandbox_profile
 
 __all__ = [
     "CostModel",
+    "PermissionRuleSet",
+    "PermissionRuleSpec",
     "SimpleDecision",
     "all_of",
     "allow",
@@ -35,6 +42,7 @@ __all__ = [
     "permission_policy",
     "plan_mode_policy",
     "quota_policy",
+    "rule_dsl_policy",
     "safe_failure",
     "sandbox_profile",
 ]

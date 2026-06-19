@@ -18,6 +18,7 @@ from typing import Any, Literal
 
 from loopplane.approval import RuleEffect
 from loopplane.gateway import ToolAdapter, ToolHandler
+from loopplane.governance import PermissionRuleSet, PermissionRuleSpec
 from loopplane.model import ModelBoundary, ToolDescriptor
 
 ApprovalDefault = Literal["allow", "ask", "deny"]
@@ -106,6 +107,12 @@ class RuntimeConfig:
     # human approves a submitted plan, enforced at the Gateway's decide stage. Carries
     # no secret. Default off → existing runs are unchanged.
     plan_mode: bool = False
+    # Opt-in declarative permission rules (spec 039): None by default. When supplied, a
+    # rule_dsl_policy is composed into the Gateway's decide stage to allow/deny/ask each
+    # call by the host's declarative rules (deny-wins, fail-closed). Carries no secret —
+    # a rule is only a tool name + patterns + a decision. Default None → existing runs
+    # are unchanged (no DSL policy installed).
+    permission_rules: PermissionRuleSet | None = None
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -130,6 +137,7 @@ class RuntimeConfig:
             observability=bool(data.get("observability", False)),
             allow_network=bool(data.get("allow_network", False)),
             plan_mode=bool(data.get("plan_mode", False)),
+            permission_rules=_coerce_permission_rules(data.get("permission_rules")),
         )
 
 
@@ -177,6 +185,20 @@ def _coerce_skills(value: Any) -> SkillsConfig | None:
         return value
     sources = value["sources"] if isinstance(value, Mapping) else value
     return SkillsConfig(sources=tuple(Path(p) for p in sources))
+
+
+def _coerce_permission_rules(value: Any) -> PermissionRuleSet | None:
+    """Coerce the declarative permission rules (spec 039): a ``PermissionRuleSet``
+    passes through; a mapping ``{"rules": [{tool, match?, decision}, ...], "default":
+    ...}`` is built into one; ``None`` stays ``None`` (no DSL policy)."""
+
+    if value is None or isinstance(value, PermissionRuleSet):
+        return value
+    rules = tuple(
+        rule if isinstance(rule, PermissionRuleSpec) else PermissionRuleSpec(**rule)
+        for rule in value.get("rules", ())
+    )
+    return PermissionRuleSet(rules=rules, default=value.get("default", "allow"))
 
 
 def _otel_available() -> bool:
