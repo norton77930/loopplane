@@ -36,11 +36,16 @@ class PromptAssembler:
         replacement_previews: Callable[[], Mapping[str, str]] | None = None,
         keep_last: int = DEFAULT_KEEP_LAST,
         chars_per_token: int = 4,
+        compact_threshold: float | None = None,
     ) -> None:
         self._providers = list(providers)
         self._replacement_previews = replacement_previews
         self.keep_last = keep_last
         self._chars_per_token = chars_per_token
+        # Proactive-compaction threshold (spec 041): None reuses the model's full
+        # capacity (the existing behavior — byte-identical); a fraction f in (0, 1]
+        # compacts proactively at f * capacity, a safety margin before the limit.
+        self._compact_threshold = compact_threshold
         self._needs_reestablish = False
 
     def mark_compacted(self) -> None:
@@ -69,10 +74,12 @@ class PromptAssembler:
         request = self._compose(history, tools, re_established + fresh)
 
         # Proactive compaction: when the assembled context approaches the
-        # model's capacity, compact and rebuild once (FR-008).
-        if self._estimate_tokens(request) > capacity and compact_history(
-            history, keep_last=self.keep_last
-        ):
+        # model's (effective) capacity, compact and rebuild once (FR-008). The
+        # effective capacity is the full capacity by default, or a configured
+        # fraction of it (spec 041) so compaction runs earlier, on a safety margin.
+        if self._estimate_tokens(request) > self._effective_capacity(
+            capacity
+        ) and compact_history(history, keep_last=self.keep_last):
             re_established = self._collect_reestablished()
             request = self._compose(history, tools, re_established + fresh)
         return request
@@ -116,6 +123,15 @@ class PromptAssembler:
                 artifact_reference=block.artifact_reference,
             )
         return block
+
+    def _effective_capacity(self, capacity: int) -> int:
+        """The capacity the proactive pre-send check compares against (spec 041):
+        the model's full capacity when no threshold is set (the existing
+        behavior), else a configured fraction of it so compaction runs earlier.
+        """
+        if self._compact_threshold is None:
+            return capacity
+        return int(capacity * self._compact_threshold)
 
     def _estimate_tokens(self, request: ModelRequest) -> int:
         chars = 0

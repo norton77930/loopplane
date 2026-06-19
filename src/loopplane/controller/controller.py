@@ -117,6 +117,7 @@ class RuntimeController:
         skill_prompt_budget_chars: int = DEFAULT_PROMPT_BUDGET_CHARS,
         enable_assembly: bool | None = None,
         assembly_keep_last: int = 4,
+        auto_compact_threshold: float | None = None,
         hooks: HookDispatcher | None = None,
         plan_mode: bool = False,
     ) -> None:
@@ -145,6 +146,10 @@ class RuntimeController:
             else (memory_store is not None or bool(skills))
         )
         self._assembly_keep_last = assembly_keep_last
+        # Proactive auto-compaction threshold (spec 041): None → the assembler's
+        # existing full-capacity proactive check (default-off, byte-identical); a
+        # fraction in (0, 1] → compact proactively at that fraction of capacity.
+        self._auto_compact_threshold = auto_compact_threshold
         self._sessions: dict[str, _Session] = {}
 
     def create_session(
@@ -264,6 +269,7 @@ class RuntimeController:
                 providers=providers,
                 replacement_previews=ledger.previews if ledger is not None else None,
                 keep_last=self._assembly_keep_last,
+                compact_threshold=self._auto_compact_threshold,
             )
 
         sequencer = EventSequencer()

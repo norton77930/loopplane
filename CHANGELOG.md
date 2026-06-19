@@ -304,5 +304,47 @@ additive layers (units 001-013), brought to release quality by unit 014.
   observation is opt-in (`docs/real-model-validation.md` §5). Rollback:
   `prompt_caching=False`, or revert the helper + the one adapter call. The next
   Tier-3 follow-on is **041** (configurable compaction).
+- **041** Configurable proactive auto-compaction (`loopplane.host` /
+  `loopplane.loop` / `loopplane.controller`) — a second Tier-3 (efficiency) unit;
+  additive, reuse-first, **no ADR**. LoopPlane's prompt assembler already runs a
+  proactive pre-send compaction check at the model's **full** capacity (estimate
+  the assembled context via the existing `chars ÷ 4` heuristic; when it exceeds
+  `context_capacity()`, run the mechanical `compact_history` once before the model
+  call), plus the loop's reactive `ContextOverflowError` compact-and-retry-once
+  backstop. This unit makes that proactive trigger **configurable** via an
+  additive, default-`None` `RuntimeConfig.auto_compact_threshold: float | None`.
+  When `None` (the default), the check compares against the **full** capacity —
+  the existing behavior, so the default-off path is **byte-identical** to today.
+  When a fraction `f` in `(0, 1]` is set, the check compares against
+  `f * context_capacity()`, so the **existing** `compact_history` runs earlier, on
+  a safety margin, before the model's limit is reached. It **reuses
+  `compact_history` unchanged** (the same mechanical `SummaryMarkerBlock` /
+  `SummaryDigest` digest — no new algorithm) and **reuses the existing
+  `_estimate_tokens` heuristic** (no tokenizer, no new dependency; the estimate is
+  a margin trigger and the reactive overflow path stays the backstop if it
+  under-counts). The threshold is threaded through the same wiring as `plan_mode`
+  / `allow_network` (`RuntimeConfig` → `assemble()` → `RuntimeController` →
+  per-session `PromptAssembler(compact_threshold=...)`), coerced in `from_mapping`,
+  and **validated fail-fast** (a non-`None` value must be a finite number in
+  `(0, 1]`, else `ConfigError`); it carries no secret. **Transparent to the loop
+  and the event stream**: compaction emits **no** runtime event today (it mutates
+  in-memory history only; the durable stream keeps the originals via
+  `replace_prefix`) and the proactive path emits none either — **no event-schema
+  change, no `SCHEMA_VERSION` bump, no content-model / `TokenUsage`-shape change,
+  no change to the agent loop's turn cycle, the Tool Gateway, or the Event Bus**.
+  No new public package / `__all__` name (the toggle is a field on the existing
+  `RuntimeConfig`; the assembler/controller gain only constructor parameters), so
+  the unit-014 api-reference bijection stays green with no doc edit. The
+  **cheap-model summarizer** (an optional summarizer `ModelBoundary` used during
+  compaction) is **deferred** to a documented follow-on (spec 042): folding a
+  model call into the compaction path adds real complexity/risk for a secondary
+  benefit, and the mechanical digest already frees space. Deterministic offline
+  tests (the effective-capacity math; proactive compaction at/over/under the
+  threshold incl. a same-history/same-capacity threshold-vs-`None` proof;
+  default-`None` byte-identity — no compaction below full capacity, the existing
+  full-capacity trigger preserved above it; the reactive backstop unchanged; the
+  invalid-threshold `ConfigError`; the `from_mapping` round-trip + no-secret).
+  Rollback: `auto_compact_threshold = None`, or revert the assembler/controller/
+  config additions → exact pre-threshold behavior.
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

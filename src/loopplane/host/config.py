@@ -10,6 +10,7 @@ host-supplied model object or the host environment, never here (FR-013).
 from __future__ import annotations
 
 import importlib.util
+import math
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -113,6 +114,14 @@ class RuntimeConfig:
     # a rule is only a tool name + patterns + a decision. Default None → existing runs
     # are unchanged (no DSL policy installed).
     permission_rules: PermissionRuleSet | None = None
+    # Opt-in proactive auto-compaction threshold (spec 041): None by default. When a
+    # fraction f in (0, 1] is supplied, the prompt assembler compacts history (the
+    # existing mechanical digest) before a turn once the estimated assembled-context
+    # size reaches f * model.context_capacity() — a safety margin before the model's
+    # limit. None reuses the existing full-capacity proactive check, so the default-off
+    # path is byte-identical to today. Carries no secret (a plain fraction). The
+    # reactive ContextOverflowError compact-and-retry-once backstop is unchanged.
+    auto_compact_threshold: float | None = None
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -138,6 +147,9 @@ class RuntimeConfig:
             allow_network=bool(data.get("allow_network", False)),
             plan_mode=bool(data.get("plan_mode", False)),
             permission_rules=_coerce_permission_rules(data.get("permission_rules")),
+            auto_compact_threshold=_coerce_threshold(
+                data.get("auto_compact_threshold")
+            ),
         )
 
 
@@ -201,6 +213,15 @@ def _coerce_permission_rules(value: Any) -> PermissionRuleSet | None:
     return PermissionRuleSet(rules=rules, default=value.get("default", "allow"))
 
 
+def _coerce_threshold(value: Any) -> float | None:
+    """Coerce the auto-compaction threshold (spec 041): ``None`` stays ``None``;
+    anything else becomes a ``float`` (range-checked later by ``validate_config``)."""
+
+    if value is None:
+        return None
+    return float(value)
+
+
 def _otel_available() -> bool:
     return importlib.util.find_spec("opentelemetry") is not None
 
@@ -260,6 +281,10 @@ def validate_config(config: RuntimeConfig) -> None:
             "activate: install the 'otel' extra and set "
             "OTEL_EXPORTER_OTLP_ENDPOINT"
         )
+
+    threshold = config.auto_compact_threshold
+    if threshold is not None and not (math.isfinite(threshold) and 0 < threshold <= 1):
+        raise ConfigError("auto_compact_threshold must be a number in (0, 1]")
 
 
 def approval_effects(
