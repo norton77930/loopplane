@@ -7,6 +7,7 @@ through the Gateway.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
@@ -222,6 +223,31 @@ _DESCRIPTORS = [
         },
         # Not read-only: it mutates per-run state (the session's todo list).
     ),
+    ToolDescriptor(
+        name="notebook_edit",
+        description=(
+            "Edit a Jupyter notebook (.ipynb) cell within the working scope: "
+            "replace a cell's source, insert a new code/markdown cell, or delete a "
+            "cell, selected by index (mode is 'replace', 'insert', or 'delete'). The "
+            "notebook must have been read in this session and be unchanged since."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "mode": {
+                    "type": "string",
+                    "enum": ["replace", "insert", "delete"],
+                },
+                "index": {"type": "integer", "minimum": 0},
+                "source": {"type": "string"},
+                "cell_type": {"type": "string", "enum": ["code", "markdown"]},
+            },
+            "required": ["path", "mode", "index"],
+            "additionalProperties": False,
+        },
+        # Not read-only: it mutates the notebook file.
+    ),
 ]
 
 
@@ -279,6 +305,7 @@ class InternalToolAdapter:
             "exit_plan_mode": self._exit_plan_mode,
             "memory_write": self._memory_write,
             "todo_write": self._todo_write,
+            "notebook_edit": self._notebook_edit,
         }
         async for output in handlers[name](call_input, context):
             yield output
@@ -727,3 +754,152 @@ class InternalToolAdapter:
             return
         lines = [f"[{item['status']}] {item['content']}" for item in validated]
         yield TextBlock(text=f"Recorded {len(validated)} todos:\n" + "\n".join(lines))
+
+    async def _notebook_edit(
+        self, call_input: dict[str, object], context: RunContext
+    ) -> AsyncIterator[AdapterOutput]:
+        """Edit a single Jupyter (.ipynb) cell (spec 046). Confined to the working
+        scope (``_resolve``) and gated by the same stale-write guard as ``edit_file``
+        (the notebook must have been read this session and be unchanged). The parsed
+        document is round-tripped so all non-targeted cells / outputs / metadata and the
+        top-level ``nbformat`` are preserved; any failure leaves the file unchanged.
+        """
+        raw = str(call_input["path"])
+        mode = str(call_input["mode"])
+        index_value = call_input["index"]
+        if not isinstance(index_value, int) or isinstance(index_value, bool):
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION, message="index must be an integer"
+            )
+            return
+        index: int = index_value
+        if index < 0:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION, message="index must be non-negative"
+            )
+            return
+        try:
+            target = self._resolve(context, raw)
+        except _PathOutsideScopeError as exc:
+            yield ErrorOutput(category=ErrorCategory.VALIDATION, message=str(exc))
+            return
+        try:
+            data = target.read_bytes()
+        except OSError as exc:
+            yield ErrorOutput(message=f"cannot edit {raw}: {exc}")
+            return
+        key = (context.session_id, str(target))
+        recorded = self._reads.get(key)
+        if recorded is None:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=(
+                    f"stale edit rejected: {raw} exists but was not read in "
+                    f"this session"
+                ),
+            )
+            return
+        if _digest(data) != recorded:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=(
+                    f"stale edit rejected: {raw} changed since it was last "
+                    f"read in this session"
+                ),
+            )
+            return
+        try:
+            document = json.loads(data.decode("utf-8", errors="replace"))
+        except ValueError as exc:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=f"{raw} is not valid JSON: {exc}",
+            )
+            return
+        if not isinstance(document, dict) or not isinstance(
+            document.get("cells"), list
+        ):
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=f"{raw} is not a valid notebook (no 'cells' list)",
+            )
+            return
+        cells = document["cells"]
+        last = len(cells) - 1
+        if mode == "delete":
+            if not 0 <= index < len(cells):
+                yield ErrorOutput(
+                    category=ErrorCategory.VALIDATION,
+                    message=f"cell index {index} out of range (0..{last})",
+                )
+                return
+            del cells[index]
+            summary = f"deleted cell {index}"
+        elif mode == "replace":
+            source = call_input.get("source")
+            if not 0 <= index < len(cells):
+                yield ErrorOutput(
+                    category=ErrorCategory.VALIDATION,
+                    message=f"cell index {index} out of range (0..{last})",
+                )
+                return
+            if not isinstance(source, str):
+                yield ErrorOutput(
+                    category=ErrorCategory.VALIDATION,
+                    message="replace requires a 'source' string",
+                )
+                return
+            cell = cells[index]
+            if not isinstance(cell, dict):
+                yield ErrorOutput(
+                    category=ErrorCategory.VALIDATION,
+                    message=f"cell {index} is not an object",
+                )
+                return
+            cell["source"] = source
+            summary = f"replaced cell {index}"
+        elif mode == "insert":
+            source = call_input.get("source")
+            cell_type = call_input.get("cell_type")
+            if not 0 <= index <= len(cells):
+                yield ErrorOutput(
+                    category=ErrorCategory.VALIDATION,
+                    message=f"insert index {index} out of range (0..{len(cells)})",
+                )
+                return
+            if not isinstance(source, str):
+                yield ErrorOutput(
+                    category=ErrorCategory.VALIDATION,
+                    message="insert requires a 'source' string",
+                )
+                return
+            if cell_type not in ("code", "markdown"):
+                yield ErrorOutput(
+                    category=ErrorCategory.VALIDATION,
+                    message="insert requires a 'cell_type' of 'code' or 'markdown'",
+                )
+                return
+            new_cell: dict[str, object] = {
+                "cell_type": cell_type,
+                "source": source,
+                "metadata": {},
+            }
+            if cell_type == "code":
+                new_cell["outputs"] = []
+                new_cell["execution_count"] = None
+            cells.insert(index, new_cell)
+            summary = f"inserted {cell_type} cell at {index}"
+        else:
+            yield ErrorOutput(
+                category=ErrorCategory.VALIDATION,
+                message=f"invalid mode {mode!r}; expected replace, insert, or delete",
+            )
+            return
+        serialized = json.dumps(document, indent=1, ensure_ascii=False) + "\n"
+        try:
+            target.write_text(serialized, encoding="utf-8")
+        except OSError as exc:
+            yield ErrorOutput(message=f"cannot write {raw}: {exc}")
+            return
+        self._reads[key] = _digest(serialized.encode("utf-8"))
+        yield TextBlock(text=f"{summary} in {raw}")

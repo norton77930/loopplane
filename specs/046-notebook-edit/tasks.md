@@ -9,8 +9,8 @@ No event-schema/content-model change, no new dependency (stdlib `json`), no ADR.
 
 ## Phase 1: Foundational (blocking prerequisites)
 
-- [ ] T001 Add `import json` and the `notebook_edit` `ToolDescriptor` (input schema per [contracts/notebook_edit-tool.md](contracts/notebook_edit-tool.md): `path`, `mode` ∈ {replace,insert,delete}, `index`, optional `source`, optional `cell_type`; `read_only=False`) to `_DESCRIPTORS` in `src/loopplane/tools/internal.py`.
-- [ ] T002 Register `"notebook_edit": self._notebook_edit` in the `invoke` dispatch dict in `src/loopplane/tools/internal.py`.
+- [x] T001 Add `import json` and the `notebook_edit` `ToolDescriptor` (input schema per [contracts/notebook_edit-tool.md](contracts/notebook_edit-tool.md): `path`, `mode` ∈ {replace,insert,delete}, `index`, optional `source`, optional `cell_type`; `read_only=False`) to `_DESCRIPTORS` in `src/loopplane/tools/internal.py`.
+- [x] T002 Register `"notebook_edit": self._notebook_edit` in the `invoke` dispatch dict in `src/loopplane/tools/internal.py`.
 
 ## Phase 2: User Story 1 — Edit a notebook cell (P1) 🎯 MVP
 
@@ -18,20 +18,20 @@ No event-schema/content-model change, no new dependency (stdlib `json`), no ADR.
 
 **Independent test**: read a 2-cell `.ipynb`, replace cell 0; only cell 0 changes; cell 1 + nbformat preserved; still a valid notebook.
 
-- [ ] T003 [US1] Write `tests/unit/test_notebook_edit.py` (mirror `tests/unit/test_internal_file_tools.py` harness): replace a cell's source (other cells/outputs/nbformat preserved); insert a markdown cell at an index (later cells shift); insert at `index == len(cells)` appends; delete a cell (order preserved). (Red until T004.)
-- [ ] T004 [US1] Implement the `_notebook_edit` async handler in `src/loopplane/tools/internal.py`: resolve `path` via `_resolve` (working scope); apply the `edit_file` stale-write guard via `self._reads` (must have been read this session + unchanged); parse the file as JSON and validate it is a notebook (a dict with a list `cells`); apply `mode` by `index` (replace sets `cells[index].source`; insert builds a minimal valid `code`/`markdown` cell and inserts at `index` allowing `== len`; delete removes `cells[index]`); validate the index range and required fields (`source` for replace/insert, `cell_type` for insert), yielding `ErrorOutput(VALIDATION)` WITHOUT writing on any failure; on success write the re-serialized JSON, refresh `self._reads` digest, and yield a `TextBlock` confirmation. Make T003 pass.
+- [x] T003 [US1] Write `tests/unit/test_notebook_edit.py` (mirror `tests/unit/test_internal_file_tools.py` harness): replace a cell's source (other cells/outputs/nbformat preserved); insert a markdown cell at an index (later cells shift); insert at `index == len(cells)` appends; delete a cell (order preserved). (Red until T004.)
+- [x] T004 [US1] Implement the `_notebook_edit` async handler in `src/loopplane/tools/internal.py`: resolve `path` via `_resolve` (working scope); apply the `edit_file` stale-write guard via `self._reads` (must have been read this session + unchanged); parse the file as JSON and validate it is a notebook (a dict with a list `cells`); apply `mode` by `index` (replace sets `cells[index].source`; insert builds a minimal valid `code`/`markdown` cell and inserts at `index` allowing `== len`; delete removes `cells[index]`); validate the index range and required fields (`source` for replace/insert, `cell_type` for insert), yielding `ErrorOutput(VALIDATION)` WITHOUT writing on any failure; on success write the re-serialized JSON, refresh `self._reads` digest, and yield a `TextBlock` confirmation. Make T003 pass.
 
 ## Phase 3: User Story 2 — Safe, guarded edits (P2)
 
-- [ ] T005 [US2] Extend `tests/unit/test_notebook_edit.py`: no-prior-read rejected; changed-since-read rejected; out-of-range index rejected; malformed/non-notebook JSON rejected — each a `VALIDATION` error with the file unchanged.
+- [x] T005 [US2] Extend `tests/unit/test_notebook_edit.py`: no-prior-read rejected; changed-since-read rejected; out-of-range index rejected; malformed/non-notebook JSON rejected — each a `VALIDATION` error with the file unchanged.
 
 ## Phase 4: User Story 3 — Governed & scoped (P3)
 
-- [ ] T006 [US3] Extend `tests/unit/test_notebook_edit.py`: a path outside the working scope is rejected (nothing written); `InternalToolAdapter().describe()` includes `notebook_edit` with `read_only is False`.
+- [x] T006 [US3] Extend `tests/unit/test_notebook_edit.py`: a path outside the working scope is rejected (nothing written); `InternalToolAdapter().describe()` includes `notebook_edit` with `read_only is False`.
 
 ## Phase 5: Polish & Cross-Cutting
 
-- [ ] T007 Run the four gates green: `ruff check`, `ruff format --check`, `mypy` (src, strict), `pytest` (full suite — additive proof). Fix any issue introduced by this unit.
+- [x] T007 Run the four gates green: `ruff check`, `ruff format --check`, `mypy` (src, strict), `pytest` (full suite — additive proof). Fix any issue introduced by this unit.
 
 ## Dependencies
 
