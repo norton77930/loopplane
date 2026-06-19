@@ -4,7 +4,13 @@ All notable changes to LoopPlane are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 Semantic Versioning.
 
-## [Unreleased]
+## [0.3.0] - 2026-06-19
+
+Two additive follow-on units after the 0.2.0 agent-capability line: a **FAIL-SAFE**
+optional cheap-model compaction summarizer (042, Tier-3 efficiency) and **model-driven
+one-shot subagent spawning** (043, Tier-2 autonomy). Both are additive and reuse-first —
+the runtime core, the agent loop, the content model, and the event schema are unchanged
+(no `SCHEMA_VERSION` bump).
 
 ### Added
 
@@ -392,5 +398,6 @@ additive layers (units 001-013), brought to release quality by unit 014.
   **first-run example prompts**. With 032, the product-polish sprint (030–032) is complete; the
   backend is untouched throughout (only unit 030 was additive backend, no ADR).
 
+[0.3.0]: https://github.com/norton77930/loopplane/releases/tag/v0.3.0
 [0.2.0]: https://github.com/norton77930/loopplane/releases/tag/v0.2.0
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0
