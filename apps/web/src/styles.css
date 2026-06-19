@@ -205,6 +205,22 @@ button.danger { color: var(--danger); border-color: var(--danger); }
 .code-block:hover .code-copy, .code-copy:focus { opacity: 1; }
 .code-copy:hover { background: var(--accent-soft); color: var(--text); }
 
+/* ---- Modals + toasts + skeletons + empty state (032) ---- */
+.modal-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.4); padding: 16px; }
+.modal { max-width: 520px; width: 100%; }
+.modal .dialog { margin: 0; max-width: none; }
+.toast-container { position: fixed; bottom: 16px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+.toast { background: var(--bg-elev); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow); padding: 8px 14px; font-size: 13px; }
+.skeleton { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.skeleton-row { height: 14px; border-radius: var(--radius-sm); background: linear-gradient(90deg, var(--accent-soft), var(--bg-elev), var(--accent-soft)); background-size: 200% 100%; animation: skeleton-shimmer 1.2s ease-in-out infinite; }
+@keyframes skeleton-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.empty-state { margin: auto; text-align: center; color: var(--text-muted); display: flex; flex-direction: column; gap: 12px; padding: 32px; }
+.empty-title { font-size: 16px; color: var(--text); }
+.empty-examples { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.example-chip { font-size: 13px; color: var(--text); border: 1px solid var(--border-strong); background: var(--bg-elev); padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+.example-chip:hover { background: var(--accent-soft); }
+.error-banner .retry { margin-left: 10px; font-size: 13px; color: var(--danger); border: 1px solid var(--danger); background: transparent; padding: 2px 10px; border-radius: var(--radius-sm); cursor: pointer; }
+
 .composer textarea { flex: 1; resize: none; font: inherit; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-input); color: var(--text); max-height: 200px; }
 .composer textarea:focus { outline: none; border-color: var(--accent); }
 

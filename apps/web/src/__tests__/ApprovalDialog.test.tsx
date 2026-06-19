@@ -16,4 +16,11 @@ describe("ApprovalDialog", () => {
     fireEvent.click(screen.getByText("Always allow this session"));
     expect(onDecide).toHaveBeenCalledWith({ allow: true, scope: "session" });
   });
+
+  it("denies on Escape (the safe default — never an implicit allow)", () => {
+    const onDecide = vi.fn();
+    render(<ApprovalDialog toolName="danger" onDecide={onDecide} />);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onDecide).toHaveBeenCalledWith({ allow: false });
+  });
 });

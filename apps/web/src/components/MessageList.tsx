@@ -5,21 +5,33 @@ import { copyText } from "../lib/clipboard";
 import type { ConversationEntry } from "../state/chat";
 import { Markdown } from "./Markdown";
 import { ReasoningBlock } from "./ReasoningBlock";
+import { Skeleton } from "./Skeleton";
 import { ToolCard } from "./ToolCard";
 
 const BOTTOM_THRESHOLD = 40;
+const EXAMPLES = [
+  "Summarize the attached file",
+  "Explain what this project does",
+  "List the available tools",
+];
 
-// The scrolling message region: renders the ordered entries (FR-001/002/006) and owns its
-// own scroll container so it can auto-scroll when pinned to the bottom and offer a
-// jump-to-latest affordance when the user has scrolled up (FR-011). Each user/assistant message
-// carries copy + regenerate actions (unit 031); regenerate shows on the latest assistant message.
+// The scrolling message region (FR-001/002/006/011) + unit-031 per-message actions + unit-032
+// loading skeleton and a richer first-run empty state with example prompts.
 interface Props {
   entries: ConversationEntry[];
   onRegenerate?: () => void;
   canRegenerate?: boolean;
+  onExample?: (prompt: string) => void;
+  loading?: boolean;
 }
 
-export function MessageList({ entries, onRegenerate, canRegenerate }: Props) {
+export function MessageList({
+  entries,
+  onRegenerate,
+  canRegenerate,
+  onExample,
+  loading,
+}: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
 
@@ -50,19 +62,46 @@ export function MessageList({ entries, onRegenerate, canRegenerate }: Props) {
 
   return (
     <div className="messages" data-testid="messages" ref={ref} onScroll={onScroll}>
-      {entries.map((entry, index) => (
-        <Entry
-          key={index}
-          entry={entry}
-          onRegenerate={index === lastAssistant ? onRegenerate : undefined}
-          canRegenerate={canRegenerate}
-        />
-      ))}
+      {loading && entries.length === 0 ? (
+        <Skeleton />
+      ) : entries.length === 0 ? (
+        <EmptyState onExample={onExample} />
+      ) : (
+        entries.map((entry, index) => (
+          <Entry
+            key={index}
+            entry={entry}
+            onRegenerate={index === lastAssistant ? onRegenerate : undefined}
+            canRegenerate={canRegenerate}
+          />
+        ))
+      )}
       {!pinned && (
         <button type="button" className="jump-latest" onClick={jumpToLatest}>
           Jump to latest
         </button>
       )}
+    </div>
+  );
+}
+
+function EmptyState({ onExample }: { onExample?: (prompt: string) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="empty-state">
+      <div className="empty-title">{t("empty.title")}</div>
+      <div className="empty-examples">
+        {EXAMPLES.map((example) => (
+          <button
+            key={example}
+            type="button"
+            className="example-chip"
+            onClick={() => onExample?.(example)}
+          >
+            {example}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -125,11 +164,7 @@ function MessageActions({
         {t("action.copy")}
       </button>
       {onRegenerate && (
-        <button
-          type="button"
-          disabled={canRegenerate === false}
-          onClick={onRegenerate}
-        >
+        <button type="button" disabled={canRegenerate === false} onClick={onRegenerate}>
           {t("action.regenerate")}
         </button>
       )}

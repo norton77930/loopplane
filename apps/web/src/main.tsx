@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { AppRoot } from "./AppRoot";
+import { ToastProvider } from "./components/Toast";
 import { I18nProvider } from "./i18n/i18n";
 import { initTheme } from "./theme/theme";
 import "./styles.css";
@@ -14,7 +15,9 @@ if (root) {
   createRoot(root).render(
     <StrictMode>
       <I18nProvider>
-        <AppRoot />
+        <ToastProvider>
+          <AppRoot />
+        </ToastProvider>
       </I18nProvider>
     </StrictMode>,
   );

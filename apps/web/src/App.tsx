@@ -13,6 +13,8 @@ import { MessageList } from "./components/MessageList";
 import { ModelSelector } from "./components/ModelSelector";
 import { QuestionDialog } from "./components/QuestionDialog";
 import { Sidebar } from "./components/Sidebar";
+import { useToast } from "./components/Toast";
+import { useTranslation } from "./i18n/i18n";
 import { estimateCost } from "./pricing";
 import { errored, initialState, reduce, userPrompt } from "./state/chat";
 
@@ -31,6 +33,10 @@ export function App({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const sessionId = useRef<string | null>(null);
   const reading = useRef(false);
+  const { notify } = useToast();
+  const { t } = useTranslation();
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   function fail(error: unknown) {
     // An authorization failure logs the user out (back to login); any other error shows the
@@ -122,13 +128,16 @@ export function App({
       setSessions(await client.listSessions());
     } catch {
       setSessions([]);
+    } finally {
+      setLoadingSessions(false);
     }
   }
 
-  // 030 — session management: rename + delete, then refresh the list.
+  // 030 — session management: rename + delete, then refresh the list (with a 032 toast).
   async function renameSession(id: string, title: string) {
     try {
       await client.renameSession(id, title);
+      notify(t("toast.renamed"));
       void refreshSessions();
     } catch (error) {
       fail(error);
@@ -142,9 +151,16 @@ export function App({
       fail(error);
       return;
     }
+    notify(t("toast.deleted"));
     // Deleting the open session returns the app to an empty/new state (FR-006).
     if (id === activeId || id === sessionId.current) newChat();
     void refreshSessions();
+  }
+
+  // 032 — retry: clear the error and re-establish the live stream.
+  function retry() {
+    setState((current) => ({ ...current, status: "idle" }));
+    if (sessionId.current) void readEvents(sessionId.current);
   }
 
   function newChat() {
@@ -161,11 +177,14 @@ export function App({
     setActiveId(id);
     // Replay history through the same reducer, then stream live (R6).
     let next = initialState;
+    setLoadingHistory(true);
     try {
       const events = (await client.history(id)) as RawEvent[];
       for (const event of events) next = reduce(next, event);
     } catch {
       next = initialState;
+    } finally {
+      setLoadingHistory(false);
     }
     setState(next);
     void readEvents(id);
@@ -203,6 +222,7 @@ export function App({
           onNew={newChat}
           onRename={(id, title) => void renameSession(id, title)}
           onDelete={(id) => void deleteSession(id)}
+          loading={loadingSessions}
         />
       }
       header={
@@ -215,7 +235,7 @@ export function App({
           onToggleInspect={() => setShowInspect((value) => !value)}
         />
       }
-      banner={state.status === "error" ? <ErrorBanner /> : undefined}
+      banner={state.status === "error" ? <ErrorBanner onRetry={retry} /> : undefined}
       panel={showInspect ? <InspectionPanel client={client} /> : undefined}
       composer={
         <Composer
@@ -243,6 +263,8 @@ export function App({
         entries={state.entries}
         onRegenerate={regenerate}
         canRegenerate={state.status !== "running"}
+        onExample={(prompt) => void send(prompt)}
+        loading={loadingHistory}
       />
       {pendingApproval && (
         <ApprovalDialog
@@ -255,6 +277,9 @@ export function App({
           prompt={pendingQuestion.prompt}
           options={pendingQuestion.options}
           onAnswer={(answers) => void answer(pendingQuestion.requestId, answers)}
+          onClose={() =>
+            setState((current) => ({ ...current, pendingQuestion: undefined }))
+          }
         />
       )}
     </AppShell>

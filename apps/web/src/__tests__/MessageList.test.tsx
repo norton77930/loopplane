@@ -72,4 +72,16 @@ describe("MessageList", () => {
     );
     expect(screen.getByText("Regenerate")).toBeDisabled();
   });
+
+  it("shows example prompts on an empty conversation and sends one", () => {
+    const onExample = vi.fn();
+    render(<MessageList entries={[]} onExample={onExample} />);
+    fireEvent.click(screen.getByText("Explain what this project does"));
+    expect(onExample).toHaveBeenCalledWith("Explain what this project does");
+  });
+
+  it("shows a loading skeleton for an empty conversation while loading", () => {
+    render(<MessageList entries={[]} loading />);
+    expect(screen.getByTestId("skeleton")).toBeInTheDocument();
+  });
 });

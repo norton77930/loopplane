@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { SessionSummary } from "../api/types";
 import { useTranslation } from "../i18n/i18n";
 import { groupSessions, type GroupKey } from "../lib/sessionGroups";
+import { Skeleton } from "./Skeleton";
 
 // The sessions sidebar (FR-008; 030): lists sessions by a human title (label, with a short-id
 // fallback), grouped Today / Yesterday / Earlier, each with a rename + delete affordance.
@@ -13,6 +14,7 @@ interface Props {
   onNew: () => void;
   onRename?: (id: string, title: string) => void;
   onDelete?: (id: string) => void;
+  loading?: boolean;
 }
 
 const GROUP_LABEL: Record<GroupKey, string> = {
@@ -21,7 +23,15 @@ const GROUP_LABEL: Record<GroupKey, string> = {
   earlier: "sidebar.earlier",
 };
 
-export function Sidebar({ sessions, activeId, onOpen, onNew, onRename, onDelete }: Props) {
+export function Sidebar({
+  sessions,
+  activeId,
+  onOpen,
+  onNew,
+  onRename,
+  onDelete,
+  loading,
+}: Props) {
   const { t } = useTranslation();
   const groups = groupSessions(sessions);
   return (
@@ -30,7 +40,9 @@ export function Sidebar({ sessions, activeId, onOpen, onNew, onRename, onDelete 
       <button type="button" className="new-chat" onClick={onNew}>
         {t("sidebar.newChat")}
       </button>
-      {sessions.length === 0 ? (
+      {loading && sessions.length === 0 ? (
+        <Skeleton rows={4} />
+      ) : sessions.length === 0 ? (
         <div className="sidebar-empty">{t("sidebar.empty")}</div>
       ) : (
         <div className="session-list" data-testid="sessions">
