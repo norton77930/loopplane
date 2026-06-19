@@ -5,6 +5,7 @@ an explicit model name are set in the environment. Run manually, e.g.::
 
     ANTHROPIC_API_KEY=... LOOPPLANE_ANTHROPIC_MODEL=<model> uv run pytest tests/live
     OPENAI_API_KEY=...    LOOPPLANE_OPENAI_MODEL=<model>    uv run pytest tests/live
+    GEMINI_API_KEY=...    LOOPPLANE_GEMINI_MODEL=<model>    uv run pytest tests/live
 """
 
 from __future__ import annotations
@@ -53,6 +54,19 @@ async def test_openai_live_text_turn() -> None:
     from loopplane.adapters.openai import OpenAIConfig, OpenAIModel
 
     model = OpenAIModel(OpenAIConfig(model=os.environ["LOOPPLANE_OPENAI_MODEL"]))
+    host = LoopPlaneHost(RuntimeConfig(model=model))
+    outcome = await host.run("Reply with the single word: pong.", _Collector())
+    assert outcome.termination_reason == "natural-completion"
+
+
+@pytest.mark.skipif(
+    not (os.environ.get("GEMINI_API_KEY") and os.environ.get("LOOPPLANE_GEMINI_MODEL")),
+    reason="set GEMINI_API_KEY and LOOPPLANE_GEMINI_MODEL to run the live check",
+)
+async def test_gemini_live_text_turn() -> None:
+    from loopplane.adapters.gemini import GeminiConfig, GeminiModel
+
+    model = GeminiModel(GeminiConfig(model=os.environ["LOOPPLANE_GEMINI_MODEL"]))
     host = LoopPlaneHost(RuntimeConfig(model=model))
     outcome = await host.run("Reply with the single word: pong.", _Collector())
     assert outcome.termination_reason == "natural-completion"

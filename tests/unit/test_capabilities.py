@@ -68,6 +68,19 @@ def test_openai_adapter_accepts_media_by_default() -> None:
     assert accepts_media(text_only) is False
 
 
+def test_gemini_adapter_accepts_media_by_default() -> None:
+    from loopplane.adapters.gemini import GeminiConfig, GeminiModel
+
+    model = GeminiModel(GeminiConfig(model="gemini", client=object()))
+    assert model.accepts_media() is True
+    assert accepts_media(model) is True
+
+    text_only = GeminiModel(
+        GeminiConfig(model="gemini", client=object(), accepts_media=False)
+    )
+    assert accepts_media(text_only) is False
+
+
 def test_openai_compat_defaults() -> None:
     from loopplane.adapters.openai_compat import ollama_model, openrouter_model
 

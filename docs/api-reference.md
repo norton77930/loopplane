@@ -176,6 +176,13 @@ OpenAI-compatible model providers (OpenRouter, Ollama) reusing the OpenAI adapte
 - `openrouter_model` — build an `OpenAIModel` pointed at OpenRouter.
 - `ollama_model` — build an `OpenAIModel` pointed at a local Ollama endpoint.
 
+### `loopplane.adapters.gemini`
+
+The native Google Gemini model-provider adapter.
+
+- `GeminiModel` — a model boundary backed by the Google GenAI API.
+- `GeminiConfig` — configuration for the Gemini adapter.
+
 ### `loopplane.skills`
 
 The skill execution profile boundary.

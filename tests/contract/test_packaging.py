@@ -46,6 +46,7 @@ def test_runtime_dependencies_are_unchanged() -> None:
     assert names == {"anyio", "pydantic", "jsonschema"}, names
     assert set(project["optional-dependencies"]) == {
         "anthropic",
+        "gemini",
         "mcp",
         "net",
         "openai",

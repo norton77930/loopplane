@@ -50,8 +50,11 @@ async def test_tool_use_round_trip(provider: str) -> None:
     assert outcome.termination_reason == "natural-completion"
     assert outcome.turns_taken == 2
     assert len(client.calls) == 2
-    # The second model call carried the tool result back to the model.
-    assert _mentions(client.calls[1]["messages"], "ping")
+    # The second model call carried the tool result back to the model. The request
+    # field differs by wire format: OpenAI/Anthropic use "messages", Gemini "contents".
+    request = client.calls[1]
+    conversation = request.get("messages", request.get("contents"))
+    assert _mentions(conversation, "ping")
     assert any(
         getattr(event.payload, "outcome", None) == "success"
         for event in collector.events

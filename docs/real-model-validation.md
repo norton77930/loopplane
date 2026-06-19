@@ -54,3 +54,22 @@ the scripted golden runs.
 Note the model identifier, date, and checklist outcomes in your validation
 log (kept outside this repository if it names internal systems). The
 integration is considered validated when scenarios 1–4 pass.
+
+## 5. Per-provider opt-in live checks
+
+The bundled adapters each ship an **opt-in, secret-gated** live smoke test in
+`tests/live/test_live_models.py`. Each is skipped unless its provider API key and
+an explicit model name are set in the environment, and all are excluded from the
+default gates (no `secrets.` reference in CI):
+
+| Provider | Env vars |
+|---|---|
+| Anthropic | `ANTHROPIC_API_KEY` + `LOOPPLANE_ANTHROPIC_MODEL` |
+| OpenAI | `OPENAI_API_KEY` + `LOOPPLANE_OPENAI_MODEL` |
+| Gemini (native) | `GEMINI_API_KEY` + `LOOPPLANE_GEMINI_MODEL` |
+
+Run one, e.g.:
+
+```powershell
+$env:GEMINI_API_KEY="..."; $env:LOOPPLANE_GEMINI_MODEL="gemini-2.5-flash"; uv run pytest tests/live -q
+```

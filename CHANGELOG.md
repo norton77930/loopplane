@@ -192,5 +192,31 @@ additive layers (units 001-013), brought to release quality by unit 014.
   model + an in-process client + a real PNG); the event serde round-trip now asserts an
   `ImageBlock`-bearing `UserInputEvent` is lossless (Constitution VI). No new dependency, no frontend.
   Fourth and final unit of the Tier-1 agent-capability sprint (033–036).
+- **037** Native Google Gemini adapter (`loopplane.adapters.gemini`) — the deferred 035 follow-up: a
+  **native** model-provider adapter (`GeminiModel` + `GeminiConfig`) over the **direct** Google GenAI
+  API (the official `google-genai` SDK, behind a new optional `gemini` extra), distinct from the
+  OpenAI-compatible OpenRouter path. Mirrors the unit-020 adapters exactly — the SDK is imported
+  **lazily** inside the client factory (so the package imports without the extra), the stream is mapped
+  by **duck-typing**, and the whole adapter is tested **offline with a stub client**. `gemini/mapping.py`
+  maps the loop's content/tools to Gemini's `contents`/`function_declarations`/`inline_data` and decodes
+  the chunk stream (`candidates[].content.parts` → text / thought→`ReasoningIncrement` / `function_call`
+  →raw `ToolCallRequest`; `usage_metadata`→`TokenUsage`; one `TurnEnd`); a context-overflow signal →
+  `ContextOverflowError`, every other fault → a public-safe `ModelProviderError` (no key/raw-body leak,
+  reusing the shared `_model_errors`). It advertises `accepts_media()` (default `True`; Gemini is
+  vision-capable — an `ImageBlock` → an `inline_data` part) and registers as a `/v1/models` host like
+  the others, so the existing selector lists it with **no frontend change**. **The shared content model
+  and the event schema are UNCHANGED** (no new `ToolCallBlock` field, **no `SCHEMA_VERSION` bump**, **no
+  ADR**): Gemini 3 hard-requires a per-`function_call` `thought_signature` for multi-turn tool use, but
+  Google's official `"skip_thought_signature_validator"` sentinel skips validation, so multi-turn tool
+  use is made functional by attaching that sentinel when re-mapping a prior `ToolCallBlock` (on the part
+  only — never in the `args` the gateway validates) rather than carrying a signature in the model.
+  Preserving the *real* per-call signature (best cross-turn reasoning continuity) is a documented
+  deferred follow-up (it would need a content-model field — a Constitution VI / ADR matter). Tool calls
+  surface **raw** for the gateway (V); only normalized increments reach the loop (VI); the SDK enters
+  only as a model-boundary adapter (VIII). New optional extra `gemini` (`google-genai>=1`); **no
+  required** runtime dependency. Deterministic offline tests (a Gemini-shaped stub: request mapping +
+  stream decoding + a tool round-trip; the shared parametrized overflow/failure/usage suites now
+  exercise "gemini") + an opt-in, secret-gated live turn. The deferred follow-up from spec 035 (research
+  Decision 2) and ADR 0001 (Follow-up #3).
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0
