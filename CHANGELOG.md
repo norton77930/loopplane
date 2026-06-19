@@ -128,5 +128,13 @@ additive layers (units 001-013), brought to release quality by unit 014.
   run is in flight, and re-runs the last user turn via the existing send path); and a code-block copy
   button via react-markdown's `pre` override (the unit-029 highlighting is unchanged). Second unit of
   the product-polish sprint (030–032); the backend is untouched.
+- **032** Web interaction resilience & states (`apps/web`) — frontend-only, no backend, no ADR, the
+  final unit of the product-polish sprint (030–032). The approval/question dialogs become **true
+  modals** (a `Modal` wrapper + a `useFocusTrap` hook — backdrop, focus trap, Esc resolving to the
+  safe default, keyboard-navigable options, focus restored on close); the connection-error banner
+  gains a **Retry** that re-establishes the stream; a small **toast** system surfaces transient
+  outcomes (rename / delete); and the UI gains **loading skeletons**, a **richer empty state**, and
+  **first-run example prompts**. With 032, the product-polish sprint (030–032) is complete; the
+  backend is untouched throughout (only unit 030 was additive backend, no ADR).
 
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

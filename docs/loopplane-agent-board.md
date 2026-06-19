@@ -111,7 +111,7 @@ git history) — not invented.
 | **029-web-agent-extras** | `specs/029-web-agent-extras` | **Verified** | Web Agent Parity Extras (maintainer-authorized extension): **frontend-only** parity polish, **no backend, no ADR** — **i18n** (en + zh-TW + switcher), **code syntax highlighting** (in 025 markdown), a **command palette** (frontend-doable slash + `@file`/`@skill` from the 027 inspection data; backend-semantic commands out of scope), and a **client-side cost estimate** (026 token usage × a bundled price table; server-side pricing deferred). Builds on 025–027. | 011, 018, 025, 026, 027 | None — the final unit; implemented & verified on `main` (i18n + syntax highlighting + command palette + client-side cost; **79 Vitest** + tsc + build green; Python unchanged). The web-UI extension (025–029) is COMPLETE. |
 | **030-web-session-management** | `specs/030-web-session-management` | **Verified** | Web Session Management (product-polish sprint): **full-stack, additive, no ADR** — persistent session **title** + **rename** + **delete**. `CheckpointStore.set_title` (append a fresh session-meta; latest wins) + `delete_session` (real removal) on both backends → controller → host → webapi **PATCH/DELETE `/v1/sessions/{id}`** (owner-scoped, non-owner 404); `SessionSummaryView` gains `last_active_at`/`created_at`. Sidebar shows titles grouped Today/Yesterday/Earlier with a rename/delete menu. Tool Gateway (V) / Event Bus (VI) untouched. | 011, 018, 021, 022, 025 | None — implemented & verified on `main` (both checkpoint backends + host/controller + PATCH/DELETE + non-owner 404; **767 pytest** + ruff + mypy + webapi boundary green, **84 Vitest** + build green). |
 | **031-web-message-actions** | `specs/031-web-message-actions` | **Verified** | Web Message Actions (product-polish sprint): **frontend-only** — per-message **copy** + **regenerate** (re-run the last user turn via the existing send path) + a **code-block copy** button (react-markdown `pre` override). No backend change. | 025 | None — implemented & verified on `main` (clipboard helper + MessageList copy/regenerate + Markdown code-copy; **90 Vitest** + tsc + build green; Python unchanged). |
-| **032-web-interaction-resilience** | `specs/032-web-interaction-resilience` | **Spec complete** | Web Interaction Resilience & States (product-polish sprint): **frontend-only** — approval/question dialogs become **true modals** (backdrop, focus trap, Esc-safe, keyboard nav); **error retry + toasts**; **loading skeletons + richer empty state + first-run prompts**. No backend change. | 025, 026 | Run **plan** (`/speckit-plan`) after 030/031. Spec + checklist drafted. |
+| **032-web-interaction-resilience** | `specs/032-web-interaction-resilience` | **Verified** | Web Interaction Resilience & States (product-polish sprint): **frontend-only** — approval/question dialogs become **true modals** (`Modal` + `useFocusTrap`; Esc = safe default; keyboard nav); **error retry + toasts**; **loading skeletons + richer empty state + first-run prompts**. No backend change. | 025, 026 | None — implemented & verified on `main` (Modal/useFocusTrap/Toast/Skeleton + dialog/banner/list wiring; **101 Vitest** + tsc + build green; Python unchanged). The product-polish sprint (030–032) is COMPLETE. |
 
 **Status evidence (for audit):**
 
@@ -463,12 +463,12 @@ git history) — not invented.
   suite is unchanged (frontend-only). Rollback = revert the `apps/web` diff → units 025–028.
   → **Verified**. **With 029, the web-UI extension (025–029) is COMPLETE.**
 
-> **🚧 PRODUCT-POLISH SPRINT IN PROGRESS — `030-web-session-management` → `031-web-message-actions` → `032-web-interaction-resilience` (maintainer-authorized, 2026-06-19).** After the web-UI extension (025–029, COMPLETE — banner below), the maintainer authorized a **product-polish sprint** (high-impact UX + session usability), frontend-first plus one additive backend unit. Three units:
+> **✅ PRODUCT-POLISH SPRINT COMPLETE — `030-web-session-management` → `031-web-message-actions` → `032-web-interaction-resilience` (maintainer-authorized, 2026-06-19).** After the web-UI extension (025–029, COMPLETE — banner below), the maintainer authorized a **product-polish sprint** (high-impact UX + session usability), frontend-first plus one additive backend unit. Three units, **all `Verified` on `main`**:
 > - **030-web-session-management** (full-stack, additive, **no ADR**) — **Verified** (shipped): persistent session **title** + **rename** + **delete** (`CheckpointStore.set_title`/`delete_session` on both backends → controller → host → **PATCH/DELETE `/v1/sessions/{id}`**, owner-scoped non-owner 404; `SessionSummaryView` gains `last_active_at`/`created_at`); sidebar titles grouped Today/Yesterday/Earlier with a rename/delete menu. Python **767 passed** + ruff + mypy-strict + webapi boundary green; apps/web **84 Vitest** + tsc + build green.
 > - **031-web-message-actions** (frontend-only) — **Verified** (shipped): per-message copy + regenerate (re-run the last user turn) + code-block copy. **90 Vitest** + tsc + build green.
-> - **032-web-interaction-resilience** (frontend-only) — **pending**: true modals (focus trap/Esc), error retry + toasts, skeletons + richer empty state + first-run prompts.
+> - **032-web-interaction-resilience** (frontend-only) — **Verified** (shipped): true modals (`Modal` + `useFocusTrap`, Esc = safe default), error retry + toasts, loading skeletons + richer empty state + first-run prompts. **101 Vitest** + tsc + build green.
 >
-> Sequence **030 → 031 → 032** on `main`, each step commit+push. **030 + 031 are `Verified`**; **032 is next**. The loop stops (CronDelete) when 032 is `Verified`. *(The web-UI-extension banner below — 025–029 — remains COMPLETE; this sprint builds on it.)*
+> Sequence **030 → 031 → 032** on `main`. **030 + 031 + 032 are all `Verified`** — the **product-polish sprint is COMPLETE**. The autopilot has no further unit and the `/loop` was stopped (CronDelete). *(The web-UI-extension banner below — 025–029 — remains COMPLETE; this sprint built on it.)*
 
 > **✅ WEB-UI EXTENSION COMPLETE — `025-web-agent-ui` → `026-web-agent-signals` → `027-web-agent-inspection` → `028-web-agent-model-files` → `029-web-agent-extras` (maintainer-authorized web-UI extension, 2026-06-19).** The original roadmap (000–019, v0.1.0; MIT) and the four-phase gap-closure (020–024) remain COMPLETE and `Verified`. Beyond them, the maintainer authorized a **web-UI extension** to bring the unit-018 SPA to parity with a modern agent app. Five units, **all `Verified` on `main`**:
 > - **025-web-agent-ui** (frontend-only) — **Verified** (shipped): two-pane shell, markdown, inline tool cards, styled dialogs, status + Stop, sessions, light/dark theme.
@@ -519,13 +519,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **032** (product-polish sprint, the final unit) — **030 + 031 are `Verified`** on `main`; 032 is frontend-only. Units **000–031** are `Verified`. |
-| Active feature directory | `specs/032-web-interaction-resilience` (advance `.specify/feature.json` → 032). |
-| Current branch | `main` — **main-only autopilot**; all units progress on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **031 COMPLETE** (plan → tasks → analyze → implement → Verified). Next: **plan** for **032** (`/speckit-plan`), the final sprint unit. |
-| Depends on | 032 → 025 (dialogs + message list) + 026 (question dialog). |
-| Next command | **`/speckit-plan`** for `032` (then tasks → analyze → implement). |
-| Stop condition status | **030 + 031 Verified**; running **032** (the last unit) under autopilot; the loop stops (CronDelete) when 032 is `Verified`. |
+| Active unit | **None** — the product-polish sprint (**030–032**) is **COMPLETE**; **all units 000–032 are `Verified`** on `main`. |
+| Active feature directory | — (no active feature; `.specify/feature.json` → `specs/032-web-interaction-resilience`, the last completed unit). |
+| Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
+| Current Spec Kit step | **032 COMPLETE** (plan → tasks → analyze → implement → Verified). The product-polish sprint (030–032) is fully shipped; the autopilot has **no further unit to advance** and the `/loop` was stopped (CronDelete). |
+| Depends on | — (all dependencies are `Verified`). |
+| Next command | — (no further unit; only reserved/out-of-scope items remain: message edit, in-session search, feedback persistence, visual/brand redesign). |
+| Stop condition status | **Complete** — 030–032 are all `Verified`; no further unit; the loop was stopped. |
 
 ---
 
