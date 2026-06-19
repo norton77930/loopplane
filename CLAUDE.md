@@ -1,5 +1,5 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan at
-specs/045-structured-output/plan.md
+specs/046-notebook-edit/plan.md
 <!-- SPECKIT END -->
