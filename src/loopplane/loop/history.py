@@ -69,6 +69,15 @@ class SessionHistory:
         """
         self._entries[:count] = [entry]
 
+    def replace_entry(self, index: int, entry: HistoryEntry) -> None:
+        """Compaction-summarizer support (spec 042): swap one in-memory entry
+        in place — used to augment a just-produced mechanical summary marker
+        with a model-written summary. Like :meth:`replace_prefix`, the durable
+        stream is append-only and keeps the originals, and the recording hook
+        is deliberately not invoked.
+        """
+        self._entries[index] = entry
+
     def snapshot(self) -> tuple[HistoryEntry, ...]:
         """A point-in-time view that cannot mutate internal state (FR-006)."""
         return tuple(self._entries)

@@ -122,6 +122,16 @@ class RuntimeConfig:
     # path is byte-identical to today. Carries no secret (a plain fraction). The
     # reactive ContextOverflowError compact-and-retry-once backstop is unchanged.
     auto_compact_threshold: float | None = None
+    # Opt-in cheap-model compaction summarizer (spec 042): None by default. When a
+    # host supplies a (typically cheap) summarizer ModelBoundary, compaction asks it
+    # to summarize the dropped conversation span and stores the model summary in the
+    # existing SummaryMarkerBlock (replacing the mechanical excerpts; keeping
+    # turn_count / tool_names). It is a FAIL-SAFE overlay: any summarizer failure
+    # (exception, timeout, empty output) falls back to the mechanical digest and
+    # never breaks a run. None → the mechanical digest, byte-identical to today.
+    # An object collaborator like `model`; carries no secret (a summarizer's
+    # credential lives in the host-supplied model object, never here).
+    compaction_summarizer: ModelBoundary | None = None
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -150,6 +160,7 @@ class RuntimeConfig:
             auto_compact_threshold=_coerce_threshold(
                 data.get("auto_compact_threshold")
             ),
+            compaction_summarizer=data.get("compaction_summarizer"),
         )
 
 

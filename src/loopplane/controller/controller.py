@@ -118,6 +118,7 @@ class RuntimeController:
         enable_assembly: bool | None = None,
         assembly_keep_last: int = 4,
         auto_compact_threshold: float | None = None,
+        compaction_summarizer: ModelBoundary | None = None,
         hooks: HookDispatcher | None = None,
         plan_mode: bool = False,
     ) -> None:
@@ -150,6 +151,10 @@ class RuntimeController:
         # existing full-capacity proactive check (default-off, byte-identical); a
         # fraction in (0, 1] → compact proactively at that fraction of capacity.
         self._auto_compact_threshold = auto_compact_threshold
+        # Optional cheap-model compaction summarizer (spec 042): None → the
+        # mechanical digest (default, byte-identical). A ModelBoundary → the loop's
+        # FAIL-SAFE overlay summarizes the dropped span into the summary marker.
+        self._compaction_summarizer = compaction_summarizer
         self._sessions: dict[str, _Session] = {}
 
     def create_session(
@@ -296,6 +301,7 @@ class RuntimeController:
                 history=history,
                 assembler=assembler,
                 hooks=self._hooks,
+                summarizer=self._compaction_summarizer,
             ),
             broker=InteractionBroker(emitter=emitter),
             approval_memory={},

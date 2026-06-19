@@ -47,12 +47,26 @@ class PromptAssembler:
         # compacts proactively at f * capacity, a safety margin before the limit.
         self._compact_threshold = compact_threshold
         self._needs_reestablish = False
+        # One-shot signal (spec 042): set when the proactive path compacts inside
+        # `assemble`, read-and-cleared by the loop so it can run the optional
+        # compaction summarizer over the just-dropped span.
+        self._just_compacted = False
 
     def mark_compacted(self) -> None:
         """Called after compaction so the next assembly re-establishes the
         content the model still needs (FR-053).
         """
         self._needs_reestablish = True
+
+    def take_compacted(self) -> bool:
+        """Read-and-clear the one-shot proactive-compaction signal (spec 042):
+        ``True`` exactly once after the proactive path ran ``compact_history`` in
+        ``assemble``, so the loop knows to run the summarizer overlay. ``False``
+        when no proactive compaction occurred.
+        """
+        compacted = self._just_compacted
+        self._just_compacted = False
+        return compacted
 
     def assemble(
         self,
@@ -80,6 +94,10 @@ class PromptAssembler:
         if self._estimate_tokens(request) > self._effective_capacity(
             capacity
         ) and compact_history(history, keep_last=self.keep_last):
+            # Signal the loop so it can run the optional compaction summarizer
+            # over the just-dropped span (spec 042); the mechanical marker is
+            # already in history and stands if no summarizer is configured.
+            self._just_compacted = True
             re_established = self._collect_reestablished()
             request = self._compose(history, tools, re_established + fresh)
         return request

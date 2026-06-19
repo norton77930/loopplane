@@ -27,7 +27,8 @@ from loopplane.hooks.points import (
 )
 from loopplane.loop.assembly import PromptAssembler
 from loopplane.loop.compaction import compact_history
-from loopplane.loop.history import SessionHistory
+from loopplane.loop.history import HistoryEntry, SessionHistory
+from loopplane.loop.summarizer import summarize_compaction
 from loopplane.model.boundary import (
     ContextOverflowError,
     Message,
@@ -40,6 +41,7 @@ from loopplane.model.boundary import (
 )
 from loopplane.model.content import (
     ContentBlock,
+    SummaryMarkerBlock,
     TextBlock,
     ToolCallBlock,
     ToolResultBlock,
@@ -75,6 +77,7 @@ class AgentLoop:
         history: SessionHistory,
         assembler: PromptAssembler | None = None,
         hooks: HookDispatcher | None = None,
+        summarizer: ModelBoundary | None = None,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -83,6 +86,10 @@ class AgentLoop:
         self._assembler = assembler
         # Optional lifecycle hooks (feature 015); absent by default (FR-011).
         self._hooks = hooks
+        # Optional cheap-model compaction summarizer (spec 042); absent by default.
+        # A FAIL-SAFE overlay on the mechanical digest: any failure keeps the
+        # mechanical marker, so a summarizer can never break a run.
+        self._summarizer = summarizer
 
     async def run(
         self, input_blocks: Sequence[ContentBlock], context: RunContext
@@ -133,7 +140,19 @@ class AgentLoop:
 
             retried_after_overflow = False
             while True:
+                before = self._history.snapshot()
                 request = self._assemble(prompt)
+                # Proactive compaction (spec 041) happens inside the synchronous
+                # `assemble`; if a summarizer is configured and a compaction just
+                # occurred, augment the fresh marker with a model summary and
+                # recompose so the model sees it (spec 042; FAIL-SAFE overlay).
+                if (
+                    self._summarizer is not None
+                    and self._assembler is not None
+                    and self._assembler.take_compacted()
+                ):
+                    await self._summarize_compaction(before)
+                    request = self._assemble(prompt)
                 try:
                     outcome = await self._stream_model_turn(
                         request, turn_index, context
@@ -141,6 +160,7 @@ class AgentLoop:
                     break
                 except ContextOverflowError:
                     # Compact and retry exactly once before surfacing (FR-008).
+                    before_overflow = self._history.snapshot()
                     if (
                         self._assembler is None
                         or retried_after_overflow
@@ -154,6 +174,10 @@ class AgentLoop:
                         return
                     retried_after_overflow = True
                     self._assembler.mark_compacted()
+                    # Augment the fresh marker with a model summary before the
+                    # retry recomposes (spec 042; FAIL-SAFE overlay).
+                    if self._summarizer is not None:
+                        await self._summarize_compaction(before_overflow)
                 except Exception:
                     await self._emitter.run_terminated(
                         "unrecoverable-error", turns_completed
@@ -216,6 +240,41 @@ class AgentLoop:
             tools=tools,
             capacity=self._model.context_capacity(),
             prompt=prompt,
+        )
+
+    async def _summarize_compaction(self, before: tuple[HistoryEntry, ...]) -> None:
+        """FAIL-SAFE overlay (spec 042): augment the just-produced mechanical
+        summary marker with a model-written summary of the dropped span. The
+        marker is the first in-memory entry's first block (compaction placed it
+        there via `replace_prefix`); the dropped span is the prefix of `before`
+        that the marker replaced. Any summarizer failure is swallowed by
+        `summarize_compaction`, so the mechanical marker stands and the run is
+        never affected.
+        """
+        if self._summarizer is None:
+            return
+        after = self._history.snapshot()
+        if not after:
+            return
+        marker_block = after[0].blocks[0] if after[0].blocks else None
+        if not isinstance(marker_block, SummaryMarkerBlock):
+            return
+        # `replace_prefix(keep_from, marker)` collapsed `before[:keep_from]` into
+        # the single marker, so keep_from = len(before) - (len(after) - 1).
+        keep_from = len(before) - (len(after) - 1)
+        dropped = before[:keep_from] if keep_from > 0 else before
+        augmented = await summarize_compaction(
+            summarizer=self._summarizer, dropped=dropped, marker=marker_block
+        )
+        if augmented is marker_block:
+            return  # the summarizer failed; the mechanical marker stands
+        self._history.replace_entry(
+            0,
+            HistoryEntry(
+                role=after[0].role,
+                blocks=(augmented,),
+                recorded_at=after[0].recorded_at,
+            ),
         )
 
     async def _stream_model_turn(

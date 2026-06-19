@@ -227,6 +227,51 @@ unchanged (no `SCHEMA_VERSION` bump).
   invalid-threshold `ConfigError`; the `from_mapping` round-trip + no-secret).
   Rollback: `auto_compact_threshold = None`, or revert the assembler/controller/
   config additions → exact pre-threshold behavior.
+- **042** Optional cheap-model compaction summarizer (`loopplane.loop` /
+  `loopplane.controller` / `loopplane.host`) — the **deferred half of 041**; a
+  third Tier-3 (efficiency) unit, additive, reuse-first, **no ADR**. Today
+  compaction produces a **mechanical** digest (`compact_history` → a
+  `SummaryMarkerBlock` whose `SummaryDigest` carries a turn count, the tool names
+  used, and bounded user-intent excerpts). This unit lets a host supply an
+  optional cheap summarizer via an additive, default-`None`
+  `RuntimeConfig.compaction_summarizer: ModelBoundary | None`: when set, compaction
+  asks it to summarize the dropped conversation span and stores the model summary
+  in the **existing** `SummaryMarkerBlock` (it replaces the mechanical `excerpts`;
+  `turn_count` / `tool_names` stay mechanical). When `None` (the default), the
+  mechanical digest is produced exactly as today — **byte-identical**. The single
+  non-negotiable property is **FAIL-SAFE**: the mechanical `compact_history`
+  **always runs first** and is the fallback; the summarizer is a pure overlay
+  applied after, and **any** failure (exception, `ContextOverflowError`, an
+  `anyio.fail_after` timeout, or empty/whitespace output) is swallowed so the
+  mechanical digest stands — compaction always succeeds and **a run is never broken
+  by the summarizer**. The summarizer is a single plain model turn (no assembler,
+  no tools), so it **cannot recurse** into compaction. Because `compact_history`
+  and `PromptAssembler.assemble` are **synchronous** (and `assemble` has direct
+  synchronous callers, so it cannot become async), the summarizer runs as an
+  **additive async overlay at the loop's existing async seams** — once after
+  assembly (the proactive 041 trigger, which the assembler signals with a one-shot
+  `take_compacted()` flag) and once in the overflow handler (the reactive 041
+  backstop); the agent loop's turn-cycle structure is preserved (one awaited
+  overlay step at the two points compaction already runs). It **reuses** the
+  existing `SummaryMarkerBlock` / `SummaryDigest` (the summary goes into
+  `excerpts`) — **no new block, no event-schema change, no `SCHEMA_VERSION` bump,
+  no content-model change**, and the marker is swapped in place via a tiny additive
+  `SessionHistory.replace_entry` (the durable stream keeps the originals, like
+  `replace_prefix`). The summarizer is an object collaborator like `model`,
+  threaded through the same wiring as `auto_compact_threshold` (`RuntimeConfig` →
+  `assemble()` → `RuntimeController` → per-session `AgentLoop`), passes through
+  `from_mapping` unchanged, and carries **no secret** (a summarizer's credential
+  lives in the host model object). No new public package / `__all__` name (the
+  summarize helper is an internal `loopplane.loop.summarizer` module without
+  `__all__`; `RuntimeConfig` is already exported and `ModelBoundary` is already
+  public), so the unit-014 api-reference bijection stays green with no doc edit.
+  Deterministic offline tests (a `ScriptedModel` as the summarizer): the model
+  summary lands in the marker (proactive + reactive); the summarizer receives the
+  dropped turns and no tools; `compaction_summarizer = None` is byte-identical
+  (mechanical digest, no model call); and the **critical FAIL-SAFE cases** — a
+  raising / empty-output / overflowing / timing-out summarizer falls back to the
+  mechanical digest and the run completes. Rollback: `compaction_summarizer = None`,
+  or revert the overlay + wiring → exact pre-042 mechanical compaction.
 
 ## [0.1.0] - 2026-06-18
 

@@ -144,6 +144,8 @@ def assemble(config: RuntimeConfig) -> AssembledRuntime:
         controller_kwargs["skills"] = skills_map
     if config.auto_compact_threshold is not None:
         controller_kwargs["auto_compact_threshold"] = config.auto_compact_threshold
+    if config.compaction_summarizer is not None:
+        controller_kwargs["compaction_summarizer"] = config.compaction_summarizer
 
     controller = RuntimeController(
         model=config.model,
