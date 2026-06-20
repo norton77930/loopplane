@@ -33,6 +33,13 @@ apps/desktop/sidecar/build/
 apps/desktop/sidecar/dist/
 apps/desktop/release/
 
+# Local manual-QA helper (docs/manual-qa.md §2) — do not commit
+/serve_web_demo.py
+
+# Local agent / browser-QA scratch artifacts — never commit
+/.playwright-mcp/
+/.claude/skills/run-web-demo/
+
 # Logs / runtime files (root-anchored so source packages are not caught)
 /logs/
 /tmp/

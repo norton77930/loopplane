@@ -23,7 +23,7 @@ controller's `subagent_depth` (default `0`). Per-run, never process-global.
 |---|---|---|---|
 | `max_subagent_depth` | `int` | `0` | The maximum `subagent_depth` at which `spawn_subagent` is permitted. A spawn is **denied** when `context.subagent_depth >= max_subagent_depth`. **`0` (the default) → the tool is NOT registered** (feature off, byte-identical to today). `1` → exactly one level of nesting (a top-level run may spawn; the child may not). |
 
-- `from_mapping` coerces it (`int(data.get("max_subagent_depth", 1))`).
+- `from_mapping` coerces it (`int(data.get("max_subagent_depth", 0))`).
 - `validate_config` requires `max_subagent_depth >= 0` (a negative cap is a `ConfigError`).
 - Carries no secret (a bare integer).
 
