@@ -140,6 +140,11 @@ class BudgetChecker:
         return self._message_spent
 
     @property
+    def session_spent(self) -> Decimal:
+        """The session's accumulated USD across runs (read-only; 064 cost surfacing)."""
+        return self._session_spent
+
+    @property
     def unpriced(self) -> bool:
         """Whether the most recent recorded turn had no price (fail-soft)."""
         return self._unpriced

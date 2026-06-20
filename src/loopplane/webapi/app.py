@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import anyio
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
@@ -37,6 +38,7 @@ from loopplane.webapi.models import (
     McpServerView,
     MemoryEntryView,
     ModelInfo,
+    MonthlyCostView,
     OpenedSession,
     QuestionAnswer,
     RenameRequest,
@@ -44,6 +46,7 @@ from loopplane.webapi.models import (
     RunRequest,
     RunResult,
     SessionAnswer,
+    SessionCostView,
     SessionSummaryView,
     SkillsResponse,
     SkillView,
@@ -421,6 +424,29 @@ def create_app(
             HistoryEntryView(role=entry.role, block_count=len(entry.blocks))
             for entry in entries
         ]
+
+    @router.get("/sessions/{session_id}/cost")
+    async def session_cost(
+        session_id: str, principal: Principal = Depends(require)
+    ) -> SessionCostView:
+        # 064: a session's accumulated USD (owner-only; 404 otherwise). null when no
+        # budget is configured ("not tracked"). Read-only; mirrors inspection routes.
+        _owned_or_404(session_id, principal)
+        try:
+            spent = host.session_cost(session_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="not found") from None
+        return SessionCostView.of(session_id, spent)
+
+    @router.get("/cost/monthly")
+    async def monthly_cost(
+        principal: Principal = Depends(require),
+    ) -> MonthlyCostView:
+        # 064: the CALLER's own current-month USD (never another principal's). null
+        # when no durable ledger is configured. Read-only.
+        month = datetime.now(UTC).strftime("%Y-%m")
+        spent = host.monthly_spend(principal.id)
+        return MonthlyCostView.of(principal.id, month, spent)
 
     @router.post("/sessions/{session_id}/resume")
     async def resume_session(

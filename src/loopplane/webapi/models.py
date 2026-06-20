@@ -8,6 +8,7 @@ Response bodies never carry conversation content: history is projected to
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field, field_validator
@@ -97,6 +98,39 @@ class HistoryEntryView(BaseModel):
 
     role: str
     block_count: int
+
+
+class SessionCostView(BaseModel):
+    """A session's accumulated USD (064 cost surfacing). ``usd_spent`` is the exact
+    Decimal string-encoded, or ``None`` ("not tracked") when no budget is configured."""
+
+    session_id: str
+    usd_spent: str | None
+
+    @classmethod
+    def of(cls, session_id: str, spent: Decimal | None) -> SessionCostView:
+        return cls(
+            session_id=session_id, usd_spent=None if spent is None else str(spent)
+        )
+
+
+class MonthlyCostView(BaseModel):
+    """A principal's current-month accumulated USD (064). ``usd_spent`` is the exact
+    Decimal string-encoded, or ``None`` ("not tracked") when no ledger is configured."""
+
+    principal_id: str
+    month: str
+    usd_spent: str | None
+
+    @classmethod
+    def of(
+        cls, principal_id: str, month: str, spent: Decimal | None
+    ) -> MonthlyCostView:
+        return cls(
+            principal_id=principal_id,
+            month=month,
+            usd_spent=None if spent is None else str(spent),
+        )
 
 
 class RunResult(BaseModel):

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 
 import anyio.lowlevel
 
@@ -99,6 +100,13 @@ class AgentLoop:
         # when caps + a pricing table + a model-id are configured (loopplane.budget is a
         # foundational package, not the tools layer — so the gateway audit is intact).
         self._budget_checker = budget_checker
+
+    def current_session_cost(self) -> Decimal | None:
+        """The session's accumulated USD, or ``None`` when no budget checker is
+        configured (064 cost surfacing; read-only — no run-path effect)."""
+        if self._budget_checker is None:
+            return None
+        return self._budget_checker.session_spent
 
     async def run(
         self, input_blocks: Sequence[ContentBlock], context: RunContext

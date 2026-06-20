@@ -740,6 +740,19 @@ class RuntimeController:
         """
         return self._require(session_id).history.snapshot()
 
+    def session_cost(self, session_id: str) -> Decimal | None:
+        """The session's accumulated USD, or ``None`` when no budget checker is
+        configured (064 cost surfacing; read-only). Raises for an unknown session."""
+        return self._require(session_id).loop.current_session_cost()
+
+    def monthly_spend(self, principal_id: str) -> Decimal | None:
+        """A principal's current-month accumulated USD from the durable ledger, or
+        ``None`` when no ledger is configured (064 cost surfacing; read-only). The
+        month is the UTC ``YYYY-MM`` derivation consistent with 063's enforcement."""
+        if self._usd_ledger is None:
+            return None
+        return self._usd_ledger.get(principal_id, datetime.now(UTC).strftime("%Y-%m"))
+
     def terminate(self, session_id: str) -> None:
         session = self._require(session_id)
         session.cancellation.set()

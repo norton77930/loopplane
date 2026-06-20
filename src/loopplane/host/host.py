@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -244,6 +245,17 @@ class LoopPlaneHost:
         """A point-in-time history snapshot for a session (FR-003)."""
 
         return self._assembled.controller.history_snapshot(session_id)
+
+    def session_cost(self, session_id: str) -> Decimal | None:
+        """A session's accumulated USD, or ``None`` when not budget-tracked (064)."""
+
+        return self._assembled.controller.session_cost(session_id)
+
+    def monthly_spend(self, principal_id: str) -> Decimal | None:
+        """A principal's current-month USD from the durable ledger, or ``None`` when
+        no ledger is configured (064)."""
+
+        return self._assembled.controller.monthly_spend(principal_id)
 
     def retrieve_artifact(self, session_id: str, reference: str) -> str | None:
         """Full content of an offloaded tool result by its stable reference;
