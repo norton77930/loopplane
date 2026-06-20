@@ -176,6 +176,18 @@ fail-soft on an unpriced model; a crossing terminates the run `budget-exceeded`.
 - `UsdBudgetCaps` — the per-message / per-session USD caps (each `None` = that dimension off).
 - `BudgetChecker` — the in-loop per-session USD accumulator + cap test (spec 055).
 
+### `loopplane.ledger` (unit 062)
+
+Durable per-user-monthly USD ledger (gap G22, Phase C; ADR 0010): an atomic
+per-`(principal_id, month)` USD accumulator. Pure storage — the per-user-monthly cap
+enforcement that consumes it lives in `loopplane.budget` (unit 063). Exact `Decimal`; the
+`psycopg` import is deferred so the package imports without the `loopplane[postgres]` extra.
+
+- `UsdLedger` — the ledger Protocol (`async add → new total`; sync `get`; keyed by `(principal_id, month)`).
+- `FileUsdLedger` — the default JSON-file backend (single-process-honest).
+- `SqliteUsdLedger` — a local SQLite backend (single-process-honest).
+- `PostgresUsdLedger` — a PostgreSQL backend; the only cross-process-atomic one (`loopplane[postgres]`).
+
 ### `loopplane.adapters.mcp`
 
 The MCP tool adapter boundary.

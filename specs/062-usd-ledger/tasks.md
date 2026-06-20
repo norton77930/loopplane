@@ -10,7 +10,7 @@ atomic per-`(principal,month)` increment; import-guarded; no new dependency. Per
 
 ## Phase 1: Protocol + package (Foundational)
 
-- [ ] T001 Create `src/loopplane/ledger/base.py` — the `UsdLedger` Protocol:
+- [x] T001 Create `src/loopplane/ledger/base.py` — the `UsdLedger` Protocol:
   `async def add(self, principal_id: str, month: str, usd: Decimal) -> Decimal` (the new
   post-increment total; atomic per `(principal_id, month)`) + `def get(self, principal_id: str,
   month: str) -> Decimal` (sync; unseen → `Decimal(0)`). Docstrings state `month` is an opaque
@@ -18,16 +18,16 @@ atomic per-`(principal,month)` increment; import-guarded; no new dependency. Per
 
 ## Phase 2: Backends (P1) 🎯
 
-- [ ] T002 [File] `src/loopplane/ledger/file.py` `FileUsdLedger`: per-`(principal,month)` JSON file
+- [x] T002 [File] `src/loopplane/ledger/file.py` `FileUsdLedger`: per-`(principal,month)` JSON file
   (Decimal-as-string) under a per-key `anyio.Lock` (`_locks: dict[tuple[str,str], anyio.Lock]`);
   `add` = lock → read (or 0) → sum (exact Decimal) → write+flush → return the new total; `get` = read
   or `Decimal(0)`. Single-process-honest. Mirror `checkpoint/file.py`'s structure.
-- [ ] T003 [SQLite] `src/loopplane/ledger/sqlite.py` `SqliteUsdLedger`: a `ledger(principal_id TEXT,
+- [x] T003 [SQLite] `src/loopplane/ledger/sqlite.py` `SqliteUsdLedger`: a `ledger(principal_id TEXT,
   month TEXT, usd_total TEXT, PRIMARY KEY(principal_id,month))` table (created on connect); `add` =
   under the per-key lock + a transaction, UPSERT the exact-Decimal sum (read current, add in Python,
   write back as TEXT) and return the new total; `get` = SELECT or `Decimal(0)`. Mirror
   `checkpoint/sqlite.py`.
-- [ ] T004 [Postgres] `src/loopplane/ledger/postgres.py` `PostgresUsdLedger`: a `ledger(..., usd_total
+- [x] T004 [Postgres] `src/loopplane/ledger/postgres.py` `PostgresUsdLedger`: a `ledger(..., usd_total
   NUMERIC, PRIMARY KEY(principal_id,month))` table; `add` = a single `INSERT ... ON
   CONFLICT(principal_id,month) DO UPDATE SET usd_total = ledger.usd_total + EXCLUDED.usd_total
   RETURNING usd_total` (the only cross-PROCESS-safe path) via ADR 0008's sync thread-bridge (async
@@ -38,7 +38,7 @@ atomic per-`(principal,month)` increment; import-guarded; no new dependency. Per
 
 ## Phase 3: Export + docs (P1)
 
-- [ ] T005 `src/loopplane/ledger/__init__.py`: export `UsdLedger`, `FileUsdLedger`, `SqliteUsdLedger`,
+- [x] T005 `src/loopplane/ledger/__init__.py`: export `UsdLedger`, `FileUsdLedger`, `SqliteUsdLedger`,
   `PostgresUsdLedger` (`__all__`). Add a NEW `loopplane.ledger` package section to
   `docs/api-reference.md` (so the api-reference bijection — which enumerates packages with `__all__` —
   stays exact). Confirm `loopplane.ledger` imports WITHOUT the `postgres` extra (the psycopg import
@@ -46,7 +46,7 @@ atomic per-`(principal,month)` increment; import-guarded; no new dependency. Per
 
 ## Phase 4: Tests (P1/P2) — offline-safe
 
-- [ ] T006 Add `tests/usd_ledger_stub.py` — a faithful in-memory psycopg stub for the Postgres ledger
+- [x] T006 Add `tests/usd_ledger_stub.py` — a faithful in-memory psycopg stub for the Postgres ledger
   (modelling the exact CREATE/UPSERT-RETURNING/SELECT SQL with a loud AssertionError fall-through),
   mirroring `tests/pg_stub.py`. Then a shared parametrized ledger contract test (File / SQLite /
   Postgres-via-stub; `pytest.importorskip("psycopg")` for the Postgres param): round-trip + `add`
@@ -58,7 +58,7 @@ atomic per-`(principal,month)` increment; import-guarded; no new dependency. Per
 
 ## Phase 5: Gates
 
-- [ ] T007 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
+- [x] T007 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
   (strict), `pytest` (full — additive). Confirm: the structural audits
   (`test_no_execution_path_outside_the_gateway`, `test_public_safety`) + the api-reference-bijection
   test (the new `loopplane.ledger` section) pass; `import loopplane.ledger` works WITHOUT the
