@@ -10,13 +10,13 @@
 
 ## Phase 1: Config knob (Foundational)
 
-- [ ] T001 Add a per-session SSE replay-buffer-size knob to the webapi app factory (where
+- [x] T001 Add a per-session SSE replay-buffer-size knob to the webapi app factory (where
   `create_app` / the app is built — e.g. `create_app(..., sse_replay_buffer=0)`), default `0`/`None`
   = off. Thread it to `run_session` / `SessionEntry`. Default-off → byte-identical.
 
 ## Phase 2: Buffer + id: line on the session sink (P1) 🎯
 
-- [ ] T002 In `src/loopplane/webapi/sessions.py`: add `replay_buffer: deque[tuple[int, str]] | None`
+- [x] T002 In `src/loopplane/webapi/sessions.py`: add `replay_buffer: deque[tuple[int, str]] | None`
   to `SessionEntry` (a `deque(maxlen=N)` when enabled, else `None`). In `run_session`'s sink: when
   the buffer is enabled, build the frame as `id: {event.sequence}\ndata: {serialize_event(event)}\n\n`,
   append `(event.sequence, frame)` to the buffer, and send it live; when disabled, the existing
@@ -25,7 +25,7 @@
 
 ## Phase 3: Reconnect replay on the endpoint (P1)
 
-- [ ] T003 In `src/loopplane/webapi/app.py` `GET /sessions/{id}/events`: accept the `Last-Event-ID`
+- [x] T003 In `src/loopplane/webapi/app.py` `GET /sessions/{id}/events`: accept the `Last-Event-ID`
   request header (FastAPI `Header(None, alias="Last-Event-ID")`). When present + the buffer is
   enabled: first yield the buffered frames with `sequence > last_id` (in order), tracking the max
   replayed sequence; then drain the live `entry.events`, **skipping frames whose `sequence ≤ the max
@@ -35,7 +35,7 @@
 
 ## Phase 4: Tests (P1/P2)
 
-- [ ] T004 Add webapi SSE reconnect tests (offline/in-process, mirroring the existing webapi/session
+- [x] T004 Add webapi SSE reconnect tests (offline/in-process, mirroring the existing webapi/session
   test harness): (a) buffer enabled — each frame carries `id: <sequence>`; (b) reconnect with
   `Last-Event-ID` replays the missed frames (seq > id) in order with no duplicate, then live; (c)
   default-off (buffer disabled) — no `id:` line, no buffer, byte-identical (the existing
@@ -44,7 +44,7 @@
 
 ## Phase 5: Gates
 
-- [ ] T005 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
+- [x] T005 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
   (strict), `pytest` (full — additive + default-off byte-identity). Confirm the structural audits
   (`test_no_execution_path_outside_the_gateway`, `test_public_safety`) + the events
   serialize/`SCHEMA_VERSION` tests (unchanged — no event-schema change) + the existing webapi/session

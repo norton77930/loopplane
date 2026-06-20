@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 import anyio
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -56,7 +56,7 @@ from loopplane.webapi.multimodal import (
     UnknownUpload,
     assemble_blocks,
 )
-from loopplane.webapi.sessions import SessionEntry, run_session
+from loopplane.webapi.sessions import SessionEntry, reconnect_stream, run_session
 from loopplane.webapi.streaming import run_event_stream
 from loopplane.webapi.uploads import UploadStore, UploadTooLarge
 
@@ -94,6 +94,7 @@ def create_app(
     default_accepts_media: bool = False,
     default_supports_structured_output: bool = False,
     max_image_bytes: int = 5 * 1024 * 1024,
+    sse_replay_buffer: int = 0,
 ) -> FastAPI:
     """Build the web/API host app embedding ``host`` behind the auth boundary.
 
@@ -104,6 +105,8 @@ def create_app(
     per-principal blob store for the upload endpoint + the ``read_upload`` tool.
     ``default_accepts_media`` declares whether the bare default ``host`` accepts
     image input (036); ``max_image_bytes`` caps an embedded image (ADR 0001 D6).
+    ``sse_replay_buffer`` (058; default 0 = off, byte-identical) sizes the bounded
+    per-session SSE replay buffer for ``Last-Event-ID`` reconnect (ADR 0006).
     """
 
     auth = authenticator or DENY_ALL
@@ -266,6 +269,7 @@ def create_app(
             principal.id,
             accepts_media,
             supports_so,
+            sse_replay_buffer,
         )
         await ready.wait()
         if box.get("error"):
@@ -274,15 +278,19 @@ def create_app(
 
     @router.get("/sessions/{session_id}/events")
     async def session_events(
-        session_id: str, principal: Principal = Depends(require)
+        session_id: str,
+        principal: Principal = Depends(require),
+        last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     ) -> StreamingResponse:
+        # 058: when the replay buffer is enabled and the client reconnects with
+        # Last-Event-ID, replay the buffered frames after that id then continue live,
+        # deduped by sequence. Default-off (no buffer) is the byte-identical live
+        # pass-through. The replay/dedup is the pure reconnect_stream helper.
         entry = _require(session_id, principal)
-
-        async def stream() -> AsyncIterator[str]:
-            async for frame in entry.events:
-                yield frame
-
-        return StreamingResponse(stream(), media_type="text/event-stream")
+        return StreamingResponse(
+            reconnect_stream(entry.replay_buffer, last_event_id, entry.events),
+            media_type="text/event-stream",
+        )
 
     @router.post("/sessions/{session_id}/submit")
     async def submit_to_session(
