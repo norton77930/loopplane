@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from loopplane.webapi.app import create_app
 from loopplane.webapi.auth import Authenticator, Principal, token_authenticator
+from loopplane.webapi.auth_jwt import jwt_authenticator
 from loopplane.webapi.models import (
     ArtifactContent,
     ErrorResponse,
@@ -43,5 +44,6 @@ __all__ = [
     "SessionSummaryView",
     "UploadRef",
     "create_app",
+    "jwt_authenticator",
     "token_authenticator",
 ]

@@ -563,6 +563,7 @@ The web/API host transport over the Host Application Interface.
 - `Authenticator` — the pluggable default-deny auth boundary.
 - `Principal` — an authenticated caller's identity (session ownership, 022).
 - `token_authenticator` — a reference token→principal verifier (dev/tests).
+- `jwt_authenticator` — a host-supplied OAuth/JWT/OIDC verifier (JWKS, iss/aud/exp/nbf; 056).
 - `RunRequest` — a run request body.
 - `UploadRef` — a reference to an uploaded file a run carries (036).
 - `RunResult` — a run result (metadata only).

@@ -12,13 +12,13 @@ load-bearing test surface.
 
 ## Phase 1: Dependency (Foundational)
 
-- [ ] T001 Add the optional extra to `pyproject.toml` `[project.optional-dependencies]`:
+- [x] T001 Add the optional extra to `pyproject.toml` `[project.optional-dependencies]`:
   `oauth = ["pyjwt[crypto]>=2.8", "httpx>=0.27"]` (alongside anthropic/net/openai/web). No change to
   base/runtime deps.
 
 ## Phase 2: The verifier + in-tree helper (P1) 🎯
 
-- [ ] T002 Create `src/loopplane/webapi/auth_jwt.py`: `jwt_authenticator(*, issuer, audience,
+- [x] T002 Create `src/loopplane/webapi/auth_jwt.py`: `jwt_authenticator(*, issuer, audience,
   jwks_url=None, algorithms=["RS256"], principal_claim="sub", leeway=…, cache_ttl=…) ->
   Authenticator` (returns the EXISTING `loopplane.webapi.auth.Authenticator` type). It parses
   `Bearer <jwt>`, reads the header `kid`, resolves the signing key from a JWKS via an in-tree helper
@@ -32,13 +32,13 @@ load-bearing test surface.
 
 ## Phase 3: Export + docs (P1)
 
-- [ ] T003 Re-export `jwt_authenticator` from `src/loopplane/webapi/__init__.py` (additive `__all__`,
+- [x] T003 Re-export `jwt_authenticator` from `src/loopplane/webapi/__init__.py` (additive `__all__`,
   alongside `Authenticator`/`Principal`/`token_authenticator`) and add it to `docs/api-reference.md`
   under `loopplane.webapi` (so the api-reference bijection stays exact).
 
 ## Phase 4: Tests (P1/P2) — security matrix
 
-- [ ] T004 Create `tests/unit/test_oauth_verifier.py` (OFFLINE — a locally-generated self-signed RSA
+- [x] T004 Create `tests/unit/test_oauth_verifier.py` (OFFLINE — a locally-generated self-signed RSA
   keypair + an in-memory JWKS served to the helper via a stub/monkeypatched fetch; NO network),
   using `pytest.importorskip` for the `oauth` extra: (a) POSITIVE — a JWT signed by the local key
   with the right iss/aud, unexpired, allowed alg → admitted as `Principal(id=<sub>)`; (b) the FULL
@@ -51,7 +51,7 @@ load-bearing test surface.
 
 ## Phase 5: Gates
 
-- [ ] T005 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
+- [x] T005 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
   (strict), `pytest` (full — additive + default-off byte-identity). Confirm: `test_public_safety` +
   the api-reference-bijection test pass (the new `jwt_authenticator` export documented); the base
   install is unaffected (the `oauth` extra import-guarded). The negative-path matrix all green.

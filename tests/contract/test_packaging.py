@@ -49,6 +49,7 @@ def test_runtime_dependencies_are_unchanged() -> None:
         "gemini",
         "mcp",
         "net",
+        "oauth",
         "openai",
         "otel",
         "web",
