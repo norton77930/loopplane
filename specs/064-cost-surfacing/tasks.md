@@ -77,4 +77,16 @@ schema/reason/dependency change. P1 (batch 064–072, 1/9).
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-21) — 0 critical, 0 high, 2 low (informational). 100% requirement
+coverage (FR-001..FR-006 and SC-001..003 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ data-model ↔ contract ↔ tasks agree (the read accessor chain
+`BudgetChecker.session_spent` → `AgentLoop.current_session_cost` → `RuntimeController.session_cost`/
+`monthly_spend` → `LoopPlaneHost` passthroughs → two owner-scoped webapi GET routes + the two views;
+default-off honest [no checker → null, no ledger → null]; UTC `YYYY-MM` per 063; read-only). **Additive
+read-only**: no loop/Event-Bus/content/checkpoint/schema/reason/dependency change; the controller/loop
+import only foundational `loopplane.budget` (not the tools layer). No Constitution violation
+(I/III/IV/V/VI/VII/X). Low notes (informational): (1) `session_cost` must read the per-SESSION total
+(`_session_spent`, which persists across runs) — confirm `session_spent` exposes `_session_spent` not
+the per-message `spent`. (2) When a host pool is configured the cost routes mirror the existing
+inspection routes' `host` usage — any host-pool inspection-routing nuance is PRE-EXISTING and
+out-of-scope for 064 (do not change it). **Cleared for `/speckit-implement`.**
