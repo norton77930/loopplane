@@ -40,7 +40,7 @@ def test_dsn_is_never_echoed(monkeypatch: pytest.MonkeyPatch) -> None:
     from tests import pg_stub
 
     pg_stub.patch_psycopg(monkeypatch)
-    secret = "postgresql://user:SUPERSECRET@host/db"
-    store = pg_module.PostgresCheckpointStore(secret)
-    assert "SUPERSECRET" not in repr(store)
-    assert "SUPERSECRET" not in str(store)
+    dsn = "postgresql://user:do-not-echo-pw@host/db"
+    store = pg_module.PostgresCheckpointStore(dsn)
+    assert "do-not-echo-pw" not in repr(store)
+    assert "do-not-echo-pw" not in str(store)
