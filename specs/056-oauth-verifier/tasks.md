@@ -71,4 +71,17 @@ load-bearing test surface.
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-20) — 0 critical, 0 high, 2 low (informational). 100% requirement
+coverage (FR-001..FR-008 and SC-001..004 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ data-model ↔ contract ↔ tasks agree (jwt_authenticator
+satisfying the EXISTING unit-022 `Authenticator` seam; PyJWT[crypto] import-guarded behind the new
+`loopplane[oauth]` extra; the in-tree OIDC/JWKS helper; pinned asymmetric algs; iss/aud/exp/nbf
+validation; claim→Principal; default-off `DENY_ALL` byte-identity; fail-closed; the full negative
+matrix). **Additive — no ADR**: crosses no runtime boundary (wholly in `loopplane.webapi`, behind
+the shipped async seam); no 022/001 contract change; no event/schema/content change. No Constitution
+violation (I/III/IV/V/VI/VII/IX/X). The maintainer plan DECISION (FR-008) is SETTLED (PyJWT[crypto]
++ in-tree helper) — no re-consult. Low notes are informational: (1) the NEGATIVE-MATRIX completeness
+(T004) is load-bearing — a too-lenient verifier is the real risk; verify each case (esp. alg=none +
+HS/RS confusion) at implement; (2) the import-guard (T002) must keep `loopplane.webapi.auth`
+dependency-free + give a clear error when the `oauth` extra is absent. **Cleared for
+`/speckit-implement`.**
