@@ -11,13 +11,13 @@ byte-identical. Confined to loopplane.checkpoint.
 
 ## Phase 1: Dependency (Foundational)
 
-- [ ] T001 Add to `pyproject.toml` `[project.optional-dependencies]`:
+- [x] T001 Add to `pyproject.toml` `[project.optional-dependencies]`:
   `postgres = ["psycopg[binary]>=3"]` (alongside anthropic/net/openai/web/oauth). No base/runtime
   dep change.
 
 ## Phase 2: The backend (P1) 🎯
 
-- [ ] T002 Create `src/loopplane/checkpoint/postgres.py` `PostgresCheckpointStore` mirroring
+- [x] T002 Create `src/loopplane/checkpoint/postgres.py` `PostgresCheckpointStore` mirroring
   `SqliteCheckpointStore`: the EXISTING `CheckpointStore` Protocol (async `append`/`set_title`; sync
   `load`/`list_sessions`/`delete_session`), reusing `records.py`
   (`serialize_record`/`deserialize_record`) over a `records(session_id, sequence, recorded_at, data,
@@ -30,14 +30,14 @@ byte-identical. Confined to loopplane.checkpoint.
 
 ## Phase 3: Export + docs (P1)
 
-- [ ] T003 Export `PostgresCheckpointStore` from `src/loopplane/checkpoint/__init__.py` (additive
+- [x] T003 Export `PostgresCheckpointStore` from `src/loopplane/checkpoint/__init__.py` (additive
   `__all__`) and add it to `docs/api-reference.md` under `loopplane.checkpoint` (so the api-reference
   bijection stays exact). Confirm `loopplane.checkpoint` still imports WITHOUT the `postgres` extra
   (the psycopg import must be deferred/guarded, not at the package/module top level).
 
 ## Phase 4: Tests (P1/P2) — offline-safe
 
-- [ ] T004 Add Postgres checkpoint tests (OFFLINE — a faithful in-memory/stub psycopg connection, NO
+- [x] T004 Add Postgres checkpoint tests (OFFLINE — a faithful in-memory/stub psycopg connection, NO
   running DB; `pytest.importorskip("psycopg")` where the real driver is needed): run the SAME
   contract assertions the SQLite backend satisfies — append→load round-trip (ordered by `sequence`,
   content preserved), `list_sessions`/`set_title`/`delete_session`, corrupt-row tolerance (skipped +
@@ -47,7 +47,7 @@ byte-identical. Confined to loopplane.checkpoint.
 
 ## Phase 5: Gates
 
-- [ ] T005 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
+- [x] T005 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
   (strict), `pytest` (full — additive + default-unchanged byte-identity). Confirm: the structural
   audits (`test_no_execution_path_outside_the_gateway`, `test_public_safety`) + the
   api-reference-bijection test (the new `PostgresCheckpointStore` documented) + the existing

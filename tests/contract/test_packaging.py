@@ -52,6 +52,7 @@ def test_runtime_dependencies_are_unchanged() -> None:
         "oauth",
         "openai",
         "otel",
+        "postgres",
         "web",
     }
 

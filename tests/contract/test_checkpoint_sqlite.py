@@ -22,12 +22,14 @@ import pytest
 from loopplane.checkpoint import (
     CheckpointStore,
     FileCheckpointStore,
+    PostgresCheckpointStore,
     SessionMetaRecord,
     SqliteCheckpointStore,
     UserInputRecord,
     rebuild_session,
 )
 from loopplane.model.content import TextBlock
+from tests import pg_stub
 
 pytestmark = pytest.mark.anyio
 
@@ -72,8 +74,12 @@ class _Backend:
     corrupt: Callable[[str], None]
 
 
-@pytest.fixture(params=["file", "sqlite"])
-def backend(request: pytest.FixtureRequest, tmp_path: Path) -> _Backend:
+@pytest.fixture(params=["file", "sqlite", "postgres"])
+def backend(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> _Backend:
     if request.param == "file":
 
         def corrupt_file(session_id: str) -> None:
@@ -83,6 +89,15 @@ def backend(request: pytest.FixtureRequest, tmp_path: Path) -> _Backend:
 
         return _Backend(
             open=lambda: FileCheckpointStore(tmp_path), corrupt=corrupt_file
+        )
+
+    if request.param == "postgres":
+        pytest.importorskip("psycopg")
+        pg_stub.patch_psycopg(monkeypatch)
+        conninfo = f"postgresql://stub/{tmp_path.name}"
+        return _Backend(
+            open=lambda: PostgresCheckpointStore(conninfo),
+            corrupt=lambda session_id: pg_stub.corrupt(conninfo, session_id),
         )
 
     db_path = tmp_path / "checkpoints.sqlite3"

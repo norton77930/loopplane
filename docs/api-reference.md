@@ -249,6 +249,7 @@ Durable session recording, checkpoint records, and session rebuild.
 - `CheckpointStore` — the checkpoint store interface (Protocol).
 - `FileCheckpointStore` — the default filesystem checkpoint store.
 - `SqliteCheckpointStore` — the optional SQLite checkpoint store.
+- `PostgresCheckpointStore` — the optional PostgreSQL checkpoint store (`loopplane[postgres]`).
 - `CheckpointRecord` — base checkpoint record.
 - `RebuildResult` — the result of rebuilding a session.
 - `rebuild_session` — rebuild a session from its records.

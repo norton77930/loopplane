@@ -4,6 +4,7 @@ session listing (contracts/checkpoint.md).
 
 from loopplane.checkpoint.base import CheckpointStore, SessionSummary
 from loopplane.checkpoint.file import FileCheckpointStore
+from loopplane.checkpoint.postgres import PostgresCheckpointStore
 from loopplane.checkpoint.rebuild import RebuildResult, rebuild_session
 from loopplane.checkpoint.recorder import RecordingSink, SessionRecorder
 from loopplane.checkpoint.records import (
@@ -35,6 +36,7 @@ __all__ = [
     "CheckpointRecord",
     "CheckpointStore",
     "FileCheckpointStore",
+    "PostgresCheckpointStore",
     "RebuildResult",
     "RecordingSink",
     "ReplacementDecisionRecord",
