@@ -65,4 +65,16 @@
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-20) — 0 critical, 0 high, 1 low (informational). 100% requirement
+coverage (FR-001..FR-007 and SC-001..003 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ **ADR 0006** ↔ data-model ↔ contract ↔ tasks agree (the
+`id:`=sequence line; a bounded `deque(maxlen=N)` per-session buffer on `SessionEntry`; the
+`Last-Event-ID` replay [seq > id] then live with dedup-by-sequence; default-off byte-identity;
+fail-safe; in-memory + per-session). **Additive — a small ADR (0006)**: confined to
+`loopplane.webapi`; no runtime/loop/gateway change; no event-schema/SCHEMA_VERSION/content change
+(the frame payload is the existing `serialize_event`; the pass-through → retained-buffer contract is
+recorded in ADR 0006, Const VI). No Constitution violation (I/IV/V/VI/X). Low note (informational):
+the dedup-by-sequence (T003) is the load-bearing correctness point — replay then live must deliver
+each frame exactly once (track the max replayed sequence; skip live frames at/below it); verify
+no-loss + no-dup at implement, incl. the too-old-id and bounded-eviction cases. **Cleared for
+`/speckit-implement`.**
