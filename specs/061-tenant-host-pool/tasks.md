@@ -71,4 +71,17 @@ shared host (byte-identical). host/loop/gateway/event UNCHANGED. Confined to loo
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-20) — 0 critical, 0 high, 1 low (informational). 100% requirement
+coverage (FR-001..FR-007 and SC-001..003 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ **ADR 0009** ↔ data-model ↔ contract ↔ tasks agree (a
+per-principal `TenantHostPool` above the host via a host factory; `host_for(principal_id, model)`
+lazily created + reused; per-principal in-flight cap + optional max-principals; per-principal
+isolation; each host keeps its `_active` invariant; create_app optional pool param, default None =
+the existing shared host byte-identical). **Additive — the maintainer FORK (pool-above-host) means NO
+breaking host/001 change** (the `_active` invariant is preserved, not relaxed); host/loop/gateway/
+event UNCHANGED; the pool is webapi/host-level (the controller/loop never import the tools layer). No
+Constitution violation (I/III/IV/V/VI/VII/X). Low note (informational): at implement, confirm the
+per-principal host resolution reconciles cleanly with the existing 028 model catalog (`_select` /
+`models`) — each principal's pool entry should still honour model selection — and that pool/host
+lifecycle (creation/reuse, and any teardown) does not leak; default (no pool) must be a verbatim
+pass-through. **Cleared for `/speckit-implement`.**
