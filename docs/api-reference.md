@@ -154,6 +154,10 @@ The internal, web, and subagent-spawn tool adapters.
 - `SwarmSupervisor` — the per-run supervisor that owns swarm members + their message inboxes (spec 050).
 - `WorktreeToolsAdapter` — the adapter for the worktree tools (create/list/remove; spec 051).
 - `WorktreeManager` — the per-run manager that owns + cleans up managed git worktrees (spec 051).
+- `CommandExecutor` — the injectable seam for executing a run_command shell command (spec 052).
+- `CommandResult` — a shell command's outcome (returncode, stdout, stderr; spec 052).
+- `HostCommandExecutor` — the default executor: the current host-shell call verbatim (spec 052).
+- `LocalJailCommandExecutor` — a POSIX local-subprocess jail (rlimits + env-scrub + confinement; spec 052).
 
 ### `loopplane.adapters.mcp`
 

@@ -12,8 +12,6 @@ import re
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 
-import anyio
-
 from loopplane.context import RunContext
 from loopplane.errors import ErrorCategory
 from loopplane.events.envelope import Question
@@ -21,6 +19,7 @@ from loopplane.gateway.spi import AdapterOutput, ErrorOutput
 from loopplane.memory.store import MemoryEntry, MemoryStore
 from loopplane.model.boundary import ToolDescriptor
 from loopplane.model.content import TextBlock
+from loopplane.tools.execution import CommandExecutor, HostCommandExecutor
 
 _SEARCH_MATCH_LIMIT = 100
 
@@ -298,10 +297,16 @@ class InternalToolAdapter:
         *,
         memory_store: MemoryStore | None = None,
         max_file_snapshots: int = 0,
+        command_executor: CommandExecutor | None = None,
     ) -> None:
         # (session_id, resolved path) -> content digest at the last read.
         self._reads: dict[tuple[str, str], str] = {}
         self._memory = memory_store
+        # The run_command execution seam (spec 052; ADR 0004): None -> the host executor
+        # (the current anyio.run_process call verbatim, byte-identical); a
+        # LocalJailCommandExecutor sandboxes it. Caller-injected like memory_store
+        # (InternalToolAdapter is passed via RuntimeConfig.tool_adapters).
+        self._executor = command_executor or HostCommandExecutor()
         # (session_id) -> the session's current todo list (spec 044).
         self._todos: dict[str, list[dict[str, str]]] = {}
         # File-edit undo (spec 054): a bounded, run-scoped, insertion-ordered log of
@@ -658,20 +663,18 @@ class InternalToolAdapter:
     ) -> AsyncIterator[AdapterOutput]:
         command = str(call_input["command"])
         try:
-            completed = await anyio.run_process(
-                command, cwd=context.working_scope, check=False
-            )
+            result = await self._executor.run(command, cwd=context.working_scope)
         except OSError as exc:
             yield ErrorOutput(message=f"cannot run command: {exc}")
             return
-        stdout = completed.stdout.decode("utf-8", errors="replace")
-        stderr = completed.stderr.decode("utf-8", errors="replace")
+        stdout = result.stdout.decode("utf-8", errors="replace")
+        stderr = result.stderr.decode("utf-8", errors="replace")
         if stdout.strip():
             yield TextBlock(text=stdout)
-        if completed.returncode != 0:
+        if result.returncode != 0:
             yield ErrorOutput(
                 message=(
-                    f"command failed with exit code {completed.returncode}: "
+                    f"command failed with exit code {result.returncode}: "
                     f"{stderr.strip() or '(no stderr)'}"
                 )
             )

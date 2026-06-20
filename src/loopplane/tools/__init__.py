@@ -3,6 +3,12 @@ Adapter and its host-injected search seam (spec 034), and the Subagent Spawn Too
 Adapter (spec 043)."""
 
 from loopplane.tools.background import BackgroundTasksAdapter, BackgroundTaskSupervisor
+from loopplane.tools.execution import (
+    CommandExecutor,
+    CommandResult,
+    HostCommandExecutor,
+    LocalJailCommandExecutor,
+)
 from loopplane.tools.internal import InternalToolAdapter
 from loopplane.tools.messaging import SwarmSupervisor, SwarmToolsAdapter
 from loopplane.tools.scheduling import ScheduleSupervisor, SchedulingToolsAdapter
@@ -14,7 +20,11 @@ from loopplane.tools.worktree import WorktreeManager, WorktreeToolsAdapter
 __all__ = [
     "BackgroundTaskSupervisor",
     "BackgroundTasksAdapter",
+    "CommandExecutor",
+    "CommandResult",
+    "HostCommandExecutor",
     "InternalToolAdapter",
+    "LocalJailCommandExecutor",
     "ReferenceSearchProvider",
     "ScheduleSupervisor",
     "SchedulingToolsAdapter",

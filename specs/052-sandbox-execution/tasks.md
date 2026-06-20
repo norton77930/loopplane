@@ -13,13 +13,13 @@ env-scrub via a FAKE executor; the real POSIX jail via a `skipif(not POSIX)` tes
 
 ## Phase 1: Foundational — the seam (P1) 🎯 MVP
 
-- [ ] T001 Create `src/loopplane/tools/execution.py`: `CommandResult` (dataclass: `returncode:int`,
+- [x] T001 Create `src/loopplane/tools/execution.py`: `CommandResult` (dataclass: `returncode:int`,
   `stdout:bytes`, `stderr:bytes`); a `CommandExecutor` Protocol (`async run(command: str, *, cwd:
   Path) -> CommandResult`); and `HostCommandExecutor` whose `run` is the CURRENT call verbatim —
   `completed = await anyio.run_process(command, cwd=cwd, check=False); return CommandResult(
   completed.returncode, completed.stdout, completed.stderr)` (let `OSError` propagate, caught by
   `_run_command` as today).
-- [ ] T002 In the same module add `LocalJailCommandExecutor` (POSIX): `__init__` raises a clear
+- [x] T002 In the same module add `LocalJailCommandExecutor` (POSIX): `__init__` raises a clear
   configuration error (a public-safe message; e.g. a local `UnsupportedPlatformError(RuntimeError)`
   or `ValueError` — do NOT invert layering by importing host.config into tools) when the POSIX
   primitives are unavailable (Windows). `run` spawns with `cwd=cwd`, a SCRUBBED env (a minimal
@@ -31,7 +31,7 @@ env-scrub via a FAKE executor; the real POSIX jail via a `skipif(not POSIX)` tes
 
 ## Phase 2: Wire run_command to the seam (P2)
 
-- [ ] T003 In `src/loopplane/tools/internal.py`: add `command_executor: CommandExecutor | None =
+- [x] T003 In `src/loopplane/tools/internal.py`: add `command_executor: CommandExecutor | None =
   None` to `InternalToolAdapter.__init__` (default → `HostCommandExecutor()`), stored as
   `self._executor` (the `memory_store` / `max_file_snapshots` injection shape). Refactor
   `_run_command` to `result = await self._executor.run(command, cwd=context.working_scope)` inside
@@ -40,10 +40,10 @@ env-scrub via a FAKE executor; the real POSIX jail via a `skipif(not POSIX)` tes
 
 ## Phase 3: Export + tests (P3)
 
-- [ ] T004 Export `CommandExecutor`, `CommandResult`, `HostCommandExecutor`,
+- [x] T004 Export `CommandExecutor`, `CommandResult`, `HostCommandExecutor`,
   `LocalJailCommandExecutor` from `src/loopplane/tools/__init__.py` and add them to
   `docs/api-reference.md` (the `loopplane.tools` section; the unit-014 bijection must stay exact).
-- [ ] T005 Write `tests/unit/test_sandbox_execution.py` (offline): (a) default byte-identity — a
+- [x] T005 Write `tests/unit/test_sandbox_execution.py` (offline): (a) default byte-identity — a
   default `InternalToolAdapter()` runs a real benign command (e.g. echo) identically to pre-052;
   (b) seam honored — a FAKE `CommandExecutor` injected is used by `run_command`; (c) contained
   spawn failure — a fake raising `OSError` → the existing "cannot run command" `ErrorOutput`;
@@ -55,7 +55,7 @@ env-scrub via a FAKE executor; the real POSIX jail via a `skipif(not POSIX)` tes
 
 ## Phase 4: Polish & Cross-Cutting
 
-- [ ] T006 Run the four gates green: `ruff check`, `ruff format --check`, `mypy` (src, strict),
+- [x] T006 Run the four gates green: `ruff check`, `ruff format --check`, `mypy` (src, strict),
   `pytest` (full suite — additive proof + default byte-identity). ALSO confirm the structural
   audits stay green: `test_no_execution_path_outside_the_gateway` (the executor is INSIDE the
   tools-layer adapter; controller/loop do not import `loopplane.tools`) and `test_public_safety`.
