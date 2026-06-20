@@ -4,6 +4,85 @@ All notable changes to LoopPlane are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 Semantic Versioning.
 
+## [0.4.0] - 2026-06-21
+
+The capability-to-platform line — twenty additive units (044–063) closing the gap-analysis
+backlog and growing LoopPlane from a single-tenant harness toward a multi-tenant platform.
+Tier-1 agent capabilities (todo, structured output, notebook edit, a keyless search
+provider), Tier-2 autonomy (background tasks, scheduling, agent messaging/swarm, worktree
+isolation), Tier-3 execution-safety & cost (sandboxed `run_command`, pricing, file undo),
+and the headline **G22 cost-governance + Tier-4 platform** arc: per-message/session and
+**durable per-user-monthly USD budget caps**, an **OAuth/JWT verifier**, **SSE + WebSocket
+MCP transports** and **MCP resources**, **resumable SSE reconnect**, a **PostgreSQL
+checkpoint backend**, **per-principal concurrency**, and the **durable USD ledger**. Every
+unit is additive, default-off, and byte-identical when unconfigured — the runtime core, the
+content model, and the event schema are unchanged (no `SCHEMA_VERSION` bump). Nine ADRs
+recorded the boundary decisions: **0002** (background execution), **0003** (agent
+messaging), **0004** (command-execution isolation), **0005** (USD budget enforcement),
+**0006** (resumable SSE), **0007** (MCP resources), **0008** (Postgres checkpoint —
+sync thread-bridge), **0009** (per-principal host pool), **0010** (durable USD ledger +
+monthly cap). Two new optional extras: `loopplane[oauth]` and `loopplane[postgres]`.
+
+### Added
+
+- **044** Agent todo tool (`loopplane.tools`) — a `todo_write` Internal-Tool-Adapter tool
+  (set-the-whole-list, per-session, metadata-only) for tracking multi-step work (gap G1).
+- **045** Native structured output (`loopplane.model`) — model-native `response_format` /
+  JSON-schema constrained output where the provider supports it (gap G3).
+- **046** Notebook edit (`loopplane.tools`) — a `notebook_edit` tool for Jupyter cells (gap G2).
+- **047** Reference search provider (`loopplane.tools`) — a bundled keyless `web_search`
+  provider so `web_search` works out of the box (gap G4).
+- **048** Background tasks (`loopplane.tools`) — agent-facing create/get/list/stop/output
+  for long-running work; a per-run supervisor (Tier-2 autonomy; **ADR 0002**).
+- **049** Agent scheduling (`loopplane.tools`) — agent-facing create/get/list/cancel that
+  wraps the in-process scheduler to fire child runs (Tier-2).
+- **050** Agent messaging & swarm (`loopplane.tools`) — dispatch + a per-member message
+  inbox over a separate registry (messages are NOT events; Tier-2; **ADR 0003**).
+- **051** Worktree isolation (`loopplane.tools`) — an opt-in per-task git worktree
+  (default-off; public-safe relative paths; shielded teardown; Tier-2).
+- **052** Sandboxed command execution (`loopplane.tools`) — an injectable `CommandExecutor`
+  seam; a POSIX `LocalJailCommandExecutor` (rlimits + env-scrub + a wall-clock timeout);
+  default = the verbatim host executor (byte-identical); Windows → `ConfigError` (Tier-3
+  G11; **ADR 0004**).
+- **053** Server-side pricing (`loopplane.pricing`) — a pure `PricingTable.cost`
+  (`TokenUsage → USD` Decimal), unwired by default (Tier-3 G21 Phase A).
+- **054** File undo (`loopplane.tools`) — an `undo_file` tool over per-session pre-edit
+  snapshots (Tier-3 G16).
+- **055** USD budget caps (`loopplane.budget`) — in-loop per-message / per-session USD
+  enforcement (reusing 053's pricing) that terminates a run with a new `budget-exceeded`
+  `TerminationReason` (additive within the schema version; **no `SCHEMA_VERSION` bump**);
+  stop-after-overage; fail-soft on an unpriced model; default-off (G22 Phase B; **ADR 0005**).
+- **056** OAuth/JWT verifier (`loopplane.webapi`) — a host-supplied `jwt_authenticator`
+  behind the unit-022 `Authenticator` seam (JWKS + iss/aud/exp/nbf, pinned asymmetric algs,
+  claim → `Principal`), behind a new import-guarded `loopplane[oauth]` extra; default
+  `DENY_ALL` unchanged (Tier-4 G18).
+- **057** MCP SSE + WebSocket transports (`loopplane.adapters.mcp`) — two additional client
+  transports alongside stdio + http, reusing the SDK's vendored clients; no new dependency
+  (Tier-4 G12 A/B).
+- **058** Resumable SSE (`loopplane.webapi`) — a bounded per-session ring buffer + an SSE
+  `id:` line (the event sequence) + `Last-Event-ID` replay (merge-based, deduped); default-off
+  byte-identical; in-memory variant (Tier-4 G23; **ADR 0006**).
+- **059** MCP resources + host-token auth (`loopplane.adapters.mcp`) — resources surfaced as
+  Gateway-routed synthetic tools (returning existing `TextBlock`/`ImageBlock`; no new content
+  type) + a config-supplied `Authorization: Bearer` token on http/sse (Tier-4 G12 C/D;
+  **ADR 0007**).
+- **060** PostgreSQL checkpoint backend (`loopplane.checkpoint`) — a third `CheckpointStore`
+  reusing `records.py` behind a new import-guarded `loopplane[postgres]` extra; the sync
+  `CheckpointStore` Protocol + File/SQLite backends are unchanged (the sync thread-bridge);
+  default backend stays File/SQLite (Tier-4 G19; **ADR 0008**).
+- **061** Per-principal host pool (`loopplane.webapi`) — an optional `TenantHostPool` above
+  the host so different principals run concurrently while each principal's host keeps its
+  sequential invariant; per-principal in-flight caps; default single-host byte-identical
+  (Tier-4 G20-A, the additive isolation slice; **ADR 0009**).
+- **062** Durable USD ledger (`loopplane.ledger`) — a new package: a `UsdLedger` Protocol
+  keyed by `(principal_id, month)` with an atomic cross-session increment, + File/SQLite/
+  Postgres backends (Postgres `ON CONFLICT … RETURNING` is the cross-process-safe path; exact
+  `Decimal`); pure storage (G22 Phase C; **ADR 0010**).
+- **063** Per-user-monthly USD cap (`loopplane.budget`) — extends 055's `BudgetChecker` with
+  an optional monthly dimension over 062's ledger (`record_turn` async; reuses the
+  `budget-exceeded` reason — no `SCHEMA_VERSION` bump); fail-open on a ledger outage;
+  enforced on create + resume; default-off byte-identical (G22 Phase C; **ADR 0010**).
+
 ## [0.3.0] - 2026-06-19
 
 Two additive follow-on units after the 0.2.0 agent-capability line: a **FAIL-SAFE**
