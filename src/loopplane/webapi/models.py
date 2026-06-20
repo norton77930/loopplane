@@ -273,3 +273,21 @@ class ModelInfo(BaseModel):
 class UploadResult(BaseModel):
     reference: str
     name: str
+
+
+# --- 065: backend-semantic slash commands ------------------------------------
+
+
+class CommandRequest(BaseModel):
+    """A backend command to run (065): a leading-``/`` command line + an optional
+    session to scope session commands (``/cost``, ``/compact``)."""
+
+    command: str
+    session_id: str | None = None
+
+
+class CommandResultView(BaseModel):
+    """A normalized, public-safe command result (065)."""
+
+    kind: str
+    text: str

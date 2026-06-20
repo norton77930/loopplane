@@ -70,6 +70,7 @@ from loopplane.hooks.points import (
 )
 from loopplane.ledger import UsdLedger
 from loopplane.loop.assembly import AugmentationProvider, PromptAssembler
+from loopplane.loop.compaction import compact_history
 from loopplane.loop.history import (
     HistoryEntry,
     HistoryHook,
@@ -752,6 +753,14 @@ class RuntimeController:
         if self._usd_ledger is None:
             return None
         return self._usd_ledger.get(principal_id, datetime.now(UTC).strftime("%Y-%m"))
+
+    def compact_session(self, session_id: str) -> bool:
+        """Compact a session's history via the EXISTING ``compact_history`` (the
+        loop's compaction seam) with this controller's ``keep_last`` (065 ``/compact``;
+        no new compaction path). Returns whether anything was compacted. Raises for an
+        unknown session."""
+        history = self._require(session_id).history
+        return compact_history(history, keep_last=self._assembly_keep_last)
 
     def terminate(self, session_id: str) -> None:
         session = self._require(session_id)

@@ -12,7 +12,12 @@ from collections.abc import Iterable
 from typing import TextIO
 
 from loopplane.cli.render import EventRenderer
+from loopplane.commands import CommandContext, default_registry
 from loopplane.host import LoopPlaneHost, RunOutcome
+
+# The CLI is a single local user with no principal auth; the command surface uses a
+# fixed local principal id for caller-scoped reads (065).
+_CLI_PRINCIPAL = "local"
 
 
 async def run_once(host: LoopPlaneHost, prompt: str, out: TextIO) -> RunOutcome:
@@ -21,11 +26,29 @@ async def run_once(host: LoopPlaneHost, prompt: str, out: TextIO) -> RunOutcome:
 
 
 async def chat_loop(host: LoopPlaneHost, lines: Iterable[str], out: TextIO) -> None:
-    """Run each input line as a turn until EOF or a ``quit``/``exit`` line."""
+    """Run each input line as a turn until EOF or a ``quit``/``exit`` line.
+
+    A leading ``/`` is intercepted as a backend command (065) and dispatched
+    against the host's existing seams (never sent to the model); ordinary input is
+    run unchanged."""
+    registry = default_registry()
+    last_session_id: str | None = None
     for raw in lines:
         line = raw.strip()
         if not line:
             continue
         if line in ("quit", "exit"):
             break
-        await run_once(host, line, out)
+        if line.startswith("/"):
+            result = registry.dispatch(
+                line,
+                CommandContext(
+                    host=host,
+                    principal_id=_CLI_PRINCIPAL,
+                    session_id=last_session_id,
+                ),
+            )
+            out.write(result.text + "\n")
+            continue
+        outcome = await run_once(host, line, out)
+        last_session_id = outcome.session_id

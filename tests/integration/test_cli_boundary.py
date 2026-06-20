@@ -16,6 +16,9 @@ ALLOWED_PREFIXES = (
     "loopplane.host",
     "loopplane.model",
     "loopplane.events",
+    # 065: the backend slash-command surface — a host UX layer over existing host
+    # seams (not a runtime internal; it never reaches the controller/gateway/loop).
+    "loopplane.commands",
 )
 PROHIBITED_TOKENS = (
     "ToolGateway",

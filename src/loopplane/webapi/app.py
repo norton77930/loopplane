@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from loopplane.commands import CommandContext, default_registry
 from loopplane.events import RuntimeEvent
 from loopplane.host import ContentBlock, LoopPlaneHost, TextBlock
 from loopplane.webapi.auth import (
@@ -33,6 +34,8 @@ from loopplane.webapi.auth import (
 )
 from loopplane.webapi.models import (
     ArtifactContent,
+    CommandRequest,
+    CommandResultView,
     ErrorResponse,
     HistoryEntryView,
     McpServerView,
@@ -121,6 +124,7 @@ def create_app(
     require = make_auth_dependency(auth)
     sessions: dict[str, SessionEntry] = {}
     catalog = dict(models or {})
+    command_registry = default_registry()  # 065: backend slash commands
 
     def _select(model: str | None) -> tuple[LoopPlaneHost, bool, bool]:
         # Route to the chosen single-model host (028); one model per run. Returns
@@ -447,6 +451,28 @@ def create_app(
         month = datetime.now(UTC).strftime("%Y-%m")
         spent = host.monthly_spend(principal.id)
         return MonthlyCostView.of(principal.id, month, spent)
+
+    @router.post("/commands")
+    async def run_command(
+        body: CommandRequest, principal: Principal = Depends(require)
+    ) -> CommandResultView:
+        # 065: dispatch a backend slash command against EXISTING host seams (never
+        # the gateway/event bus). Session-scoped commands (/cost, /compact) require
+        # ownership; the result is public-safe (the caller's own data only).
+        line = body.command if body.command.startswith("/") else f"/{body.command}"
+        name = line[1:].strip().split(" ", 1)[0].lower()
+        if name in ("cost", "compact"):
+            if body.session_id is None:
+                raise HTTPException(status_code=400, detail="session_id required")
+            _owned_or_404(body.session_id, principal)
+        ctx = CommandContext(
+            host=host,
+            principal_id=principal.id,
+            session_id=body.session_id,
+            models=tuple(catalog),
+        )
+        result = command_registry.dispatch(line, ctx)
+        return CommandResultView(kind=result.kind, text=result.text)
 
     @router.post("/sessions/{session_id}/resume")
     async def resume_session(

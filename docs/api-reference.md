@@ -677,3 +677,16 @@ testable, credential-free core.
 - `EventRenderer` — an event sink that renders a run, metadata-safe.
 - `select_model` — choose the demo model or an env-configured provider.
 - `DemoModel` — the built-in, credential-free demo model.
+
+### `loopplane.commands` (unit 065)
+
+Backend-semantic slash commands (gap G14): a small host command surface that maps a
+leading-`/` command to an EXISTING host seam — `/cost` (064), `/model`, `/memory`, and
+`/compact` (the loop's `compact_history`). Commands are a host UX, NOT tools: they never
+reach the Tool Gateway or the Event Bus. Shared by the CLI REPL and the web/API
+`POST /commands` endpoint; dispatch never raises and is public-safe.
+
+- `CommandResult` — a normalized, public-safe command result (`kind` + `text`).
+- `CommandContext` — what a handler needs (the host + principal + optional session + models).
+- `CommandRegistry` — parses a leading-`/` line and dispatches to a handler (never raises).
+- `default_registry` — a registry with the four built-in commands (cost/model/memory/compact).

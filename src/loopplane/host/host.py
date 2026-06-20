@@ -257,6 +257,12 @@ class LoopPlaneHost:
 
         return self._assembled.controller.monthly_spend(principal_id)
 
+    def compact_session(self, session_id: str) -> bool:
+        """Compact a session's history via the existing compaction seam (065
+        ``/compact``); returns whether anything was compacted."""
+
+        return self._assembled.controller.compact_session(session_id)
+
     def retrieve_artifact(self, session_id: str, reference: str) -> str | None:
         """Full content of an offloaded tool result by its stable reference;
         ``None`` when no artifact backend is configured or the reference is
