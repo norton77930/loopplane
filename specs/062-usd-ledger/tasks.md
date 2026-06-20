@@ -81,4 +81,18 @@ atomic per-`(principal,month)` increment; import-guarded; no new dependency. Per
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-21) — 0 critical, 0 high, 1 low (informational). 100% requirement
+coverage (FR-001..FR-007 and SC-001..003 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ **ADR 0010** ↔ data-model ↔ contract ↔ tasks agree (the NEW
+`loopplane.ledger` package; `UsdLedger` Protocol [async `add` → new total, atomic per
+`(principal_id, month)`; sync `get` → `Decimal(0)` unseen]; File/SQLite/Postgres backends mirroring
+060 with the per-key `anyio.Lock` + exact-Decimal increment; Postgres `ON CONFLICT … RETURNING` via
+ADR 0008's sync thread-bridge, import-guarded behind the EXISTING `loopplane[postgres]` extra; exact
+Decimal, never float; offline-safe tests + the load-bearing concurrent-no-lost-update). **Additive —
+a NEW package behind ADR 0010**: pure storage; no loop/budget/controller/event-schema/content change;
+no new dependency. No Constitution violation (I/III/IV/V/VI/VII/IX/X). Low note (informational): the
+offline Postgres stub must FAITHFULLY model the `INSERT … ON CONFLICT(principal_id,month) DO UPDATE …
+RETURNING usd_total` accumulate-and-return semantics (a loud AssertionError fall-through for any
+unmodelled SQL) so the contract parity is real; and `loopplane.ledger`'s `__all__` must register in
+the api-reference bijection (a new package section) while the `psycopg` import stays guarded so the
+base install imports the package without the extra. **Cleared for `/speckit-implement`.**
