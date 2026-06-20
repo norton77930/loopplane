@@ -548,6 +548,8 @@ Sandbox, policy, and cost governance.
 - `rule_dsl_policy` — enforce a host-suppliable declarative permission rule set (allow/deny/ask).
 - `PermissionRuleSet` — a host-suppliable permission rule set with a default decision.
 - `PermissionRuleSpec` — one declarative permission rule (tool matcher, optional input match, decision).
+- `permission_mode_ruleset` — build the preset rule set for a named permission mode (unit 066).
+- `PERMISSION_MODES` — the known named permission modes: acceptEdits / bypassPermissions / dontAsk / plan (unit 066).
 
 ### `loopplane.inspect` (unit 010)
 

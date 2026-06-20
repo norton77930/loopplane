@@ -27,8 +27,10 @@ from loopplane.controller.controller import RuntimeController
 from loopplane.events import RuntimeEvent
 from loopplane.gateway import PolicyDecider, ToolGateway
 from loopplane.governance import (
+    PermissionRuleSet,
     all_of,
     network_policy,
+    permission_mode_ruleset,
     plan_mode_policy,
     rule_dsl_policy,
     safe_failure,
@@ -122,6 +124,10 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
     tool_names = collect_tool_names(config)
     if skill_adapter is not None:
         tool_names.extend(descriptor.name for descriptor in skill_adapter.describe())
+    # 066: resolve a named permission mode into the effective plan-mode flag for the
+    # controller (None mode → the host's own plan_mode, byte-identical). _build_decider
+    # resolves the effective rule set + plan mode itself from the same helper.
+    _, effective_plan_mode = _resolve_permission_mode(config)
     decide = _build_decider(config, tool_names, skills_map)
 
     gateway_kwargs: dict[str, Any] = {}
@@ -265,7 +271,7 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         model=config.model,
         gateway=gateway,
         event_sink=sink,
-        plan_mode=config.plan_mode,
+        plan_mode=effective_plan_mode,
         subagent_depth=subagent_depth,
         **controller_kwargs,
     )
@@ -279,6 +285,27 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         skills=skills_map or {},
         memory_store=memory_store,
     )
+
+
+def _resolve_permission_mode(
+    config: RuntimeConfig,
+) -> tuple[PermissionRuleSet | None, bool]:
+    """Resolve a named permission mode (spec 066) into the effective
+    ``(permission_rules, plan_mode)`` fed to the decider + the controller.
+
+    ``permission_mode is None`` returns the host's own ``permission_rules`` +
+    ``plan_mode`` unchanged (byte-identical). ``plan`` forces plan mode on; the other
+    modes derive a preset ``PermissionRuleSet`` from the 039 DSL (``dontAsk`` folds in
+    any explicit rules; ``acceptEdits``/``bypassPermissions`` are standalone — the
+    combination is rejected by ``validate_config``). No new decider/stage.
+    """
+
+    mode = config.permission_mode
+    if mode is None:
+        return config.permission_rules, config.plan_mode
+    if mode == "plan":
+        return config.permission_rules, True
+    return permission_mode_ruleset(mode, config.permission_rules), config.plan_mode
 
 
 def _build_decider(
@@ -305,14 +332,15 @@ def _build_decider(
     posture is unchanged.
     """
 
+    # 066: a named permission_mode resolves to the effective rule set + plan-mode flag
+    # (None mode → the host's own permission_rules + plan_mode, byte-identical).
+    permission_rules, plan_mode = _resolve_permission_mode(config)
     approval_needed = config.approval is not None or bool(skills_map)
     # When egress is off the gate must be installed so network tools deny by default;
     # when on, the policy is a no-op allow and only matters if approval is also wired.
     network_gate_needed = not config.allow_network
-    plan_mode_needed = config.plan_mode
-    rules_needed = config.permission_rules is not None and bool(
-        config.permission_rules.rules
-    )
+    plan_mode_needed = plan_mode
+    rules_needed = permission_rules is not None and bool(permission_rules.rules)
     if (
         not approval_needed
         and not network_gate_needed
@@ -340,8 +368,8 @@ def _build_decider(
         # The declarative permission rules (spec 039): allow/deny/ask each call by the
         # host's rules; an `ask` reuses the per-run RunContext's approval round-trip.
         # Regexes are compiled here, so a malformed rule fails the build (fail-closed).
-        assert config.permission_rules is not None
-        deciders.append(rule_dsl_policy(config.permission_rules))
+        assert permission_rules is not None
+        deciders.append(rule_dsl_policy(permission_rules))
 
     # Deny-wins composition (all_of) wrapped fail-closed (safe_failure); a single
     # decider composes the same way, so this is uniform whether or not approval is

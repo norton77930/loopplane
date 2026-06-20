@@ -20,7 +20,11 @@ from typing import Any, Literal
 
 from loopplane.approval import RuleEffect
 from loopplane.gateway import ToolAdapter, ToolHandler
-from loopplane.governance import PermissionRuleSet, PermissionRuleSpec
+from loopplane.governance import (
+    PERMISSION_MODES,
+    PermissionRuleSet,
+    PermissionRuleSpec,
+)
 from loopplane.ledger import UsdLedger
 from loopplane.model import ModelBoundary, ToolDescriptor
 from loopplane.pricing import PricingTable
@@ -117,6 +121,14 @@ class RuntimeConfig:
     # a rule is only a tool name + patterns + a decision. Default None → existing runs
     # are unchanged (no DSL policy installed).
     permission_rules: PermissionRuleSet | None = None
+    # Opt-in named permission mode (spec 066; gap G10): None by default. When set to a
+    # known mode (acceptEdits / bypassPermissions / dontAsk / plan) the assembler
+    # derives a preset PermissionRuleSet from the EXISTING 039 DSL (or sets plan mode)
+    # and feeds it through the SAME rule_dsl_policy decider — a convenience over
+    # hand-authored rules; no new decider/stage. None → no preset, byte-identical. A
+    # bare string; carries no secret. acceptEdits/bypassPermissions are mutually
+    # exclusive with permission_rules (validated); dontAsk/plan may combine with them.
+    permission_mode: str | None = None
     # Opt-in proactive auto-compaction threshold (spec 041): None by default. When a
     # fraction f in (0, 1] is supplied, the prompt assembler compacts history (the
     # existing mechanical digest) before a turn once the estimated assembled-context
@@ -215,6 +227,7 @@ class RuntimeConfig:
             allow_network=bool(data.get("allow_network", False)),
             plan_mode=bool(data.get("plan_mode", False)),
             permission_rules=_coerce_permission_rules(data.get("permission_rules")),
+            permission_mode=data.get("permission_mode"),
             auto_compact_threshold=_coerce_threshold(
                 data.get("auto_compact_threshold")
             ),
@@ -390,6 +403,23 @@ def validate_config(config: RuntimeConfig) -> None:
 
     if config.max_worktrees < 0:
         raise ConfigError("max_worktrees must be a non-negative integer")
+
+    if config.permission_mode is not None:
+        if config.permission_mode not in PERMISSION_MODES:
+            raise ConfigError(
+                f"unknown permission_mode {config.permission_mode!r}; "
+                f"expected one of {list(PERMISSION_MODES)}"
+            )
+        # acceptEdits / bypassPermissions are standalone presets — combining them with
+        # hand-authored permission_rules is ambiguous; dontAsk/plan may combine.
+        if (
+            config.permission_mode in ("acceptEdits", "bypassPermissions")
+            and config.permission_rules is not None
+        ):
+            raise ConfigError(
+                f"permission_mode {config.permission_mode!r} cannot be combined with "
+                "permission_rules; set one or the other"
+            )
 
     for _label, _cap in (
         ("per_message_usd", config.per_message_usd),

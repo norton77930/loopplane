@@ -14,6 +14,7 @@ from loopplane.governance.base import SimpleDecision, allow, as_decider, deny
 from loopplane.governance.budget import CostModel, budget_policy, quota_policy
 from loopplane.governance.capability import capability_policy
 from loopplane.governance.combine import all_of, default_deny, safe_failure
+from loopplane.governance.modes import PERMISSION_MODES, permission_mode_ruleset
 from loopplane.governance.network import network_policy
 from loopplane.governance.path import path_policy
 from loopplane.governance.permission import permission_policy
@@ -26,6 +27,7 @@ from loopplane.governance.rule_dsl import (
 from loopplane.governance.sandbox import sandbox_profile
 
 __all__ = [
+    "PERMISSION_MODES",
     "CostModel",
     "PermissionRuleSet",
     "PermissionRuleSpec",
@@ -39,6 +41,7 @@ __all__ = [
     "deny",
     "network_policy",
     "path_policy",
+    "permission_mode_ruleset",
     "permission_policy",
     "plan_mode_policy",
     "quota_policy",

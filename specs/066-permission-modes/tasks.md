@@ -10,7 +10,7 @@ the preset at the SAME decide stage. No ADR. Default `None` byte-identical. P1 (
 
 ## Phase 1: The mode builder (Foundational) 🎯
 
-- [ ] T001 In `src/loopplane/governance/rule_dsl.py` (or a new `governance/modes.py`): add
+- [x] T001 In `src/loopplane/governance/rule_dsl.py` (or a new `governance/modes.py`): add
   `PERMISSION_MODES` (the known names: `acceptEdits`, `bypassPermissions`, `dontAsk`, `plan`) +
   `permission_mode_ruleset(mode: str, explicit_rules: PermissionRuleSet | None) -> PermissionRuleSet
   | None` returning the effective ruleset: `acceptEdits` = `rules=(allow on the registered file-edit
@@ -18,12 +18,12 @@ the preset at the SAME decide stage. No ADR. Default `None` byte-identical. P1 (
   default="ask"`; `bypassPermissions` = `rules=(), default="allow"`; `dontAsk` = the explicit rules
   (or empty `default="allow"`) with every `ask` rewritten to `allow` (a pure transform; keeps `deny`);
   `plan` → `None` (the caller sets `plan_mode`). Reuse `PermissionRuleSet`/`PermissionRuleSpec`.
-- [ ] T002 Export the new public name(s) from `src/loopplane/governance/__init__.py` `__all__` (the
+- [x] T002 Export the new public name(s) from `src/loopplane/governance/__init__.py` `__all__` (the
   builder + `PERMISSION_MODES`) and add them to `docs/api-reference.md` (the bijection).
 
 ## Phase 2: Config wiring (P1)
 
-- [ ] T003 In `src/loopplane/host/config.py`: add `RuntimeConfig.permission_mode: str | None = None`
+- [x] T003 In `src/loopplane/host/config.py`: add `RuntimeConfig.permission_mode: str | None = None`
   + `from_mapping` coercion. In `validate_config`: reject an unknown mode (`ConfigError`); reject
   `acceptEdits`/`bypassPermissions` combined with explicit `permission_rules` (`ConfigError` —
   ambiguous); `dontAsk`/`plan` may combine. In assembly (where `permission_rules`/`plan_mode` are
@@ -33,7 +33,7 @@ the preset at the SAME decide stage. No ADR. Default `None` byte-identical. P1 (
 
 ## Phase 3: Tests (P1)
 
-- [ ] T004 Add `tests/<unit>/test_permission_modes.py` (offline; the decider + scripted
+- [x] T004 Add `tests/<unit>/test_permission_modes.py` (offline; the decider + scripted
   `ToolCallRequest`s): (a) `acceptEdits` → a file-edit tool allowed, another tool follows `ask`;
   (b) `bypassPermissions` → all allowed; (c) `dontAsk` → an otherwise-`ask` decision → `allow`, a
   `deny` rule still denies; (d) `plan` → plan-mode behaviour (read-only until approved); (e)
@@ -42,7 +42,7 @@ the preset at the SAME decide stage. No ADR. Default `None` byte-identical. P1 (
 
 ## Phase 4: Gates
 
-- [ ] T005 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
+- [x] T005 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
   (strict), `pytest` (full — additive + default-off byte-identity). Confirm: the structural audits
   (`test_no_execution_path_outside_the_gateway`, `test_public_safety`) + the events
   serialize/`SCHEMA_VERSION` tests (UNCHANGED) + the api-reference bijection (the new public name) +
