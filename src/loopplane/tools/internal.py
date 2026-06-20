@@ -268,6 +268,22 @@ _MEMORY_WRITE_DESCRIPTOR = ToolDescriptor(
 )
 
 
+_UNDO_FILE_DESCRIPTOR = ToolDescriptor(
+    name="undo_file",
+    description=(
+        "Undo the most recent change this run made to a file (write_file / "
+        "edit_file / notebook_edit), restoring its previous content. Pass the same "
+        "'path'; call again to walk back further. Reports when nothing is left to undo."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {"path": {"type": "string"}},
+        "required": ["path"],
+        "additionalProperties": False,
+    },
+)
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -277,17 +293,32 @@ class _PathOutsideScopeError(ValueError):
 
 
 class InternalToolAdapter:
-    def __init__(self, *, memory_store: MemoryStore | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        memory_store: MemoryStore | None = None,
+        max_file_snapshots: int = 0,
+    ) -> None:
         # (session_id, resolved path) -> content digest at the last read.
         self._reads: dict[tuple[str, str], str] = {}
         self._memory = memory_store
         # (session_id) -> the session's current todo list (spec 044).
         self._todos: dict[str, list[dict[str, str]]] = {}
+        # File-edit undo (spec 054): a bounded, run-scoped, insertion-ordered log of
+        # ((session_id, resolved path), prior raw bytes) snapshots taken before a
+        # mutating tool overwrites an existing file. 0 (default) = off, byte-identical
+        # (no snapshot side-effect, undo_file not registered); the oldest snapshot is
+        # dropped once the cap is exceeded (the memory guard). Caller-injected like
+        # memory_store (InternalToolAdapter is passed via RuntimeConfig.tool_adapters).
+        self._max_file_snapshots = max_file_snapshots
+        self._snapshots: list[tuple[tuple[str, str], bytes]] = []
 
     def describe(self) -> Sequence[ToolDescriptor]:
         descriptors = list(_DESCRIPTORS)
         if self._memory is not None:
             descriptors.append(_MEMORY_WRITE_DESCRIPTOR)
+        if self._max_file_snapshots > 0:
+            descriptors.append(_UNDO_FILE_DESCRIPTOR)
         return descriptors
 
     async def invoke(
@@ -306,6 +337,7 @@ class InternalToolAdapter:
             "memory_write": self._memory_write,
             "todo_write": self._todo_write,
             "notebook_edit": self._notebook_edit,
+            "undo_file": self._undo_file,
         }
         async for output in handlers[name](call_input, context):
             yield output
@@ -326,6 +358,16 @@ class InternalToolAdapter:
         if not target.is_relative_to(scope):
             raise _PathOutsideScopeError(f"{raw} resolves outside the working scope")
         return target
+
+    def _snapshot(self, key: tuple[str, str], prior: bytes) -> None:
+        """Record a file's prior bytes before a mutating overwrite (spec 054). A no-op
+        when undo is disabled (cap 0), so the mutating tools stay byte-identical;
+        bounded — the oldest snapshot is dropped once the per-run cap is exceeded."""
+        if self._max_file_snapshots <= 0:
+            return
+        self._snapshots.append((key, prior))
+        while len(self._snapshots) > self._max_file_snapshots:
+            self._snapshots.pop(0)
 
     async def _read_file(
         self, call_input: dict[str, object], context: RunContext
@@ -355,6 +397,7 @@ class InternalToolAdapter:
             yield ErrorOutput(category=ErrorCategory.VALIDATION, message=str(exc))
             return
         key = (context.session_id, str(target))
+        prior_bytes: bytes | None = None
         if target.exists():
             # The stale-write guard (FR-034); new-file creation is exempt.
             recorded = self._reads.get(key)
@@ -368,11 +411,11 @@ class InternalToolAdapter:
                 )
                 return
             try:
-                current = _digest(target.read_bytes())
+                prior_bytes = target.read_bytes()
             except OSError as exc:
                 yield ErrorOutput(message=f"cannot write {raw}: {exc}")
                 return
-            if current != recorded:
+            if _digest(prior_bytes) != recorded:
                 yield ErrorOutput(
                     category=ErrorCategory.VALIDATION,
                     message=(
@@ -387,6 +430,9 @@ class InternalToolAdapter:
         except OSError as exc:
             yield ErrorOutput(message=f"cannot write {raw}: {exc}")
             return
+        if prior_bytes is not None:
+            # Snapshot the overwritten file's prior bytes for undo (spec 054).
+            self._snapshot(key, prior_bytes)
         self._reads[key] = _digest(content.encode("utf-8"))
         yield TextBlock(text=f"wrote {len(content)} characters to {raw}")
 
@@ -461,6 +507,7 @@ class InternalToolAdapter:
         except OSError as exc:
             yield ErrorOutput(message=f"cannot edit {raw}: {exc}")
             return
+        self._snapshot(key, data)  # prior bytes, for undo (spec 054)
         self._reads[key] = _digest(updated.encode("utf-8"))
         yield TextBlock(text=f"edited {raw}: replaced 1 occurrence")
 
@@ -901,5 +948,35 @@ class InternalToolAdapter:
         except OSError as exc:
             yield ErrorOutput(message=f"cannot write {raw}: {exc}")
             return
+        self._snapshot(key, data)  # prior bytes, for undo (spec 054)
         self._reads[key] = _digest(serialized.encode("utf-8"))
         yield TextBlock(text=f"{summary} in {raw}")
+
+    async def _undo_file(
+        self, call_input: dict[str, object], context: RunContext
+    ) -> AsyncIterator[AdapterOutput]:
+        """Restore a file to its most recent pre-edit snapshot (spec 054), within the
+        working scope; re-syncs the stale-write guard so a later edit is accepted."""
+        raw = str(call_input["path"])
+        try:
+            target = self._resolve(context, raw)
+        except _PathOutsideScopeError as exc:
+            yield ErrorOutput(category=ErrorCategory.VALIDATION, message=str(exc))
+            return
+        key = (context.session_id, str(target))
+        prior: bytes | None = None
+        for position in range(len(self._snapshots) - 1, -1, -1):
+            if self._snapshots[position][0] == key:
+                prior = self._snapshots.pop(position)[1]
+                break
+        if prior is None:
+            yield TextBlock(text=f"nothing to undo for {raw}")
+            return
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(prior)
+        except OSError as exc:
+            yield ErrorOutput(message=f"cannot undo {raw}: {exc}")
+            return
+        self._reads[key] = _digest(prior)
+        yield TextBlock(text=f"reverted {raw} to its previous version")
