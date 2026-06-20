@@ -19,6 +19,7 @@ class MCPServerConfig(BaseModel):
     command: str | None = None
     args: tuple[str, ...] = ()
     url: str | None = None
+    auth_token: str | None = None  # 059 — host-supplied bearer (http/sse); never echoed
 
     @model_validator(mode="after")
     def _check_transport_fields(self) -> MCPServerConfig:
