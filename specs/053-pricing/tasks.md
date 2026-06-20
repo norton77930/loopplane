@@ -11,7 +11,7 @@ enforcement (G22 caps deferred); no event-schema/content-model change; no new de
 
 ## Phase 1: The pricing module (P1) 🎯 MVP
 
-- [ ] T001 Create `src/loopplane/pricing.py`: a frozen `PricingRate` dataclass (`input_rate:
+- [x] T001 Create `src/loopplane/pricing.py`: a frozen `PricingRate` dataclass (`input_rate:
   Decimal`, `output_rate: Decimal`); a frozen/immutable `PricingTable` wrapping a host-supplied
   `Mapping[str, PricingRate]` with `cost(self, usage: TokenUsage, model: str) -> Decimal | None`
   returning `None` for an unknown model, else `usage.input_tokens * rate.input_rate +
@@ -21,14 +21,14 @@ enforcement (G22 caps deferred); no event-schema/content-model change; no new de
 
 ## Phase 2: Export + docs (P2)
 
-- [ ] T002 Add a `loopplane.pricing` section to `docs/api-reference.md` listing `PricingRate` +
+- [x] T002 Add a `loopplane.pricing` section to `docs/api-reference.md` listing `PricingRate` +
   `PricingTable` with one-line descriptions, so the unit-014 api-reference bijection
   (`tests/contract/test_api_reference.py`) stays exact. (If the bijection test enumerates packages
   via a fixed list/discovery, ensure `loopplane.pricing` is covered.)
 
 ## Phase 3: Tests (P3)
 
-- [ ] T003 Write `tests/unit/test_pricing.py` (offline): (a) priced cost equals `input×input_rate +
+- [x] T003 Write `tests/unit/test_pricing.py` (offline): (a) priced cost equals `input×input_rate +
   output×output_rate` exactly; (b) large counts + fractional per-token rates → exact `Decimal` (no
   float drift — assert the exact expected `Decimal`); (c) unknown model → `None`; (d) zero usage or
   zero rates → `Decimal('0')`; (e) immutability (PricingRate/PricingTable are frozen — mutating
@@ -37,7 +37,7 @@ enforcement (G22 caps deferred); no event-schema/content-model change; no new de
 
 ## Phase 4: Polish & Cross-Cutting
 
-- [ ] T004 Run the four gates green: `ruff check`, `ruff format --check`, `mypy` (src, strict),
+- [x] T004 Run the four gates green: `ruff check`, `ruff format --check`, `mypy` (src, strict),
   `pytest` (full suite — additive proof; pricing is unwired so the runtime is byte-identical).
   ALSO confirm the structural audits stay green: `test_no_execution_path_outside_the_gateway`,
   `test_public_safety`, and the api-reference bijection (`test_api_reference.py`).

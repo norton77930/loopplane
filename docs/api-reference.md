@@ -159,6 +159,14 @@ The internal, web, and subagent-spawn tool adapters.
 - `HostCommandExecutor` — the default executor: the current host-shell call verbatim (spec 052).
 - `LocalJailCommandExecutor` — a POSIX local-subprocess jail (rlimits + env-scrub + confinement; spec 052).
 
+### `loopplane.pricing` (unit 053)
+
+Server-side pricing (gap G21, Phase A): pure token-usage → USD cost from host-supplied
+rates. Metadata only — not wired into the runtime; no enforcement (G22 caps deferred).
+
+- `PricingRate` — a model's per-token USD rates (input + output, exact decimals).
+- `PricingTable` — a host-supplied model→rate table with a pure usage→USD `cost` (spec 053).
+
 ### `loopplane.adapters.mcp`
 
 The MCP tool adapter boundary.
