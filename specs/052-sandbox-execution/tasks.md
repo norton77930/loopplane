@@ -76,4 +76,17 @@ env-scrub via a FAKE executor; the real POSIX jail via a `skipif(not POSIX)` tes
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-20) — 0 critical, 0 high, 2 low (informational). 100%
+requirement coverage (FR-001..FR-008 and SC-001..004 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ **ADR 0004** ↔ data-model ↔ contract ↔ tasks agree (the
+`CommandExecutor` seam + `CommandResult`; `HostCommandExecutor` verbatim = byte-identical default;
+`LocalJailCommandExecutor` POSIX rlimits/env-scrub/cwd+process-group with Windows→`ConfigError`;
+the `command_executor` ctor injection; the `_run_command` refactor; Gateway-owned). The one
+boundary crossing (a runtime execution-isolation model) is **maintainer-approved and recorded in
+ADR 0004**, additive + default-off; no Constitution violation (III/IV/V/VI/X), no breaking 001/002
+contract change, no event-bus change. Low notes are informational: (1) the dev/CI host is Windows
+11 → the real POSIX jail (rlimit termination) is validated on POSIX/WSL via a `skipif`-gated test,
+while Windows tests cover the seam/default/`ConfigError`/env-scrub with a fake executor; (2) the
+exact POSIX spawn mechanism applying the `setrlimit`/`setsid` preexec (anyio.run_process kwargs vs
+open_process vs to_thread+subprocess) is an implementation detail left to the implement. **Cleared
+for `/speckit-implement`.**
