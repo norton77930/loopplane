@@ -14,7 +14,7 @@ sessions live in a lifespan-held task group (see :mod:`loopplane.webapi.sessions
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass
 
 import anyio
@@ -56,6 +56,7 @@ from loopplane.webapi.multimodal import (
     UnknownUpload,
     assemble_blocks,
 )
+from loopplane.webapi.pool import TenantHostPool
 from loopplane.webapi.sessions import SessionEntry, reconnect_stream, run_session
 from loopplane.webapi.streaming import run_event_stream
 from loopplane.webapi.uploads import UploadStore, UploadTooLarge
@@ -95,6 +96,7 @@ def create_app(
     default_supports_structured_output: bool = False,
     max_image_bytes: int = 5 * 1024 * 1024,
     sse_replay_buffer: int = 0,
+    host_pool: TenantHostPool | None = None,
 ) -> FastAPI:
     """Build the web/API host app embedding ``host`` behind the auth boundary.
 
@@ -107,6 +109,9 @@ def create_app(
     image input (036); ``max_image_bytes`` caps an embedded image (ADR 0001 D6).
     ``sse_replay_buffer`` (058; default 0 = off, byte-identical) sizes the bounded
     per-session SSE replay buffer for ``Last-Event-ID`` reconnect (ADR 0006).
+    ``host_pool`` (061; default None = off, byte-identical) routes each principal to
+    its OWN host so principals run concurrently, while each principal's host keeps
+    its sequential ``_active`` invariant (ADR 0009, pool-above-host).
     """
 
     auth = authenticator or DENY_ALL
@@ -124,6 +129,23 @@ def create_app(
         if entry is None:
             raise HTTPException(status_code=400, detail="unknown model")
         return entry.host, entry.accepts_media, entry.supports_structured_output
+
+    def _resolve(
+        model: str | None, principal: Principal
+    ) -> tuple[LoopPlaneHost, bool, bool]:
+        # 061: with a host pool, route the caller to its OWN host (concurrent across
+        # principals; each host stays sequential). The model is still validated by
+        # _select (unknown -> 400) + supplies the media/structured-output flags.
+        # Default (no pool) returns _select(model) verbatim — byte-identical.
+        chosen, accepts_media, supports_so = _select(model)
+        if host_pool is not None:
+            try:
+                chosen = host_pool.host_for(principal.id, model)
+            except RuntimeError as exc:
+                raise HTTPException(
+                    status_code=429, detail="capacity exceeded"
+                ) from exc
+        return chosen, accepts_media, supports_so
 
     def _build_blocks(
         body: RunRequest, owner: str, accepts_media: bool
@@ -221,16 +243,24 @@ def create_app(
     async def post_run(
         body: RunRequest, principal: Principal = Depends(require)
     ) -> RunResult:
-        chosen, accepts_media, supports_so = _select(body.model)
+        chosen, accepts_media, supports_so = _resolve(body.model, principal)
         _check_output_schema(body.output_schema, supports_so)
         blocks = _build_blocks(body, principal.id, accepts_media)
+        # 061: bound a principal's concurrent in-flight runs (no-op when no pool —
+        # nullcontext keeps the default path byte-identical).
+        in_flight = (
+            host_pool.in_flight(principal.id)
+            if host_pool is not None
+            else nullcontext()
+        )
         try:
-            outcome = await chosen.run(
-                blocks,
-                _discard,
-                principal_id=principal.id,
-                output_schema=body.output_schema,
-            )
+            async with in_flight:
+                outcome = await chosen.run(
+                    blocks,
+                    _discard,
+                    principal_id=principal.id,
+                    output_schema=body.output_schema,
+                )
         except RuntimeError as exc:
             raise HTTPException(
                 status_code=409, detail="a run is already active"
@@ -243,7 +273,7 @@ def create_app(
     async def post_run_events(
         body: RunRequest, principal: Principal = Depends(require)
     ) -> StreamingResponse:
-        chosen, accepts_media, supports_so = _select(body.model)
+        chosen, accepts_media, supports_so = _resolve(body.model, principal)
         _check_output_schema(body.output_schema, supports_so)
         blocks = _build_blocks(body, principal.id, accepts_media)
         return StreamingResponse(
@@ -257,7 +287,7 @@ def create_app(
     async def open_session(
         model: str | None = None, principal: Principal = Depends(require)
     ) -> OpenedSession:
-        chosen, accepts_media, supports_so = _select(model)
+        chosen, accepts_media, supports_so = _resolve(model, principal)
         ready = anyio.Event()
         box: dict[str, str] = {}
         app.state.session_tg.start_soon(

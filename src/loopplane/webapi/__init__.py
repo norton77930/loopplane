@@ -28,6 +28,7 @@ from loopplane.webapi.models import (
     SessionSummaryView,
     UploadRef,
 )
+from loopplane.webapi.pool import TenantHostPool
 
 __all__ = [
     "ArtifactContent",
@@ -42,6 +43,7 @@ __all__ = [
     "RunResult",
     "SessionAnswer",
     "SessionSummaryView",
+    "TenantHostPool",
     "UploadRef",
     "create_app",
     "jwt_authenticator",

@@ -10,7 +10,7 @@ shared host (byte-identical). host/loop/gateway/event UNCHANGED. Confined to loo
 
 ## Phase 1: The pool (P1) 🎯
 
-- [ ] T001 Create `src/loopplane/webapi/pool.py` `TenantHostPool`: holds a host FACTORY
+- [x] T001 Create `src/loopplane/webapi/pool.py` `TenantHostPool`: holds a host FACTORY
   (`Callable[..., LoopPlaneHost]`), a per-principal in-flight cap, and an optional max-principals
   bound. `host_for(principal_id, model=None) -> LoopPlaneHost` lazily builds + caches a per-principal
   host (reused across that principal's requests) and bounds per-principal in-flight runs (an
@@ -20,7 +20,7 @@ shared host (byte-identical). host/loop/gateway/event UNCHANGED. Confined to loo
 
 ## Phase 2: create_app wiring (P1)
 
-- [ ] T002 In `src/loopplane/webapi/app.py`: add an OPTIONAL `host_pool: TenantHostPool | None = None`
+- [x] T002 In `src/loopplane/webapi/app.py`: add an OPTIONAL `host_pool: TenantHostPool | None = None`
   param to `create_app`. When None (default): the existing single shared `host` + `_select(model)`
   path is used VERBATIM (byte-identical — one shared host; the existing 409 on a concurrent run).
   When set: the per-principal session/run routes resolve the host via
@@ -29,13 +29,13 @@ shared host (byte-identical). host/loop/gateway/event UNCHANGED. Confined to loo
 
 ## Phase 3: Export + docs (P1)
 
-- [ ] T003 Export `TenantHostPool` from `src/loopplane/webapi/__init__.py` (additive `__all__`) and
+- [x] T003 Export `TenantHostPool` from `src/loopplane/webapi/__init__.py` (additive `__all__`) and
   add it to `docs/api-reference.md` under `loopplane.webapi` (so the api-reference bijection stays
   exact).
 
 ## Phase 4: Tests (P1/P2) — offline/in-process
 
-- [ ] T004 Add webapi pool tests (offline/in-process, mirroring the existing webapi/host test
+- [x] T004 Add webapi pool tests (offline/in-process, mirroring the existing webapi/host test
   harness): (a) concurrent principals — with a pool + a host factory, principal A and principal B run
   concurrently (neither raises "a run is already active"); (b) same-principal sequential — A's second
   concurrent run is rejected (the per-host `_active` invariant holds); (c) default-off byte-identity —
@@ -46,7 +46,7 @@ shared host (byte-identical). host/loop/gateway/event UNCHANGED. Confined to loo
 
 ## Phase 5: Gates
 
-- [ ] T005 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
+- [x] T005 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
   (strict), `pytest` (full — additive + default-off byte-identity). Confirm the structural audits
   (`test_no_execution_path_outside_the_gateway` [controller/loop must not import the tools layer],
   `test_public_safety`) + the api-reference-bijection test (the new `TenantHostPool` documented) + the
