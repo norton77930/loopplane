@@ -11,16 +11,16 @@ Per ADR 0005. **No SCHEMA_VERSION bump; no Phase C (durable ledger).**
 
 ## Phase 1: Event vocabulary + config (Foundational)
 
-- [ ] T001 Add `"budget-exceeded"` to the `TerminationReason` Literal in
+- [x] T001 Add `"budget-exceeded"` to the `TerminationReason` Literal in
   `src/loopplane/events/envelope.py:194` (additive; **no SCHEMA_VERSION bump**). Update the
   runtime-events contract doc (specs/011 `contracts/runtime-events.md`) to list the new reason.
-- [ ] T002 Add `RuntimeConfig.per_message_usd` + `per_session_usd` (`Decimal | None = None`) to
+- [x] T002 Add `RuntimeConfig.per_message_usd` + `per_session_usd` (`Decimal | None = None`) to
   `src/loopplane/host/config.py` (coerce in `from_mapping`, validate non-negative Decimal in
   `validate_config`; no secret). Default None = off.
 
 ## Phase 2: The budget checker (P1) 🎯
 
-- [ ] T003 Create `src/loopplane/budget.py` (a NEW module — keep 053's `loopplane.pricing` pure +
+- [x] T003 Create `src/loopplane/budget.py` (a NEW module — keep 053's `loopplane.pricing` pure +
   unwired): a `BudgetChecker` that holds the caps + a `PricingTable` + the model-id + the prior
   per-session spend, with `record_turn(usage: TokenUsage)` (add this turn's USD via
   `PricingTable.cost`; on `None` → mark unpriced, do not accumulate) + `exceeded() -> bool`
@@ -30,7 +30,7 @@ Per ADR 0005. **No SCHEMA_VERSION bump; no Phase C (durable ledger).**
 
 ## Phase 3: In-loop enforcement (P1)
 
-- [ ] T004 [loop] Thread an optional `budget_checker: BudgetChecker | None = None` into
+- [x] T004 [loop] Thread an optional `budget_checker: BudgetChecker | None = None` into
   `AgentLoop.__init__` (the assembler/hooks/summarizer default-None collaborator pattern). In the
   turn cycle: where `TurnEnd.usage` is handled (`loop.py` `_stream_model_turn` ~296-298) feed it to
   the checker; after `turns_completed += 1` (~197), if the checker is set and `exceeded()`, emit a
@@ -41,7 +41,7 @@ Per ADR 0005. **No SCHEMA_VERSION bump; no Phase C (durable ledger).**
 
 ## Phase 4: Controller / host wiring (P1)
 
-- [ ] T005 [controller] Build the `BudgetChecker` in `RuntimeController._assemble` from the caps
+- [x] T005 [controller] Build the `BudgetChecker` in `RuntimeController._assemble` from the caps
   (`per_message_usd`/`per_session_usd`) + a host-supplied `PricingTable` + model-id (additive
   optional `RuntimeController` kwargs, mirroring the 048-054 optional-injection pattern); thread it
   into the `AgentLoop`. Carry per-session spend on `_Session` (fold the run's `spent` back after a
@@ -50,12 +50,12 @@ Per ADR 0005. **No SCHEMA_VERSION bump; no Phase C (durable ledger).**
 
 ## Phase 5: Consumer audit + tests (P2/P3)
 
-- [ ] T006 Audit every `TerminationReason` consumer for the new `budget-exceeded` value and fix any
+- [x] T006 Audit every `TerminationReason` consumer for the new `budget-exceeded` value and fix any
   that would mishandle it: `cli/render.py` (reason rendering — should be reason-agnostic),
   `checkpoint/rebuild.py` (MUST NOT strand the user input — verify it only special-cases
   `cancelled`, so `budget-exceeded` is safe), `webapi` run-terminated handling, `apps/web`
   (frontend run-terminated). Add the new reason where an exhaustive match exists.
-- [ ] T007 Write `tests/unit/test_budget_caps.py` (offline, a scripted model emitting `TokenUsage`
+- [x] T007 Write `tests/unit/test_budget_caps.py` (offline, a scripted model emitting `TokenUsage`
   + a `PricingTable`): cap crossed → terminate `budget-exceeded` (crossing turn's output retained);
   under-cap → `natural-completion`; per-session cumulative cap; default-off byte-identity (no caps →
   no accounting/events); unpriced model → fail-soft (no terminate + a warning diagnostic); the
@@ -64,7 +64,7 @@ Per ADR 0005. **No SCHEMA_VERSION bump; no Phase C (durable ledger).**
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T008 Run the four gates green: `ruff check`, `ruff format --check`, `mypy` (src, strict),
+- [x] T008 Run the four gates green: `ruff check`, `ruff format --check`, `mypy` (src, strict),
   `pytest` (full suite — additive proof + default-off byte-identity). ALSO confirm: the structural
   audits (`test_no_execution_path_outside_the_gateway` [loop must not import `loopplane.tools`],
   `test_public_safety`) and the events serialize/`SCHEMA_VERSION` tests stay green (additive, no

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 import anyio.lowlevel
 
+from loopplane.budget import BudgetChecker
 from loopplane.context import RunContext
 from loopplane.events.emitter import EventEmitter
 from loopplane.gateway.gateway import ToolGateway
@@ -78,6 +79,7 @@ class AgentLoop:
         assembler: PromptAssembler | None = None,
         hooks: HookDispatcher | None = None,
         summarizer: ModelBoundary | None = None,
+        budget_checker: BudgetChecker | None = None,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -90,6 +92,13 @@ class AgentLoop:
         # A FAIL-SAFE overlay on the mechanical digest: any failure keeps the
         # mechanical marker, so a summarizer can never break a run.
         self._summarizer = summarizer
+        # Optional USD budget checker (spec 055; ADR 0005); None by default → no cost
+        # accounting and a byte-identical run. When set, the loop records each turn's
+        # USD cost from TurnEnd.usage and terminates the run `budget-exceeded` after the
+        # turn that crosses a per-message/per-session cap (output retained). Built only
+        # when caps + a pricing table + a model-id are configured (loopplane.budget is a
+        # foundational package, not the tools layer — so the gateway audit is intact).
+        self._budget_checker = budget_checker
 
     async def run(
         self, input_blocks: Sequence[ContentBlock], context: RunContext
@@ -107,6 +116,10 @@ class AgentLoop:
         if context.turn_budget is not None and context.turn_budget <= 0:
             await self._emitter.run_terminated("turn-budget-exhausted", 0)
             return
+        # Reset the per-message USD accumulator; the per-session total persists across
+        # runs on the same session (spec 055). No-op when no checker is configured.
+        if self._budget_checker is not None:
+            self._budget_checker.start_run()
 
         # user-prompt-submit hook (feature 015): fire before the prompt is
         # recorded or sent. A block ends the run without a model call — the prompt
@@ -207,6 +220,15 @@ class AgentLoop:
             if assistant_blocks:
                 await self._history.append("assistant", assistant_blocks)
 
+            # USD budget enforcement (spec 055; ADR 0005): the just-finished turn's cost
+            # was recorded in `_stream_model_turn`; if a per-message/per-session cap is
+            # now crossed, terminate after this turn (output retained above) — distinct
+            # from `cancelled` (input-stranding) and `turn-budget-exhausted` (by count).
+            # Skipped entirely when no checker is configured → byte-identical.
+            if self._budget_checker is not None and self._budget_checker.exceeded():
+                await self._emitter.run_terminated("budget-exceeded", turns_completed)
+                return
+
             if not outcome.calls:
                 if self._hooks is not None:
                     await self._hooks.fire(
@@ -298,6 +320,20 @@ class AgentLoop:
                     turn_index, increment.stop_reason, increment.usage
                 )
                 outcome.turn_ended = True
+                # USD budget accounting (spec 055; ADR 0005): record this turn's cost. A
+                # fail-soft `None` (model has no price) accumulates nothing and emits a
+                # public-safe warning; the cap is just not enforced for that turn. No-op
+                # when no checker is configured → byte-identical.
+                if (
+                    self._budget_checker is not None
+                    and self._budget_checker.record_turn(increment.usage) is None
+                ):
+                    await self._emitter.diagnostic(
+                        "warning",
+                        "budget",
+                        "model has no configured price; the USD budget cap is "
+                        "not enforced for this turn",
+                    )
             await anyio.lowlevel.checkpoint()
             if context.cancellation.is_set():
                 break

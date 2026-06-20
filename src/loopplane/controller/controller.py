@@ -14,6 +14,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
@@ -26,6 +27,7 @@ from loopplane.artifacts.budget import (
     ReplacementLedger,
 )
 from loopplane.artifacts.store import ArtifactStore
+from loopplane.budget import BudgetChecker, UsdBudgetCaps
 from loopplane.checkpoint.base import CheckpointStore, SessionSummary
 from loopplane.checkpoint.rebuild import rebuild_session
 from loopplane.checkpoint.recorder import RecordingSink, SessionRecorder
@@ -83,6 +85,7 @@ from loopplane.model.content import (
     ToolCallBlock,
     ToolResultBlock,
 )
+from loopplane.pricing import PricingTable
 from loopplane.skills.advertiser import DEFAULT_PROMPT_BUDGET_CHARS, SkillAdvertiser
 from loopplane.skills.loader import LoadedSkill
 
@@ -141,6 +144,10 @@ class RuntimeController:
         max_swarm_members: int = 0,
         worktree_manager_factory: WorktreeManagerFactory | None = None,
         max_worktrees: int = 0,
+        pricing_table: PricingTable | None = None,
+        model_id: str | None = None,
+        per_message_usd: Decimal | None = None,
+        per_session_usd: Decimal | None = None,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -174,6 +181,18 @@ class RuntimeController:
         # controller stays tool-agnostic (Constitution V).
         self._worktree_manager_factory = worktree_manager_factory
         self._max_worktrees = max_worktrees
+        # USD budget caps (spec 055; G22 Phase B; ADR 0005): the host-supplied 053
+        # pricing table + model-id + the per-message/per-session USD caps. All inert by
+        # default (None) → no BudgetChecker is built and the loop is byte-identical.
+        # When caps + a pricing table + a model-id are ALL present, _assemble builds a
+        # per-session BudgetChecker and threads it into the AgentLoop; the session USD
+        # total lives on that checker (carried by the per-session loop) and resets on
+        # resume() (the session is rebuilt → a fresh checker). pricing/budget are
+        # foundational packages (not the tools layer) → the gateway audit is unaffected.
+        self._pricing_table = pricing_table
+        self._budget_model_id = model_id
+        self._per_message_usd = per_message_usd
+        self._per_session_usd = per_session_usd
         # Optional lifecycle hooks (feature 015); absent by default (FR-011).
         # process_setup fires at most once per controller lifetime.
         self._hooks = hooks
@@ -323,6 +342,26 @@ class RuntimeController:
                 compact_threshold=self._auto_compact_threshold,
             )
 
+        # USD budget caps (spec 055; ADR 0005): build a per-session checker only when
+        # caps + a host-supplied pricing table + a model-id are ALL set; otherwise
+        # None → the loop is byte-identical. This is the only place USD accounting is
+        # wired; the loop consults the checker per turn and terminates `budget-exceeded`
+        # after a crossing turn. The per-session total lives on the checker; because
+        # _assemble runs once per session (create + resume), the checker persists across
+        # this session's runs and resets on resume (a fresh assembly).
+        budget_checker: BudgetChecker | None = None
+        if (
+            self._per_message_usd is not None or self._per_session_usd is not None
+        ) and (self._pricing_table is not None and self._budget_model_id is not None):
+            budget_checker = BudgetChecker(
+                caps=UsdBudgetCaps(
+                    per_message_usd=self._per_message_usd,
+                    per_session_usd=self._per_session_usd,
+                ),
+                pricing=self._pricing_table,
+                model_id=self._budget_model_id,
+            )
+
         sequencer = EventSequencer()
         emitter = EventEmitter(session_id=session_id, sequencer=sequencer, sink=sink)
         history = SessionHistory(on_append=hook)
@@ -348,6 +387,7 @@ class RuntimeController:
                 assembler=assembler,
                 hooks=self._hooks,
                 summarizer=self._compaction_summarizer,
+                budget_checker=budget_checker,
             ),
             broker=InteractionBroker(emitter=emitter),
             approval_memory={},

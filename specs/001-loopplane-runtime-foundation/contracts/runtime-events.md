@@ -38,7 +38,7 @@ Every event carries:
 | question-answered | request_id, answers | The user's answer is matched to its request |
 | replay-started / replay-completed | counts | Bracket the replayed span on reattachment, so consumers know when the live stream begins |
 | diagnostic | severity (info, warning, error), category, safe message | A non-fatal condition: external server failure (FR-043), skipped skill/memory entry (FR-051, FR-071), repaired tool call (FR-082), skipped corrupt record (FR-083) |
-| run-terminated | reason (natural-completion, turn-budget-exhausted, cancelled, unrecoverable-error), turns taken | Exactly once per run (FR-001) |
+| run-terminated | reason (natural-completion, turn-budget-exhausted, cancelled, unrecoverable-error, budget-exceeded), turns taken | Exactly once per run (FR-001). `budget-exceeded` (spec 055; ADR 0005) is an additive reason within SCHEMA_VERSION=1 — no version bump. |
 
 ## Ordering rules
 

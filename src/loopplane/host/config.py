@@ -14,6 +14,7 @@ import math
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 
@@ -21,6 +22,7 @@ from loopplane.approval import RuleEffect
 from loopplane.gateway import ToolAdapter, ToolHandler
 from loopplane.governance import PermissionRuleSet, PermissionRuleSpec
 from loopplane.model import ModelBoundary, ToolDescriptor
+from loopplane.pricing import PricingTable
 
 ApprovalDefault = Literal["allow", "ask", "deny"]
 CheckpointBackend = Literal["file", "sqlite"]
@@ -167,6 +169,19 @@ class RuntimeConfig:
     # isolated git worktrees under a managed area of the working scope. A bare integer;
     # carries no secret.
     max_worktrees: int = 0
+    # Opt-in USD budget caps (spec 055; G22 Phase B; ADR 0005): per-message +
+    # per-session USD caps enforced INSIDE the Agent Loop turn cycle (TokenUsage). All
+    # None (default) → no cost accounting, no enforcement, byte-identical. Enforcement
+    # also requires `pricing_table` + `model_id` (the host supplies both; the model
+    # boundary exposes no model id). When a cap is crossed the run terminates with a new
+    # `budget-exceeded` TerminationReason (additive, no SCHEMA_VERSION bump). Decimal
+    # money; carries no secret.
+    per_message_usd: Decimal | None = None
+    per_session_usd: Decimal | None = None
+    # The host-supplied 053 pricing table + model-id used to price token usage for the
+    # caps above. Both None by default → the caps are inert (no enforcement).
+    pricing_table: PricingTable | None = None
+    model_id: str | None = None
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -202,7 +217,17 @@ class RuntimeConfig:
             max_swarm_members=int(data.get("max_swarm_members", 0)),
             max_swarm_messages=int(data.get("max_swarm_messages", 0)),
             max_worktrees=int(data.get("max_worktrees", 0)),
+            per_message_usd=_coerce_usd(data.get("per_message_usd")),
+            per_session_usd=_coerce_usd(data.get("per_session_usd")),
+            pricing_table=data.get("pricing_table"),
+            model_id=data.get("model_id"),
         )
+
+
+def _coerce_usd(value: Any) -> Decimal | None:
+    if value is None or isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
 
 
 def _coerce_tool(item: Any) -> ToolSpec:
@@ -355,6 +380,13 @@ def validate_config(config: RuntimeConfig) -> None:
 
     if config.max_worktrees < 0:
         raise ConfigError("max_worktrees must be a non-negative integer")
+
+    for _label, _cap in (
+        ("per_message_usd", config.per_message_usd),
+        ("per_session_usd", config.per_session_usd),
+    ):
+        if _cap is not None and _cap < 0:
+            raise ConfigError(f"{_label} must be a non-negative USD amount")
 
 
 def approval_effects(

@@ -4,11 +4,12 @@ A host-supplied :class:`PricingTable` maps a model id to its per-token USD rates
 :meth:`PricingTable.cost` returns the **exact** :class:`decimal.Decimal` USD cost of a
 :class:`loopplane.model.TokenUsage` record, or ``None`` for a model it has no price for.
 
-**Pure metadata**: pricing enforces nothing, makes no network call, ships no prices,
-and is **not wired into the runtime** (the loop / controller / gateway never import
-it) — a host or observability layer calls :meth:`PricingTable.cost` on demand, so the
-runtime is byte-identical when pricing is unused. USD budget caps / enforcement (G22)
-are deferred to a later unit + ADR.
+**Pure metadata**: pricing enforces nothing, makes no network call, and ships no prices
+— the loop and gateway never import it. A host or observability layer calls
+:meth:`PricingTable.cost` on demand, and (since spec 055) ``loopplane.budget`` reuses
+it to enforce USD caps; pricing itself stays byte-identical and unenforcing. USD budget
+caps / enforcement (G22 Phase B) build on it in :mod:`loopplane.budget` (spec 055; ADR
+0005), default-off so the runtime is byte-identical when no caps are configured.
 """
 
 from __future__ import annotations

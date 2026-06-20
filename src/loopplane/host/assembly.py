@@ -242,6 +242,17 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
             config.max_worktrees
         )
         controller_kwargs["max_worktrees"] = config.max_worktrees
+    # USD budget caps (spec 055; ADR 0005): forward the host-supplied pricing table +
+    # model-id + the per-message/per-session USD caps. The controller builds a
+    # BudgetChecker only when caps + a pricing table + a model-id are present; else off.
+    if config.pricing_table is not None:
+        controller_kwargs["pricing_table"] = config.pricing_table
+    if config.model_id is not None:
+        controller_kwargs["model_id"] = config.model_id
+    if config.per_message_usd is not None:
+        controller_kwargs["per_message_usd"] = config.per_message_usd
+    if config.per_session_usd is not None:
+        controller_kwargs["per_session_usd"] = config.per_session_usd
 
     controller = RuntimeController(
         model=config.model,

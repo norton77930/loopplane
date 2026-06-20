@@ -196,6 +196,7 @@ TerminationReason = Literal[
     "turn-budget-exhausted",
     "cancelled",
     "unrecoverable-error",
+    "budget-exceeded",
 ]
 
 
