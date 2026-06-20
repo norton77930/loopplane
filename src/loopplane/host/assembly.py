@@ -253,6 +253,13 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         controller_kwargs["per_message_usd"] = config.per_message_usd
     if config.per_session_usd is not None:
         controller_kwargs["per_session_usd"] = config.per_session_usd
+    # Per-user-monthly USD cap (spec 063; ADR 0010): forward the host-supplied durable
+    # ledger + the monthly cap; the controller builds the monthly dimension only when
+    # both (+ pricing + model-id) are present, else off (byte-identical).
+    if config.usd_ledger is not None:
+        controller_kwargs["usd_ledger"] = config.usd_ledger
+    if config.per_user_monthly_usd is not None:
+        controller_kwargs["per_user_monthly_usd"] = config.per_user_monthly_usd
 
     controller = RuntimeController(
         model=config.model,

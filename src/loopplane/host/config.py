@@ -21,6 +21,7 @@ from typing import Any, Literal
 from loopplane.approval import RuleEffect
 from loopplane.gateway import ToolAdapter, ToolHandler
 from loopplane.governance import PermissionRuleSet, PermissionRuleSpec
+from loopplane.ledger import UsdLedger
 from loopplane.model import ModelBoundary, ToolDescriptor
 from loopplane.pricing import PricingTable
 
@@ -182,6 +183,13 @@ class RuntimeConfig:
     # caps above. Both None by default → the caps are inert (no enforcement).
     pricing_table: PricingTable | None = None
     model_id: str | None = None
+    # Opt-in per-user-monthly USD cap (spec 063; G22 Phase C; ADR 0010): a host-supplied
+    # durable `usd_ledger` + the monthly cap. Both None (default) → no monthly
+    # enforcement, byte-identical. Also requires `pricing_table` + `model_id` (the cost
+    # source). Reuses the `budget-exceeded` reason (no SCHEMA_VERSION bump). Decimal
+    # money; the ledger/DSN carries no secret in this config object.
+    per_user_monthly_usd: Decimal | None = None
+    usd_ledger: UsdLedger | None = None
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -221,6 +229,8 @@ class RuntimeConfig:
             per_session_usd=_coerce_usd(data.get("per_session_usd")),
             pricing_table=data.get("pricing_table"),
             model_id=data.get("model_id"),
+            per_user_monthly_usd=_coerce_usd(data.get("per_user_monthly_usd")),
+            usd_ledger=data.get("usd_ledger"),
         )
 
 
@@ -384,6 +394,7 @@ def validate_config(config: RuntimeConfig) -> None:
     for _label, _cap in (
         ("per_message_usd", config.per_message_usd),
         ("per_session_usd", config.per_session_usd),
+        ("per_user_monthly_usd", config.per_user_monthly_usd),
     ):
         if _cap is not None and _cap < 0:
             raise ConfigError(f"{_label} must be a non-negative USD amount")

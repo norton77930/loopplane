@@ -229,7 +229,7 @@ async def test_unpriced_model_is_fail_soft(tmp_path: Path) -> None:
 # --- the checker, unit -------------------------------------------------------
 
 
-def test_budget_checker_accumulates_and_detects_crossing() -> None:
+async def test_budget_checker_accumulates_and_detects_crossing() -> None:
     table = PricingTable(
         rates={
             "m": PricingRate(input_rate=Decimal("0.001"), output_rate=Decimal("0.002"))
@@ -245,16 +245,16 @@ def test_budget_checker_accumulates_and_detects_crossing() -> None:
     assert not checker.exceeded()
 
     # 10 input tokens × 0.001 = 0.010 (exact); at the cap, not over (strictly greater).
-    assert checker.record_turn(TokenUsage(input_tokens=10, output_tokens=0)) == Decimal(
-        "0.01"
-    )
+    assert (
+        await checker.record_turn(TokenUsage(input_tokens=10, output_tokens=0))
+    ) == Decimal("0.01")
     assert checker.spent == Decimal("0.01")
     assert not checker.exceeded()
 
     # +5 output tokens × 0.002 = 0.010 → 0.020 total, now over.
-    assert checker.record_turn(TokenUsage(input_tokens=0, output_tokens=5)) == Decimal(
-        "0.01"
-    )
+    assert (
+        await checker.record_turn(TokenUsage(input_tokens=0, output_tokens=5))
+    ) == Decimal("0.01")
     assert checker.spent == Decimal("0.02")
     assert checker.exceeded()
     assert not checker.unpriced
@@ -264,7 +264,7 @@ def test_budget_checker_accumulates_and_detects_crossing() -> None:
     assert checker.spent == Decimal(0)
 
 
-def test_budget_checker_unpriced_is_fail_soft() -> None:
+async def test_budget_checker_unpriced_is_fail_soft() -> None:
     table = PricingTable(
         rates={
             "m": PricingRate(input_rate=Decimal("0.001"), output_rate=Decimal("0.002"))
@@ -276,7 +276,9 @@ def test_budget_checker_unpriced_is_fail_soft() -> None:
         model_id="absent-model",
     )
     checker.start_run()
-    assert checker.record_turn(TokenUsage(input_tokens=10, output_tokens=10)) is None
+    assert (
+        await checker.record_turn(TokenUsage(input_tokens=10, output_tokens=10))
+    ) is None
     assert checker.unpriced
     assert checker.spent == Decimal(0)
     assert not checker.exceeded()

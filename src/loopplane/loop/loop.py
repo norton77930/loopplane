@@ -324,16 +324,25 @@ class AgentLoop:
                 # fail-soft `None` (model has no price) accumulates nothing and emits a
                 # public-safe warning; the cap is just not enforced for that turn. No-op
                 # when no checker is configured → byte-identical.
-                if (
-                    self._budget_checker is not None
-                    and self._budget_checker.record_turn(increment.usage) is None
-                ):
-                    await self._emitter.diagnostic(
-                        "warning",
-                        "budget",
-                        "model has no configured price; the USD budget cap is "
-                        "not enforced for this turn",
-                    )
+                if self._budget_checker is not None:
+                    cost = await self._budget_checker.record_turn(increment.usage)
+                    if cost is None:
+                        await self._emitter.diagnostic(
+                            "warning",
+                            "budget",
+                            "model has no configured price; the USD budget cap is "
+                            "not enforced for this turn",
+                        )
+                    elif self._budget_checker.ledger_unavailable:
+                        # 063 fail-open (ADR 0010 D9): the durable monthly ledger was
+                        # unreachable; allow the turn but flag that the monthly cap was
+                        # not enforced (public-safe — no id/amount interpolated).
+                        await self._emitter.diagnostic(
+                            "warning",
+                            "budget",
+                            "the usage ledger is unavailable; the per-user monthly "
+                            "cap is not enforced for this turn",
+                        )
             await anyio.lowlevel.checkpoint()
             if context.cancellation.is_set():
                 break

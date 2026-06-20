@@ -68,6 +68,7 @@ from loopplane.hooks.points import (
     SessionEndPayload,
     SessionStartPayload,
 )
+from loopplane.ledger import UsdLedger
 from loopplane.loop.assembly import AugmentationProvider, PromptAssembler
 from loopplane.loop.history import (
     HistoryEntry,
@@ -148,6 +149,8 @@ class RuntimeController:
         model_id: str | None = None,
         per_message_usd: Decimal | None = None,
         per_session_usd: Decimal | None = None,
+        usd_ledger: UsdLedger | None = None,
+        per_user_monthly_usd: Decimal | None = None,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -193,6 +196,13 @@ class RuntimeController:
         self._budget_model_id = model_id
         self._per_message_usd = per_message_usd
         self._per_session_usd = per_session_usd
+        # USD per-user-monthly cap (spec 063; G22 Phase C; ADR 0010): a host-supplied
+        # durable UsdLedger + the monthly cap. Off by default (None) → byte-identical;
+        # when both are set (+ pricing + model-id) _assemble gives the per-session
+        # BudgetChecker the monthly dimension, threaded with the run's principal_id on
+        # create AND resume. The ledger is a foundational package (not the tools layer).
+        self._usd_ledger = usd_ledger
+        self._per_user_monthly_usd = per_user_monthly_usd
         # Optional lifecycle hooks (feature 015); absent by default (FR-011).
         # process_setup fires at most once per controller lifetime.
         self._hooks = hooks
@@ -278,6 +288,7 @@ class RuntimeController:
             decisions=decisions,
             next_record_sequence=max(record.sequence for record in records) + 1,
             meta_recorded=True,
+            principal_id=rebuilt.principal_id,
         )
         self._sessions[session_id] = session
         for problem in problems:
@@ -349,10 +360,20 @@ class RuntimeController:
         # after a crossing turn. The per-session total lives on the checker; because
         # _assemble runs once per session (create + resume), the checker persists across
         # this session's runs and resets on resume (a fresh assembly).
+        # 063 (ADR 0010): a checker is also built for a per-user-monthly cap. The
+        # monthly dimension (ledger + principal_id + per_user_monthly_usd) is threaded
+        # in but only activates inside the checker when all three are set; principal_id
+        # is supplied on create AND resume so the monthly cap enforces on resumed
+        # sessions too. A cost source (pricing + model-id) is required for any cap.
         budget_checker: BudgetChecker | None = None
-        if (
-            self._per_message_usd is not None or self._per_session_usd is not None
-        ) and (self._pricing_table is not None and self._budget_model_id is not None):
+        _any_cap = (
+            self._per_message_usd is not None
+            or self._per_session_usd is not None
+            or self._per_user_monthly_usd is not None
+        )
+        if _any_cap and (
+            self._pricing_table is not None and self._budget_model_id is not None
+        ):
             budget_checker = BudgetChecker(
                 caps=UsdBudgetCaps(
                     per_message_usd=self._per_message_usd,
@@ -360,6 +381,9 @@ class RuntimeController:
                 ),
                 pricing=self._pricing_table,
                 model_id=self._budget_model_id,
+                ledger=self._usd_ledger,
+                principal_id=principal_id,
+                per_user_monthly_usd=self._per_user_monthly_usd,
             )
 
         sequencer = EventSequencer()

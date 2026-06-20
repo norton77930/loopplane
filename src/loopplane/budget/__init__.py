@@ -17,13 +17,21 @@ deferred (ADR 0005 D7).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from decimal import Decimal
 
+from loopplane.ledger import UsdLedger
 from loopplane.model.boundary import TokenUsage
 from loopplane.pricing import PricingTable
 
 __all__ = ["UsdBudgetCaps", "BudgetChecker"]
+
+
+def _utc_month_now() -> str:
+    """The current UTC calendar month as a ``YYYY-MM`` string (063; ADR 0010)."""
+    return datetime.now(UTC).strftime("%Y-%m")
 
 
 @dataclass(frozen=True)
@@ -49,20 +57,43 @@ class BudgetChecker:
     caps: UsdBudgetCaps
     pricing: PricingTable
     model_id: str
+    # 063 (G22 Phase C; ADR 0010) — the OPTIONAL durable per-user-monthly dimension.
+    # When ``ledger`` + ``principal_id`` + ``per_user_monthly_usd`` are ALL set,
+    # ``record_turn`` (async) adds this turn's cost to the ``(principal_id, month)``
+    # ledger and folds the returned monthly total into ``exceeded()``; ``month`` is a
+    # caller-injectable ``YYYY-MM`` provider (default UTC now). All unset → no ledger
+    # await → byte-identical to 055. ``loopplane.ledger`` is foundational (not tools).
+    ledger: UsdLedger | None = None
+    principal_id: str | None = None
+    per_user_monthly_usd: Decimal | None = None
+    month: Callable[[], str] = _utc_month_now
     _message_spent: Decimal = field(default=Decimal(0), init=False)
     _session_spent: Decimal = field(default=Decimal(0), init=False)
+    _monthly_total: Decimal = field(default=Decimal(0), init=False)
     _unpriced: bool = field(default=False, init=False)
+    _ledger_unavailable: bool = field(default=False, init=False)
+
+    def _monthly_active(self) -> bool:
+        return (
+            self.ledger is not None
+            and self.principal_id is not None
+            and self.per_user_monthly_usd is not None
+        )
 
     def start_run(self) -> None:
         """Reset the per-message accumulator; the per-session total persists."""
         self._message_spent = Decimal(0)
 
-    def record_turn(self, usage: TokenUsage) -> Decimal | None:
-        """Add this turn's USD cost to the per-message + per-session totals.
+    async def record_turn(self, usage: TokenUsage) -> Decimal | None:
+        """Add this turn's USD cost to the per-message + per-session totals (and, when
+        the monthly dimension is configured, to the durable per-user-monthly ledger).
 
         The cost is ``input × input_rate + output × output_rate`` (053). Returns the
         turn's cost, or ``None`` (fail-soft) when the model has no price — in which case
-        nothing is accumulated.
+        nothing is accumulated. The monthly ledger ``add`` is **fail-open** (063; ADR
+        0010 D9): a ledger outage sets :attr:`ledger_unavailable` and skips the monthly
+        accumulation for that turn — never a crash, never a denial. With no monthly
+        dimension this awaits nothing new (byte-identical to 055).
         """
         cost = self.pricing.cost(usage, self.model_id)
         if cost is None:
@@ -71,18 +102,36 @@ class BudgetChecker:
         self._unpriced = False
         self._message_spent += cost
         self._session_spent += cost
+        if self._monthly_active():
+            assert self.ledger is not None and self.principal_id is not None
+            try:
+                self._monthly_total = await self.ledger.add(
+                    self.principal_id, self.month(), cost
+                )
+                self._ledger_unavailable = False
+            except Exception:
+                # FAIL-OPEN: a ledger outage must not crash or deny the run; the monthly
+                # cap is simply not enforced for this turn (a public-safe diagnostic is
+                # emitted by the loop).
+                self._ledger_unavailable = True
         return cost
 
     def exceeded(self) -> bool:
-        """Whether a configured per-message OR per-session USD cap is now crossed."""
+        """Whether a configured per-message, per-session, OR per-user-monthly USD cap is
+        now crossed."""
         if (
             self.caps.per_message_usd is not None
             and self._message_spent > self.caps.per_message_usd
         ):
             return True
-        return (
+        if (
             self.caps.per_session_usd is not None
             and self._session_spent > self.caps.per_session_usd
+        ):
+            return True
+        return (
+            self.per_user_monthly_usd is not None
+            and self._monthly_total > self.per_user_monthly_usd
         )
 
     @property
@@ -94,3 +143,9 @@ class BudgetChecker:
     def unpriced(self) -> bool:
         """Whether the most recent recorded turn had no price (fail-soft)."""
         return self._unpriced
+
+    @property
+    def ledger_unavailable(self) -> bool:
+        """Whether the most recent recorded turn could not reach the durable monthly
+        ledger (063; fail-open — the monthly cap was not enforced that turn)."""
+        return self._ledger_unavailable

@@ -10,7 +10,7 @@ principal_id on create + resume; default-off byte-identical. Per ADR 0010 (all f
 
 ## Phase 1: BudgetChecker monthly dimension (P1) 🎯
 
-- [ ] T001 In `src/loopplane/budget/__init__.py`: add the optional monthly dimension to
+- [x] T001 In `src/loopplane/budget/__init__.py`: add the optional monthly dimension to
   `BudgetChecker` — `ledger: UsdLedger | None = None`, `principal_id: str | None = None`, `clock:
   Callable[[], datetime] = (default a UTC now)`, `per_user_monthly_usd: Decimal | None = None` + an
   internal `_monthly_total: Decimal`. Make `record_turn` **async**: compute the (priced) cost as
@@ -24,14 +24,14 @@ principal_id on create + resume; default-off byte-identical. Per ADR 0010 (all f
 
 ## Phase 2: Loop await (P1)
 
-- [ ] T002 In `src/loopplane/loop/loop.py` ~328-329: `await` the now-async `record_turn` —
+- [x] T002 In `src/loopplane/loop/loop.py` ~328-329: `await` the now-async `record_turn` —
   `(await self._budget_checker.record_turn(increment.usage)) is None`. No other loop change (the
   enforcement point + `exceeded()` check at ~228 + the `budget-exceeded` termination are unchanged).
   When `budget_checker` is None the path is unchanged.
 
 ## Phase 3: Controller + config wiring (P1)
 
-- [ ] T003 In `src/loopplane/controller/controller.py`: add `usd_ledger: UsdLedger | None = None` +
+- [x] T003 In `src/loopplane/controller/controller.py`: add `usd_ledger: UsdLedger | None = None` +
   `per_user_monthly_usd: Decimal | None = None` ctor kwargs (mirroring the 055 budget kwargs). In
   `_assemble`, build the `BudgetChecker` monthly dim from `usd_ledger` + `per_user_monthly_usd` +
   the `principal_id` already passed to `_assemble` — and EXTEND the build condition so a checker is
@@ -39,7 +39,7 @@ principal_id on create + resume; default-off byte-identical. Per ADR 0010 (all f
   `principal_id` into the BudgetChecker on BOTH create AND resume** — `resume` currently omits it
   (~270-281); pass the persisted `principal_id` (from the checkpoint/`_Session`) so the monthly cap
   enforces on resumed sessions.
-- [ ] T004 In `src/loopplane/host/config.py`: add `RuntimeConfig.per_user_monthly_usd` (`Decimal |
+- [x] T004 In `src/loopplane/host/config.py`: add `RuntimeConfig.per_user_monthly_usd` (`Decimal |
   None = None`) + a host-supplied `usd_ledger` field (`UsdLedger | None`); coerce/validate
   (non-negative Decimal) in `from_mapping`/`validate_config`. In `src/loopplane/host/assembly.py`:
   forward `usd_ledger` + `per_user_monthly_usd` to the `RuntimeController` kwargs (mirror the 055
@@ -47,7 +47,7 @@ principal_id on create + resume; default-off byte-identical. Per ADR 0010 (all f
 
 ## Phase 4: Tests (P1/P2)
 
-- [ ] T005 Update the existing 055 budget tests that call `record_turn` synchronously → `await` (the
+- [x] T005 Update the existing 055 budget tests that call `record_turn` synchronously → `await` (the
   signature is now async). Add monthly-cap tests (offline; a `UsdLedger` [File/in-memory] + a scripted
   model): (a) a monthly cap crossed → terminate `budget-exceeded` after the crossing turn (output
   retained); under the cap → completes; (b) each turn's cost is added to the ledger
@@ -59,7 +59,7 @@ principal_id on create + resume; default-off byte-identical. Per ADR 0010 (all f
 
 ## Phase 5: Gates
 
-- [ ] T006 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
+- [x] T006 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
   (strict), `pytest` (full — additive + default-off byte-identity). Confirm: the structural audits
   (`test_no_execution_path_outside_the_gateway` [controller/loop import only foundational, NOT the
   tools layer], `test_public_safety`) + the events serialize/`SCHEMA_VERSION` tests (UNCHANGED — reuse
