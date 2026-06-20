@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from loopplane.tools.background import BackgroundTask
     from loopplane.tools.messaging import Member, Message
     from loopplane.tools.scheduling import Schedule
+    from loopplane.tools.worktree import Worktree
 
 
 @dataclass
@@ -123,6 +124,28 @@ class SwarmSupervisor(Protocol):
 SwarmSupervisorFactory = Callable[["anyio.abc.TaskGroup"], "SwarmSupervisor | None"]
 
 
+class WorktreeManager(Protocol):
+    """The per-run worktree-isolation manager interface (spec 051).
+
+    The concrete ``WorktreeManager`` (``loopplane.tools.worktree``) implements it
+    structurally; declared here so the controller and ``RunContext`` can name it WITHOUT
+    importing the tools layer (Constitution V). The scope owner (the Dispatcher / the
+    one-shot ``host.run``) builds a concrete manager from the session's working scope,
+    stamps it on the run's context; ``cleanup()`` removes the managed worktrees at scope
+    exit. No task group — git ops are synchronous.
+    """
+
+    async def create(self, *, branch: str | None = None) -> Worktree | str: ...
+    def list_worktrees(self) -> list[Worktree]: ...
+    async def remove(self, worktree_id: str) -> str | None: ...
+    async def cleanup(self) -> None: ...
+
+
+# A scope owner builds a manager from the session's working scope (NOT a task group —
+# worktree ops are synchronous); typed without the tools layer (Constitution V).
+WorktreeManagerFactory = Callable[["Path"], "WorktreeManager | None"]
+
+
 @dataclass
 class RunContext:
     session_id: str
@@ -168,3 +191,7 @@ class RunContext:
     # (the reserved ``"coordinator"`` id). A member carries its own id, stamped into
     # its child context so its messaging tools resolve "self".
     swarm_member_id: str | None = None
+    # Per-run worktree-isolation manager (spec 051). ``None`` means worktrees are off
+    # (the tools return a normalized "not enabled" error). Built by the scope owner from
+    # the session's working scope; set only in ``RuntimeController.drive()`` (per-run).
+    worktrees: WorktreeManager | None = None

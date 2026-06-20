@@ -181,6 +181,13 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         gateway.register_adapter(
             SwarmToolsAdapter(max_subagent_depth=config.max_subagent_depth)
         )
+    # Opt-in worktree isolation (spec 051): register the three worktree tools only when
+    # a non-zero cap is set (0 → no tools, byte-identical). The manager is built per-run
+    # by the scope owner; the tools read it via RunContext.worktrees.
+    if config.max_worktrees >= 1:
+        from loopplane.tools.worktree import WorktreeToolsAdapter
+
+        gateway.register_adapter(WorktreeToolsAdapter())
 
     sink = RunSink()
     if config.observability:
@@ -228,6 +235,13 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
             config.max_swarm_messages,
         )
         controller_kwargs["max_swarm_members"] = config.max_swarm_members
+    if config.max_worktrees >= 1:
+        from loopplane.tools.worktree import make_worktree_manager_factory
+
+        controller_kwargs["worktree_manager_factory"] = make_worktree_manager_factory(
+            config.max_worktrees
+        )
+        controller_kwargs["max_worktrees"] = config.max_worktrees
 
     controller = RuntimeController(
         model=config.model,

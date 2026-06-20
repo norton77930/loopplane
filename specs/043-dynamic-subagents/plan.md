@@ -172,7 +172,7 @@ src/loopplane/
 │   │                       #   history snapshot; child events captured (no live sink) + aggregate_events.
 │   └── __init__.py         # MODIFY: export SpawnSubagentAdapter (additive __all__)
 ├── host/
-│   ├── config.py           # MODIFY: RuntimeConfig + max_subagent_depth: int = 1 (+ from_mapping
+│   ├── config.py           # MODIFY: RuntimeConfig + max_subagent_depth: int = 0 (+ from_mapping
 │   │                       #   coercion; validate_config range check >= 0); no secret
 │   └── assembly.py         # MODIFY: when config.max_subagent_depth >= 1, register a SpawnSubagentAdapter
 │   │                       #   with the parent model + a child-config factory (parent config, depth+1,

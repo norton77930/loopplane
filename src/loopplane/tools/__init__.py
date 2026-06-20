@@ -9,6 +9,7 @@ from loopplane.tools.scheduling import ScheduleSupervisor, SchedulingToolsAdapte
 from loopplane.tools.search import ReferenceSearchProvider
 from loopplane.tools.subagent import SpawnSubagentAdapter
 from loopplane.tools.web import SearchProvider, SearchResult, WebToolAdapter
+from loopplane.tools.worktree import WorktreeManager, WorktreeToolsAdapter
 
 __all__ = [
     "BackgroundTaskSupervisor",
@@ -23,4 +24,6 @@ __all__ = [
     "SwarmSupervisor",
     "SwarmToolsAdapter",
     "WebToolAdapter",
+    "WorktreeManager",
+    "WorktreeToolsAdapter",
 ]

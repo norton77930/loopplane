@@ -161,6 +161,12 @@ class RuntimeConfig:
     # The per-run message cap for spec 050 (the total in-run agent-to-agent messages). A
     # bare integer; carries no secret.
     max_swarm_messages: int = 0
+    # Opt-in worktree isolation (spec 051): the per-run managed-worktree cap. Off by
+    # default (`0` → NO worktree tools registered, byte-identical). When a host sets it
+    # >= 1, the three worktree tools are registered and a run may create up to this many
+    # isolated git worktrees under a managed area of the working scope. A bare integer;
+    # carries no secret.
+    max_worktrees: int = 0
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -195,6 +201,7 @@ class RuntimeConfig:
             max_schedules=int(data.get("max_schedules", 0)),
             max_swarm_members=int(data.get("max_swarm_members", 0)),
             max_swarm_messages=int(data.get("max_swarm_messages", 0)),
+            max_worktrees=int(data.get("max_worktrees", 0)),
         )
 
 
@@ -345,6 +352,9 @@ def validate_config(config: RuntimeConfig) -> None:
 
     if config.max_swarm_messages < 0:
         raise ConfigError("max_swarm_messages must be a non-negative integer")
+
+    if config.max_worktrees < 0:
+        raise ConfigError("max_worktrees must be a non-negative integer")
 
 
 def approval_effects(

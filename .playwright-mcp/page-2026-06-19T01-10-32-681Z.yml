@@ -1,0 +1,26 @@
+- generic [ref=e3]:
+  - button "Log out" [ref=e4] [cursor=pointer]
+  - generic [ref=e5]:
+    - complementary [ref=e6]:
+      - generic [ref=e7]: LoopPlane
+      - button "+ 新對話" [ref=e8] [cursor=pointer]
+      - generic [ref=e9]: 尚無工作階段。
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - generic [ref=e12]: LoopPlane
+        - generic [ref=e13]: 已斷線
+        - button "檢視" [ref=e15] [cursor=pointer]
+        - combobox "language" [ref=e16]:
+          - option "English"
+          - option "繁體中文" [selected]
+        - button "toggle theme" [ref=e17] [cursor=pointer]: Dark
+      - alert [ref=e26]: Disconnected — please retry.
+      - generic [ref=e27]:
+        - generic [ref=e28]: You
+        - generic [ref=e29]: Hello! Show me a markdown list and a code block.
+      - generic [ref=e19]:
+        - generic [ref=e22] [cursor=pointer]: Attach
+        - generic [ref=e23]:
+          - textbox "prompt" [ref=e24]:
+            - /placeholder: 傳訊息給 LoopPlane...
+          - button "傳送" [disabled] [ref=e25]

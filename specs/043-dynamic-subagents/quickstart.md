@@ -34,7 +34,7 @@ returns the child's **final answer** as the tool result. The parent uses it and 
   swarm (those are deferred).
 - **Bounded recursion**: a child runs at `parent_depth + 1`. At/over `max_subagent_depth`, a further
   `spawn_subagent` is **denied** with a normalized error and **no** child run starts — subagents cannot
-  recurse without bound. With the default `max_subagent_depth=1`, the child cannot spawn a grandchild.
+  recurse without bound. With `max_subagent_depth=1` (the default `0` leaves the feature off), the child cannot spawn a grandchild.
 - **Failure-contained**: a child that errors, over-runs, fails validation, or returns nothing yields a
   **normalized** error to the parent (a public-safe marker, never a raw exception); the parent run never
   crashes.

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         BackgroundSupervisor,
         ScheduleSupervisor,
         SwarmSupervisor,
+        WorktreeManager,
     )
 
 _INCREMENT_TYPES = ("assistant-output-increment", "assistant-reasoning-increment")
@@ -100,6 +101,7 @@ class Dispatcher:
         self._supervisor: BackgroundSupervisor | None = None
         self._schedule_supervisor: ScheduleSupervisor | None = None
         self._swarm_supervisor: SwarmSupervisor | None = None
+        self._worktree_manager: WorktreeManager | None = None
 
     async def run(self) -> None:
         """Drive the round-trip until the inbound channel closes. On close
@@ -115,6 +117,11 @@ class Dispatcher:
                 task_group
             )
             self._swarm_supervisor = self._controller.make_swarm_supervisor(task_group)
+            # Worktree isolation (spec 051): a per-session manager from the working
+            # scope (no task group — synchronous git ops); cleaned up on close.
+            self._worktree_manager = self._controller.make_worktree_manager(
+                self._session_id
+            )
             try:
                 async for request in self._inbound:
                     await self._handle(request, task_group)
@@ -127,6 +134,8 @@ class Dispatcher:
                     self._schedule_supervisor.cancel_all()
                 if self._swarm_supervisor is not None:
                     self._swarm_supervisor.cancel_all()
+                if self._worktree_manager is not None:
+                    await self._worktree_manager.cleanup()
                 self._controller.on_reviewer_disconnect(self._session_id)
 
     async def _handle(
@@ -182,6 +191,7 @@ class Dispatcher:
                 background_supervisor=self._supervisor,
                 schedule_supervisor=self._schedule_supervisor,
                 swarm_supervisor=self._swarm_supervisor,
+                worktree_manager=self._worktree_manager,
             )
         finally:
             self._driving = False

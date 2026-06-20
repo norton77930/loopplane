@@ -152,6 +152,8 @@ The internal, web, and subagent-spawn tool adapters.
 - `ScheduleSupervisor` — the per-run supervisor that owns + fires scheduled child runs (spec 049).
 - `SwarmToolsAdapter` — the adapter for the swarm/messaging tools (dispatch/get/list + message send/inbox; spec 050).
 - `SwarmSupervisor` — the per-run supervisor that owns swarm members + their message inboxes (spec 050).
+- `WorktreeToolsAdapter` — the adapter for the worktree tools (create/list/remove; spec 051).
+- `WorktreeManager` — the per-run manager that owns + cleans up managed git worktrees (spec 051).
 
 ### `loopplane.adapters.mcp`
 

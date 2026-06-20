@@ -141,6 +141,10 @@ class LoopPlaneHost:
             principal_id=principal_id,
         )
         self._bind(sink, controller, session_id, on_event, on_approval)
+        # Worktree isolation (spec 051): a per-session manager from the working scope
+        # (no task group — synchronous git ops); cleaned up in the finally below.
+        # ``None`` when worktrees are disabled.
+        worktree_manager = controller.make_worktree_manager(session_id)
         try:
             if (
                 controller.max_background_tasks >= 1
@@ -172,6 +176,7 @@ class LoopPlaneHost:
                         schedule_supervisor=schedule_supervisor,
                         swarm_supervisor=swarm_supervisor,
                         swarm_member_id=self._swarm_member_id,
+                        worktree_manager=worktree_manager,
                     )
                     if supervisor is not None:
                         supervisor.cancel_all()
@@ -181,10 +186,15 @@ class LoopPlaneHost:
                         swarm_supervisor.cancel_all()
             else:
                 await controller.drive(
-                    session_id, _coerce_blocks(prompt), output_schema=output_schema
+                    session_id,
+                    _coerce_blocks(prompt),
+                    output_schema=output_schema,
+                    worktree_manager=worktree_manager,
                 )
             outcome = _build_outcome(controller, session_id, sink)
         finally:
+            if worktree_manager is not None:
+                await worktree_manager.cleanup()
             sink.unbind()
             self._active = False
         return outcome

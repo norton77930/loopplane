@@ -38,6 +38,8 @@ from loopplane.context import (
     ScheduleSupervisorFactory,
     SwarmSupervisor,
     SwarmSupervisorFactory,
+    WorktreeManager,
+    WorktreeManagerFactory,
 )
 from loopplane.events.emitter import EventEmitter, EventSink
 from loopplane.events.envelope import (
@@ -137,6 +139,8 @@ class RuntimeController:
         max_schedules: int = 0,
         swarm_supervisor_factory: SwarmSupervisorFactory | None = None,
         max_swarm_members: int = 0,
+        worktree_manager_factory: WorktreeManagerFactory | None = None,
+        max_worktrees: int = 0,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -164,6 +168,12 @@ class RuntimeController:
         # byte-identical. The controller stays tool-agnostic (Constitution V).
         self._swarm_supervisor_factory = swarm_supervisor_factory
         self._max_swarm_members = max_swarm_members
+        # Worktree isolation (spec 051): an injected manager factory + count cap, to
+        # build a per-session worktree manager from the working scope; off by default
+        # (None / 0) → byte-identical. No task group (synchronous git ops). The
+        # controller stays tool-agnostic (Constitution V).
+        self._worktree_manager_factory = worktree_manager_factory
+        self._max_worktrees = max_worktrees
         # Optional lifecycle hooks (feature 015); absent by default (FR-011).
         # process_setup fires at most once per controller lifetime.
         self._hooks = hooks
@@ -421,6 +431,16 @@ class RuntimeController:
             return None
         return self._swarm_supervisor_factory(task_group)
 
+    def make_worktree_manager(self, session_id: str) -> WorktreeManager | None:
+        """Build a per-session worktree manager from the session's working scope (spec
+        051), or ``None`` when worktrees are off. No task group (synchronous git ops);
+        the concrete manager comes from the injected factory, so the controller stays
+        tool-agnostic (Constitution V)."""
+
+        if self._max_worktrees < 1 or self._worktree_manager_factory is None:
+            return None
+        return self._worktree_manager_factory(self._require(session_id).working_scope)
+
     async def drive(
         self,
         session_id: str,
@@ -430,6 +450,7 @@ class RuntimeController:
         schedule_supervisor: ScheduleSupervisor | None = None,
         swarm_supervisor: SwarmSupervisor | None = None,
         swarm_member_id: str | None = None,
+        worktree_manager: WorktreeManager | None = None,
     ) -> None:
         """Run one complete turn cycle; ends with exactly one run-terminated
         event (FR-001).
@@ -474,6 +495,7 @@ class RuntimeController:
             schedules=schedule_supervisor,
             swarm=swarm_supervisor,
             swarm_member_id=swarm_member_id,
+            worktrees=worktree_manager,
         )
         try:
             await session.loop.run(input_blocks, context)
