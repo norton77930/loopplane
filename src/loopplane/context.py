@@ -14,6 +14,7 @@ import anyio
 if TYPE_CHECKING:
     from loopplane.approval.interactions import InteractionBroker
     from loopplane.tools.background import BackgroundTask
+    from loopplane.tools.messaging import Member, Message
     from loopplane.tools.scheduling import Schedule
 
 
@@ -92,6 +93,36 @@ ScheduleSupervisorFactory = Callable[
 ]
 
 
+class SwarmSupervisor(Protocol):
+    """The per-run swarm / agent-to-agent messaging supervisor interface (spec 050;
+    ADR 0003).
+
+    The concrete ``SwarmSupervisor`` (``loopplane.tools.messaging``) implements it
+    structurally; declared here so the controller and ``RunContext`` can name it WITHOUT
+    importing the tools layer (Constitution V). The scope owner (the Dispatcher's task
+    group / the one-shot ``host.run``) builds a concrete supervisor and stamps it on the
+    run's context. Messages are a SEPARATE in-run registry, NOT runtime events (ADR 0003
+    D2), so the Event Bus is unchanged.
+    """
+
+    def dispatch(
+        self,
+        instruction: str,
+        *,
+        allowed_tools: tuple[str, ...] | None,
+        child_depth: int,
+        working_scope: Path,
+    ) -> str | None: ...
+    def get(self, member_id: str) -> Member | None: ...
+    def list_members(self) -> list[Member]: ...
+    def send(self, from_id: str, to_id: str, content: str) -> str: ...
+    def inbox(self, member_id: str) -> list[Message]: ...
+    def cancel_all(self) -> None: ...
+
+
+SwarmSupervisorFactory = Callable[["anyio.abc.TaskGroup"], "SwarmSupervisor | None"]
+
+
 @dataclass
 class RunContext:
     session_id: str
@@ -129,3 +160,11 @@ class RunContext:
     # Dispatcher's task group / the one-shot ``host.run``) and set only in
     # ``RuntimeController.drive()``; per-run.
     schedules: ScheduleSupervisor | None = None
+    # Per-run swarm / messaging supervisor (spec 050; ADR 0003). ``None`` = off (the
+    # tools return a "not enabled" error). Built by the scope owner, set in ``drive``.
+    # Messages are a separate registry, not events (D2).
+    swarm: SwarmSupervisor | None = None
+    # The caller's member id within a swarm (spec 050); ``None`` = the top-level run
+    # (the reserved ``"coordinator"`` id). A member carries its own id, stamped into
+    # its child context so its messaging tools resolve "self".
+    swarm_member_id: str | None = None

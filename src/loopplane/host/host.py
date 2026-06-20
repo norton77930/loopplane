@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import anyio
 
@@ -35,6 +35,9 @@ from loopplane.host.inspect import (
 from loopplane.host.sink import RunSink
 from loopplane.loop.history import HistoryEntry
 from loopplane.model import ContentBlock, TextBlock
+
+if TYPE_CHECKING:
+    from loopplane.context import SwarmSupervisor
 
 Prompt = str | Sequence[ContentBlock]
 
@@ -93,6 +96,8 @@ class LoopPlaneHost:
         *,
         working_scope: Path | None = None,
         subagent_depth: int = 0,
+        swarm_supervisor: SwarmSupervisor | None = None,
+        swarm_member_id: str | None = None,
     ) -> None:
         # Assembly validates the config and fails fast before any run (FR-005).
         # ``subagent_depth`` (spec 043) is this host's recursion depth; 0 for a
@@ -103,6 +108,11 @@ class LoopPlaneHost:
         self._config = config
         self._working_scope = working_scope or Path.cwd()
         self._active = False
+        # Swarm (spec 050; ADR 0003): when this host runs a swarm MEMBER, it carries the
+        # SHARED supervisor + the member's id so the member's run uses the same in-run
+        # message registry and resolves "self". ``None`` for a top-level host.
+        self._swarm_supervisor = swarm_supervisor
+        self._swarm_member_id = swarm_member_id
 
     @property
     def skill_problems(self) -> tuple[str, ...]:
@@ -132,27 +142,43 @@ class LoopPlaneHost:
         )
         self._bind(sink, controller, session_id, on_event, on_approval)
         try:
-            if controller.max_background_tasks >= 1 or controller.max_schedules >= 1:
-                # Background tasks (048) + schedules (049): own a task group for this
-                # run so the tools can launch child runs; cancel any still-pending task
-                # and any active schedule timer at end (an infinite interval timer would
-                # otherwise keep the task group from exiting).
+            if (
+                controller.max_background_tasks >= 1
+                or controller.max_schedules >= 1
+                or controller.max_swarm_members >= 1
+            ):
+                # Background tasks (048) + schedules (049) + swarm (050): own a task
+                # group so the tools can launch child runs; cancel pending work at end
+                # (an interval timer / running member would otherwise block exit).
                 async with anyio.create_task_group() as task_group:
                     supervisor = controller.make_background_supervisor(task_group)
                     schedule_supervisor = controller.make_schedule_supervisor(
                         task_group
                     )
+                    # A MEMBER child host carries the SHARED supervisor (it runs as that
+                    # member); a top-level run builds its own. Cancel only what we own.
+                    swarm_supervisor: SwarmSupervisor | None
+                    if self._swarm_supervisor is not None:
+                        swarm_supervisor = self._swarm_supervisor
+                        own_swarm = False
+                    else:
+                        swarm_supervisor = controller.make_swarm_supervisor(task_group)
+                        own_swarm = True
                     await controller.drive(
                         session_id,
                         _coerce_blocks(prompt),
                         output_schema=output_schema,
                         background_supervisor=supervisor,
                         schedule_supervisor=schedule_supervisor,
+                        swarm_supervisor=swarm_supervisor,
+                        swarm_member_id=self._swarm_member_id,
                     )
                     if supervisor is not None:
                         supervisor.cancel_all()
                     if schedule_supervisor is not None:
                         schedule_supervisor.cancel_all()
+                    if own_swarm and swarm_supervisor is not None:
+                        swarm_supervisor.cancel_all()
             else:
                 await controller.drive(
                     session_id, _coerce_blocks(prompt), output_schema=output_schema

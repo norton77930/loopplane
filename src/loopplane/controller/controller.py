@@ -36,6 +36,8 @@ from loopplane.context import (
     RunContext,
     ScheduleSupervisor,
     ScheduleSupervisorFactory,
+    SwarmSupervisor,
+    SwarmSupervisorFactory,
 )
 from loopplane.events.emitter import EventEmitter, EventSink
 from loopplane.events.envelope import (
@@ -133,6 +135,8 @@ class RuntimeController:
         max_background_tasks: int = 0,
         schedule_supervisor_factory: ScheduleSupervisorFactory | None = None,
         max_schedules: int = 0,
+        swarm_supervisor_factory: SwarmSupervisorFactory | None = None,
+        max_swarm_members: int = 0,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -155,6 +159,11 @@ class RuntimeController:
         # byte-identical. The controller stays tool-agnostic (Constitution V).
         self._schedule_supervisor_factory = schedule_supervisor_factory
         self._max_schedules = max_schedules
+        # Agent messaging & swarm (spec 050; ADR 0003): an injected supervisor factory +
+        # cap to build a per-run swarm supervisor on demand; off by default (None / 0) →
+        # byte-identical. The controller stays tool-agnostic (Constitution V).
+        self._swarm_supervisor_factory = swarm_supervisor_factory
+        self._max_swarm_members = max_swarm_members
         # Optional lifecycle hooks (feature 015); absent by default (FR-011).
         # process_setup fires at most once per controller lifetime.
         self._hooks = hooks
@@ -395,6 +404,23 @@ class RuntimeController:
             return None
         return self._schedule_supervisor_factory(task_group)
 
+    @property
+    def max_swarm_members(self) -> int:
+        return self._max_swarm_members
+
+    def make_swarm_supervisor(
+        self, task_group: anyio.abc.TaskGroup
+    ) -> SwarmSupervisor | None:
+        """Build a per-run swarm supervisor bound to ``task_group`` (spec 050), or
+        ``None`` when swarm is off. The scope owner (the Dispatcher / one-shot
+        ``host.run``) calls this with a task group it owns and passes the result to
+        ``drive``; the concrete supervisor comes from the injected factory, so the
+        controller stays tool-agnostic (Constitution V)."""
+
+        if self._max_swarm_members < 1 or self._swarm_supervisor_factory is None:
+            return None
+        return self._swarm_supervisor_factory(task_group)
+
     async def drive(
         self,
         session_id: str,
@@ -402,6 +428,8 @@ class RuntimeController:
         output_schema: dict[str, object] | None = None,
         background_supervisor: BackgroundSupervisor | None = None,
         schedule_supervisor: ScheduleSupervisor | None = None,
+        swarm_supervisor: SwarmSupervisor | None = None,
+        swarm_member_id: str | None = None,
     ) -> None:
         """Run one complete turn cycle; ends with exactly one run-terminated
         event (FR-001).
@@ -444,6 +472,8 @@ class RuntimeController:
             output_schema=output_schema,
             background_tasks=background_supervisor,
             schedules=schedule_supervisor,
+            swarm=swarm_supervisor,
+            swarm_member_id=swarm_member_id,
         )
         try:
             await session.loop.run(input_blocks, context)

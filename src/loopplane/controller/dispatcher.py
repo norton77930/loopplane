@@ -21,7 +21,11 @@ from loopplane.events.envelope import RuntimeEvent
 from loopplane.model.content import ContentBlock
 
 if TYPE_CHECKING:
-    from loopplane.context import BackgroundSupervisor, ScheduleSupervisor
+    from loopplane.context import (
+        BackgroundSupervisor,
+        ScheduleSupervisor,
+        SwarmSupervisor,
+    )
 
 _INCREMENT_TYPES = ("assistant-output-increment", "assistant-reasoning-increment")
 
@@ -95,6 +99,7 @@ class Dispatcher:
         self._driving = False
         self._supervisor: BackgroundSupervisor | None = None
         self._schedule_supervisor: ScheduleSupervisor | None = None
+        self._swarm_supervisor: SwarmSupervisor | None = None
 
     async def run(self) -> None:
         """Drive the round-trip until the inbound channel closes. On close
@@ -109,6 +114,7 @@ class Dispatcher:
             self._schedule_supervisor = self._controller.make_schedule_supervisor(
                 task_group
             )
+            self._swarm_supervisor = self._controller.make_swarm_supervisor(task_group)
             try:
                 async for request in self._inbound:
                     await self._handle(request, task_group)
@@ -119,6 +125,8 @@ class Dispatcher:
                     self._supervisor.cancel_all()
                 if self._schedule_supervisor is not None:
                     self._schedule_supervisor.cancel_all()
+                if self._swarm_supervisor is not None:
+                    self._swarm_supervisor.cancel_all()
                 self._controller.on_reviewer_disconnect(self._session_id)
 
     async def _handle(
@@ -173,6 +181,7 @@ class Dispatcher:
                 blocks,
                 background_supervisor=self._supervisor,
                 schedule_supervisor=self._schedule_supervisor,
+                swarm_supervisor=self._swarm_supervisor,
             )
         finally:
             self._driving = False

@@ -46,7 +46,9 @@ from loopplane.skills import SkillToolAdapter, load_skills, skill_profiles
 from loopplane.skills.loader import LoadedSkill
 
 if TYPE_CHECKING:
+    from loopplane.context import SwarmSupervisor
     from loopplane.host.host import LoopPlaneHost
+    from loopplane.tools.messaging import MemberHostFactory
     from loopplane.tools.subagent import ChildHostFactory
 
 
@@ -169,6 +171,16 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         gateway.register_adapter(
             SchedulingToolsAdapter(max_subagent_depth=config.max_subagent_depth)
         )
+    # Opt-in agent messaging & swarm (spec 050; ADR 0003): register the five swarm tools
+    # only when a non-zero team-size cap is set (0 → no tools, byte-identical). The
+    # supervisor is built per-run by the scope owner; the tools read it via
+    # RunContext.swarm. Messages are a separate in-run registry (NOT events).
+    if config.max_swarm_members >= 1:
+        from loopplane.tools.messaging import SwarmToolsAdapter
+
+        gateway.register_adapter(
+            SwarmToolsAdapter(max_subagent_depth=config.max_subagent_depth)
+        )
 
     sink = RunSink()
     if config.observability:
@@ -207,6 +219,15 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
             )
         )
         controller_kwargs["max_schedules"] = config.max_schedules
+    if config.max_swarm_members >= 1:
+        from loopplane.tools.messaging import make_swarm_supervisor_factory
+
+        controller_kwargs["swarm_supervisor_factory"] = make_swarm_supervisor_factory(
+            _make_member_host_builder(config),
+            config.max_swarm_members,
+            config.max_swarm_messages,
+        )
+        controller_kwargs["max_swarm_members"] = config.max_swarm_members
 
     controller = RuntimeController(
         model=config.model,
@@ -318,6 +339,35 @@ def _make_child_host_builder(parent_config: RuntimeConfig) -> ChildHostFactory:
         )
 
     return build_child_host
+
+
+def _make_member_host_builder(parent_config: RuntimeConfig) -> MemberHostFactory:
+    """Build the closure the swarm supervisor uses to create a member's child host.
+
+    Like :func:`_make_child_host_builder`, but bakes the SHARED supervisor + the
+    member id into the child host, so the member's run uses the same in-run message
+    registry and resolves "self" (ADR 0003). The supervisor passes itself + the id.
+    """
+
+    def build_member_host(
+        supervisor: SwarmSupervisor,
+        member_id: str,
+        depth: int,
+        allowed_tools: tuple[str, ...] | None,
+        working_scope: Path,
+    ) -> LoopPlaneHost:
+        from loopplane.host.host import LoopPlaneHost
+
+        child_config = _restrict_config(parent_config, allowed_tools)
+        return LoopPlaneHost(
+            child_config,
+            working_scope=working_scope,
+            subagent_depth=depth,
+            swarm_supervisor=supervisor,
+            swarm_member_id=member_id,
+        )
+
+    return build_member_host
 
 
 def _restrict_config(

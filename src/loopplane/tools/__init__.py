@@ -4,6 +4,7 @@ Adapter (spec 043)."""
 
 from loopplane.tools.background import BackgroundTasksAdapter, BackgroundTaskSupervisor
 from loopplane.tools.internal import InternalToolAdapter
+from loopplane.tools.messaging import SwarmSupervisor, SwarmToolsAdapter
 from loopplane.tools.scheduling import ScheduleSupervisor, SchedulingToolsAdapter
 from loopplane.tools.search import ReferenceSearchProvider
 from loopplane.tools.subagent import SpawnSubagentAdapter
@@ -19,5 +20,7 @@ __all__ = [
     "SearchProvider",
     "SearchResult",
     "SpawnSubagentAdapter",
+    "SwarmSupervisor",
+    "SwarmToolsAdapter",
     "WebToolAdapter",
 ]

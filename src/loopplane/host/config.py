@@ -153,6 +153,14 @@ class RuntimeConfig:
     # scheduling tools are registered and a run may have up to this many active
     # schedules. A bare integer; carries no secret.
     max_schedules: int = 0
+    # Opt-in agent-to-agent messaging & swarm (spec 050; ADR 0003): the per-run team
+    # cap. Off by default (`0` → NO swarm tools registered, byte-identical). When a
+    # host sets it >= 1 (with `max_subagent_depth` >= 1), the five swarm tools are
+    # registered and a run may dispatch up to this many members. A bare integer.
+    max_swarm_members: int = 0
+    # The per-run message cap for spec 050 (the total in-run agent-to-agent messages). A
+    # bare integer; carries no secret.
+    max_swarm_messages: int = 0
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -185,6 +193,8 @@ class RuntimeConfig:
             max_subagent_depth=int(data.get("max_subagent_depth", 0)),
             max_background_tasks=int(data.get("max_background_tasks", 0)),
             max_schedules=int(data.get("max_schedules", 0)),
+            max_swarm_members=int(data.get("max_swarm_members", 0)),
+            max_swarm_messages=int(data.get("max_swarm_messages", 0)),
         )
 
 
@@ -329,6 +339,12 @@ def validate_config(config: RuntimeConfig) -> None:
 
     if config.max_schedules < 0:
         raise ConfigError("max_schedules must be a non-negative integer")
+
+    if config.max_swarm_members < 0:
+        raise ConfigError("max_swarm_members must be a non-negative integer")
+
+    if config.max_swarm_messages < 0:
+        raise ConfigError("max_swarm_messages must be a non-negative integer")
 
 
 def approval_effects(

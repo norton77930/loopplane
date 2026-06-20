@@ -150,6 +150,8 @@ The internal, web, and subagent-spawn tool adapters.
 - `BackgroundTaskSupervisor` — the per-run supervisor that owns + tracks background tasks (spec 048).
 - `SchedulingToolsAdapter` — the adapter for the scheduling tools (create/get/list/cancel; spec 049).
 - `ScheduleSupervisor` — the per-run supervisor that owns + fires scheduled child runs (spec 049).
+- `SwarmToolsAdapter` — the adapter for the swarm/messaging tools (dispatch/get/list + message send/inbox; spec 050).
+- `SwarmSupervisor` — the per-run supervisor that owns swarm members + their message inboxes (spec 050).
 
 ### `loopplane.adapters.mcp`
 
