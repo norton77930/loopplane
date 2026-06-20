@@ -72,4 +72,16 @@ default-unused byte-identical; no content/event-schema change.
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-20) — 0 critical, 0 high, 1 low (informational). 100% requirement
+coverage (FR-001..FR-007 and SC-001..003 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ **ADR 0007** ↔ data-model ↔ contract ↔ tasks agree (resources
+as Gateway-routed `{server}:list_resources`/`:read_resource` synthetic tools dispatching to the
+session resource APIs → existing TextBlock/ImageBlock; per-server isolation for resource-less
+servers; the config `auth_token` → Authorization header on http/sse [websocket: SDK has no headers,
+documented]; default-unused byte-identity; token public-safe). **Additive — a small ADR (0007)**:
+resources reach the model ONLY via the Gateway (V); **no content-model/event-schema/SCHEMA_VERSION
+change** (VI — existing block types); confined to `loopplane.adapters.mcp`; no runtime/loop/gateway-
+core change. No Constitution violation (I/IV/V/VI/VII/IX/X). Low note (informational): confirm at
+implement the exact `ReadResourceResult.contents` shape (TextResourceContents.text →TextBlock;
+BlobResourceContents.blob+mimeType →ImageBlock for images) and that no resource read introduces a new
+content type (if it would, STOP — a 2nd boundary). **Cleared for `/speckit-implement`.**
