@@ -1,8 +1,0 @@
-- generic [ref=e4]:
-  - heading "LoopPlane" [level=1] [ref=e5]
-  - paragraph [ref=e6]: Sign in with your access token to continue.
-  - generic [ref=e7]:
-    - generic [ref=e8]:
-      - text: Access token
-      - textbox "access token" [ref=e9]
-    - button "Log in" [ref=e10] [cursor=pointer]

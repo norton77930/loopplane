@@ -169,7 +169,7 @@ either way.
 | `src/loopplane/context.py` | + `RunContext.subagent_depth: int = 0` |
 | `src/loopplane/tools/subagent.py` | NEW `SpawnSubagentAdapter` (one tool) |
 | `src/loopplane/tools/__init__.py` | export `SpawnSubagentAdapter` |
-| `src/loopplane/host/config.py` | + `RuntimeConfig.max_subagent_depth: int = 0` (+ coercion + validation) |
+| `src/loopplane/host/config.py` | + `RuntimeConfig.max_subagent_depth: int = 1` (+ coercion + validation) |
 | `src/loopplane/host/assembly.py` | register the adapter when cap ≥ 1; child-host closure; pass depth to controller |
 | `src/loopplane/controller/controller.py` | + `subagent_depth` kwarg; `drive()` sets it on `RunContext` |
 
