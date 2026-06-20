@@ -64,4 +64,17 @@ the preset at the SAME decide stage. No ADR. Default `None` byte-identical. P1 (
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-21) — 0 critical, 0 high, 2 low (informational). 100% requirement
+coverage (FR-001..FR-006 and SC-001..003 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ data-model ↔ contract ↔ tasks agree (the
+`permission_mode_ruleset` builder + `PERMISSION_MODES` over the existing 039 `PermissionRuleSet`/
+`rule_dsl_policy`; the four mode semantics [acceptEdits/bypassPermissions/dontAsk/plan]; a
+`RuntimeConfig.permission_mode` selector fed through the SAME decider at the SAME decide stage; the
+documented precedence in `validate_config`; default `None` byte-identical). **Additive**: no new
+decider kind / gateway stage / Event-Bus / `SCHEMA_VERSION` / dependency change; composes the existing
+039 governance seam. No Constitution violation (I/III/IV/V/VI/VII/X). Low notes (informational): (1)
+the `acceptEdits` edit-tool name list must be cross-checked against the ACTUAL registered tool names
+(write_file/edit_file/notebook_edit[/undo_file]) at implement so the preset allows exactly the edit
+tools. (2) the new exported governance public name (`permission_mode_ruleset`/`PERMISSION_MODES`) must
+register in `docs/api-reference.md` (the bijection enumerates packages with `__all__`).
+**Cleared for `/speckit-implement`.**
