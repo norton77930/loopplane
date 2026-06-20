@@ -80,4 +80,17 @@ Event-Bus bypass); runtime core byte-identical; non-command input unchanged. P1 
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-21) — 0 critical, 0 high, 2 low (informational). 100% requirement
+coverage (FR-001..FR-006 and SC-001..003 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ data-model ↔ contract ↔ tasks agree (the `loopplane.commands`
+registry [`CommandContext`/`CommandResult`/`dispatch`, unknown→normalized] + the four handlers over
+existing seams [`/cost`→064, `/model`→the model list, `/memory`→`inspect_memory`, `/compact`→a new
+`compact_session` reusing `compact_history`] + the CLI REPL interception + a webapi `POST /commands`).
+**Additive host command surface**: routes ONLY through existing seams; the runtime core
+(loop/gateway/events/content) is byte-identical; non-command input unchanged; no new
+`TerminationReason`/`SCHEMA_VERSION` bump/dependency. No Constitution violation (I/III/IV/V/VI/VII/X).
+Low notes (informational): (1) commands are a host UX that call EXISTING host methods (not the
+gateway) — they are NOT tools, so `test_no_execution_path_outside_the_gateway` holds; keep the literal
+"loopplane.tools" out of any new loop/controller code. (2) the NEW `loopplane.commands` package must
+register a section in `docs/api-reference.md` (the bijection enumerates packages with `__all__`).
+**Cleared for `/speckit-implement`.**
