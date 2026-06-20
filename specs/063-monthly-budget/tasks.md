@@ -84,4 +84,19 @@ principal_id on create + resume; default-off byte-identical. Per ADR 0010 (all f
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-21) — 0 critical, 0 high, 2 low (informational). 100% requirement
+coverage (FR-001..FR-007 and SC-001..003 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ **ADR 0010** ↔ data-model ↔ contract ↔ tasks agree (the
+optional monthly dimension on `BudgetChecker` [ledger + principal_id + a UTC `YYYY-MM` clock +
+`per_user_monthly_usd`]; `record_turn` async [`await ledger.add` → fold into `exceeded()`]; the loop
+awaits it; reuse the existing `budget-exceeded` reason; FAIL-OPEN; principal_id on create + resume;
+`RuntimeConfig.per_user_monthly_usd` + a host `usd_ledger`; default-off byte-identical). **Additive —
+behind ADR 0010 (all forks settled)**: no new `TerminationReason`, no `SCHEMA_VERSION`/content change;
+the controller/loop import only `loopplane.budget`/`loopplane.ledger` (foundational, not the tools
+layer — the audit holds). No Constitution violation (I/III/IV/V/VI/VII/X). Low notes (informational):
+(1) the `record_turn` sync→async change (ADR 0010 D6) requires EVERY caller awaited — the loop
+(loop.py:328-329) + the 055 budget tests; verify none is left calling it synchronously (a coroutine
+would be silently truthy → the `is None` check breaks). (2) `principal_id` on resume must come from
+the PERSISTED checkpoint (the `SessionMetaPayload.principal_id` / `_Session.principal_id`); confirm
+resume reads it + threads it (the closed gap) — test a resumed session enforces. **Cleared for
+`/speckit-implement`.**
