@@ -86,4 +86,17 @@ Per ADR 0005. **No SCHEMA_VERSION bump; no Phase C (durable ledger).**
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-20) — 0 critical, 0 high, 2 low (informational). 100%
+requirement coverage (FR-001..FR-008 and SC-001..004 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ **ADR 0005** ↔ data-model ↔ contract ↔ tasks agree (the
+additive `budget-exceeded` `TerminationReason` [no SCHEMA_VERSION bump]; a new `loopplane.budget`
+`BudgetChecker` reusing 053 `PricingTable.cost`; the optional in-loop `budget_checker` collaborator;
+`RuntimeConfig` USD caps; controller/_assemble wiring + per-session spend on `_Session`; the
+consumer audit; stop-after-overage + fail-soft). The two boundary crossings (in-loop enforcement,
+IV; the additive `TerminationReason`, VI) are **maintainer-approved + recorded in ADR 0005**;
+additive + default-off byte-identical; no breaking 001/002 contract change, no `SCHEMA_VERSION`
+bump. No Constitution violation (III/IV/V/VI/X). Low notes are informational: (1) the
+`TerminationReason` consumer audit (T006) is load-bearing — esp. `checkpoint/rebuild.py` must NOT
+strand the input on `budget-exceeded` (it only special-cases `cancelled`); verified at implement;
+(2) the per-session USD counter resets on `resume()` (records don't reconstruct accumulated USD) —
+documented, accepted v1. **Cleared for `/speckit-implement`.**
