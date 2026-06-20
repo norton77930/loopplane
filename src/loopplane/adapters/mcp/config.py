@@ -15,7 +15,7 @@ class MCPServerConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
-    transport: Literal["stdio", "http"]
+    transport: Literal["stdio", "http", "sse", "websocket"]
     command: str | None = None
     args: tuple[str, ...] = ()
     url: str | None = None
@@ -24,8 +24,8 @@ class MCPServerConfig(BaseModel):
     def _check_transport_fields(self) -> MCPServerConfig:
         if self.transport == "stdio" and not self.command:
             raise ValueError("stdio transport requires a command")
-        if self.transport == "http" and not self.url:
-            raise ValueError("http transport requires a url")
+        if self.transport in ("http", "sse", "websocket") and not self.url:
+            raise ValueError(f"{self.transport} transport requires a url")
         return self
 
 

@@ -10,13 +10,13 @@ stdio/http byte-identical; no new dependency.
 
 ## Phase 1: Config (Foundational)
 
-- [ ] T001 In `src/loopplane/adapters/mcp/config.py`: extend `MCPServerConfig.transport` to
+- [x] T001 In `src/loopplane/adapters/mcp/config.py`: extend `MCPServerConfig.transport` to
   `Literal["stdio", "http", "sse", "websocket"]`; in `_check_transport_fields` require a `url` for
   `sse` + `websocket` (mirror the `http` arm — a clear "requires a url" error). stdio/http unchanged.
 
 ## Phase 2: Adapter branches (P1) 🎯
 
-- [ ] T002 In `src/loopplane/adapters/mcp/adapter.py` `_connect_one`: add an `sse` branch
+- [x] T002 In `src/loopplane/adapters/mcp/adapter.py` `_connect_one`: add an `sse` branch
   (`from mcp.client.sse import sse_client`; `read, write = await server_stack.enter_async_context(
   sse_client(config.url))`) and a `websocket` branch (`from mcp.client.websocket import
   websocket_client`; same shape) — branch-local imports mirroring the existing stdio/http branches;
@@ -27,7 +27,7 @@ stdio/http byte-identical; no new dependency.
 
 ## Phase 3: Tests (P1/P2)
 
-- [ ] T003 Add MCP adapter tests (offline, the SDK transport client stubbed/monkeypatched — NO
+- [x] T003 Add MCP adapter tests (offline, the SDK transport client stubbed/monkeypatched — NO
   network, mirroring the existing transport tests): (a) an `sse` config + a `url` connects via the
   stubbed `sse_client` and tools are discovered; (b) a `websocket` config likewise; (c) `sse` /
   `websocket` without a `url` → a clear validation error; (d) confirm stdio/http tests still pass
@@ -35,7 +35,7 @@ stdio/http byte-identical; no new dependency.
 
 ## Phase 4: Gates
 
-- [ ] T004 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
+- [x] T004 Run the four gates green: `ruff check`, `ruff format --check src tests`, `mypy src`
   (strict), `pytest` (full — additive + stdio/http byte-identity). Confirm the structural audits
   (`test_no_execution_path_outside_the_gateway`, `test_public_safety`) + the existing MCP suite pass.
   No new public name expected (no api-reference change unless a name is exported).

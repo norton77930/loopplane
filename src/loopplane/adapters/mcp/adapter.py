@@ -101,12 +101,24 @@ class MCPToolAdapter:
             read, write = await server_stack.enter_async_context(
                 stdio_client(parameters)
             )
-        else:
+        elif config.transport == "http":
             from mcp.client.streamable_http import streamablehttp_client
 
             assert config.url is not None
             read, write, _ = await server_stack.enter_async_context(
                 streamablehttp_client(config.url)
+            )
+        elif config.transport == "sse":
+            from mcp.client.sse import sse_client
+
+            assert config.url is not None
+            read, write = await server_stack.enter_async_context(sse_client(config.url))
+        else:
+            from mcp.client.websocket import websocket_client
+
+            assert config.url is not None
+            read, write = await server_stack.enter_async_context(
+                websocket_client(config.url)
             )
 
         session = await server_stack.enter_async_context(ClientSession(read, write))
