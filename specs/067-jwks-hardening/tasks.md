@@ -68,4 +68,16 @@ the legit verification path preserved. P1 (batch 064–072, 4/9, the last P1).
 
 ## Cross-Artifact Analysis (gate)
 
-_(filled at the analyze step)_
+**Result: PASS** (analyze, 2026-06-21) — 0 critical, 0 high, 2 low (informational). 100% requirement
+coverage (FR-001..FR-006 and SC-001..003 each map to ≥1 task); every task traces to a
+requirement/design item; spec ↔ plan ↔ data-model ↔ contract ↔ tasks agree (the `_JwksResolver`
+throttle [`refresh_min_interval`] + single-flight [`anyio.Lock` + re-check] + a bounded negative-kid
+cache; the `get_key` flow with a byte-identical cache hit + an always-on TTL/cold-start refresh + the
+throttled fresh-unknown-kid path; the `jwt_authenticator(refresh_min_interval=60.0)` knob). **Additive
+security hardening, default-safe**: confined to `webapi/auth_jwt.py`; no new dependency (behind the
+existing `loopplane[oauth]`); no Event-Bus/`SCHEMA_VERSION`/content change; the legit verification path
+preserved. No Constitution violation (I/III/IV/V/VI/VII/X). Low notes (informational): (1) the
+throttle/rotation tests must control time deterministically (monkeypatch/inject `time.monotonic`) to
+avoid wall-clock flakes; the spray/single-flight tests must use a counting fake `_fetch_jwks` (NO real
+network). (2) the negative-kid cache MUST be bounded (size cap + expiry eviction) so a spray of
+distinct kids cannot grow it without limit — verify at implement. **Cleared for `/speckit-implement`.**
