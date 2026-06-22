@@ -89,7 +89,7 @@ and webapi tests prove non-owner reconnect attempts cannot replay another princi
 ### Tests for User Story 3
 
 - [ ] T018 [US3] Extend `tests/contract/test_event_replay_store.py` with shared backend contract coverage for `FileEventReplayStore`, `SqliteEventReplayStore`, and `PostgresEventReplayStore` import-guard behavior.
-- [ ] T019 [US3] Add failing corruption and retention tests in `tests/contract/test_event_replay_store.py` for file and SQLite stores.
+- [ ] T019 [US3] Add failing corruption, unavailable-store, and retention tests in `tests/contract/test_event_replay_store.py` for file and SQLite stores.
 - [ ] T020 [US3] Add failing owner-scoping and delete-cleanup tests in `tests/integration/test_webapi_replay_store.py` for cross-principal reconnect attempts and session deletion.
 
 ### Implementation for User Story 3
@@ -159,4 +159,5 @@ and webapi tests prove non-owner reconnect attempts cannot replay another princi
 
 ## Cross-Artifact Analysis (gate)
 
-Pending `/speckit-analyze`.
+Passed `/speckit-analyze`: no blocking cross-artifact inconsistencies; medium unavailable-store
+coverage wording was corrected in T019 before implementation.
