@@ -23,7 +23,12 @@ from loopplane.checkpoint import (
     rebuild_session,
 )
 from loopplane.errors import ErrorCategory, NormalizedError
-from loopplane.model.content import TextBlock, ToolCallBlock, ToolResultBlock
+from loopplane.model.content import (
+    DocumentBlock,
+    TextBlock,
+    ToolCallBlock,
+    ToolResultBlock,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -129,6 +134,31 @@ async def test_resume_rebuilds_history_from_records_alone(tmp_path: Path) -> Non
     (result_block,) = rebuilt.entries[2].blocks
     assert isinstance(result_block, ToolResultBlock)
     assert result_block.call_id == "c1"
+
+
+async def test_resume_preserves_document_user_input(tmp_path: Path) -> None:
+    document = DocumentBlock(
+        media="JVBERi0xLjcKJSVFT0Y=",
+        format="application/pdf",
+        name="report.pdf",
+    )
+    store = FileCheckpointStore(tmp_path)
+    await store.append(_meta("s1"))
+    await store.append(
+        UserInputRecord(
+            session_id="s1",
+            sequence=2,
+            recorded_at=_NOW,
+            payload={"blocks": [TextBlock(text="read"), document]},
+        )
+    )
+
+    records, problems = FileCheckpointStore(tmp_path).load("s1")
+    rebuilt = rebuild_session(records)
+
+    assert problems == []
+    assert rebuilt.repairs == []
+    assert rebuilt.entries[0].blocks == (TextBlock(text="read"), document)
 
 
 async def test_dangling_call_is_repaired_with_a_warning(tmp_path: Path) -> None:

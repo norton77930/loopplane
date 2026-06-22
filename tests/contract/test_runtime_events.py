@@ -35,7 +35,7 @@ from loopplane.events import (
 )
 from loopplane.events.envelope import RUNTIME_EVENT_TYPES
 from loopplane.model.boundary import TokenUsage
-from loopplane.model.content import ImageBlock, TextBlock
+from loopplane.model.content import DocumentBlock, ImageBlock, TextBlock
 
 EXPECTED_VOCABULARY = {
     "user-input",
@@ -205,6 +205,36 @@ def test_user_input_with_an_image_block_round_trips() -> None:
     assert image["kind"] == "image"
     assert image["format"] == "image/png"
     assert image["media"] == "aGVsbG8="
+
+
+def test_user_input_with_document_block_round_trips_without_schema_change() -> None:
+    event = UserInputEvent(
+        **_envelope(1),
+        payload={
+            "blocks": [
+                TextBlock(text="summarize"),
+                DocumentBlock(
+                    media="JVBERi0xLjcKJSVFT0Y=",
+                    format="application/pdf",
+                    name="report.pdf",
+                ),
+            ]
+        },
+    )
+
+    restored = deserialize_event(serialize_event(event))
+
+    assert restored == event
+    document = json.loads(serialize_event(event))
+    assert document["schema_version"] == SCHEMA_VERSION
+    assert set(RUNTIME_EVENT_TYPES) == EXPECTED_VOCABULARY
+    block = document["payload"]["blocks"][1]
+    assert block == {
+        "kind": "document",
+        "media": "JVBERi0xLjcKJSVFT0Y=",
+        "format": "application/pdf",
+        "name": "report.pdf",
+    }
 
 
 def test_serialized_form_is_self_describing() -> None:

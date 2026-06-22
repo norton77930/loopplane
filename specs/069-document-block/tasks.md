@@ -15,7 +15,7 @@ assembly change, no runtime event type, no termination reason, and no `SCHEMA_VE
 
 **Purpose**: Create the focused test surface and reusable safe sample data for all stories.
 
-- [ ] T001 Create `tests/unit/test_document_block.py` with shared helpers for base64 PDF bytes, a public-safe document name, mixed `Message` content, and JSON serialization assertions.
+- [X] T001 Create `tests/unit/test_document_block.py` with shared helpers for base64 PDF bytes, a public-safe document name, mixed `Message` content, and JSON serialization assertions.
 
 ---
 
@@ -23,9 +23,9 @@ assembly change, no runtime event type, no termination reason, and no `SCHEMA_VE
 
 **Purpose**: Add the additive content-model shape that all stories depend on.
 
-- [ ] T002 Add failing validation and discriminated-union tests in `tests/unit/test_document_block.py` for `DocumentBlock(kind="document", media, format, name=None)`, non-empty `media`, non-empty `format`, public-safe `name`, and existing text/image/tool/summary block round-trips.
-- [ ] T003 Implement `DocumentBlock` in `src/loopplane/model/content.py` with non-empty `media` and `format`, public-safe optional `name`, and membership in `ContentBlock` without adding it to `OutputBlock`.
-- [ ] T004 Export `DocumentBlock` from `src/loopplane/model/__init__.py` and `src/loopplane/host/__init__.py` so hosts can construct document-bearing prompts through the existing host seam.
+- [X] T002 Add failing validation and discriminated-union tests in `tests/unit/test_document_block.py` for `DocumentBlock(kind="document", media, format, name=None)`, non-empty `media`, non-empty `format`, public-safe `name`, and existing text/image/tool/summary block round-trips.
+- [X] T003 Implement `DocumentBlock` in `src/loopplane/model/content.py` with non-empty `media` and `format`, public-safe optional `name`, and membership in `ContentBlock` without adding it to `OutputBlock`.
+- [X] T004 Export `DocumentBlock` from `src/loopplane/model/__init__.py` and `src/loopplane/host/__init__.py` so hosts can construct document-bearing prompts through the existing host seam.
 
 **Checkpoint**: The content union accepts documents, while every pre-existing block kind still serializes and validates unchanged.
 
@@ -39,14 +39,14 @@ assembly change, no runtime event type, no termination reason, and no `SCHEMA_VE
 
 ### Tests for User Story 1
 
-- [ ] T005 [US1] Add failing tests in `tests/unit/test_document_block.py` proving a `ModelRequest` preserves text/document/image ordering and existing non-document content behavior is unchanged.
-- [ ] T006 [US1] Add a failing `UserInputEvent` document round-trip test in `tests/contract/test_runtime_events.py` asserting `SCHEMA_VERSION` and `RUNTIME_EVENT_TYPES` are unchanged.
-- [ ] T007 [US1] Add a failing checkpoint/rebuild document round-trip test in `tests/contract/test_checkpoint.py` proving `UserInputRecord` preserves document-bearing user history.
+- [X] T005 [US1] Add failing tests in `tests/unit/test_document_block.py` proving a `ModelRequest` preserves text/document/image ordering and existing non-document content behavior is unchanged.
+- [X] T006 [US1] Add a failing `UserInputEvent` document round-trip test in `tests/contract/test_runtime_events.py` asserting `SCHEMA_VERSION` and `RUNTIME_EVENT_TYPES` are unchanged.
+- [X] T007 [US1] Add a failing checkpoint/rebuild document round-trip test in `tests/contract/test_checkpoint.py` proving `UserInputRecord` preserves document-bearing user history.
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Verify `src/loopplane/model/boundary.py`, `src/loopplane/events/envelope.py`, and `src/loopplane/checkpoint/records.py` carry `DocumentBlock` through the existing `ContentBlock` union without schema-version or event-vocabulary edits.
-- [ ] T009 [US1] Run `uv run pytest -q tests/unit/test_document_block.py tests/contract/test_runtime_events.py tests/contract/test_checkpoint.py` and confirm US1 tests pass.
+- [X] T008 [US1] Verify `src/loopplane/model/boundary.py`, `src/loopplane/events/envelope.py`, and `src/loopplane/checkpoint/records.py` carry `DocumentBlock` through the existing `ContentBlock` union without schema-version or event-vocabulary edits.
+- [X] T009 [US1] Run `uv run pytest -q tests/unit/test_document_block.py tests/contract/test_runtime_events.py tests/contract/test_checkpoint.py` and confirm US1 tests pass.
 
 **Checkpoint**: MVP complete - document-bearing user input reaches the model/content/event/checkpoint boundaries losslessly.
 
@@ -60,16 +60,16 @@ assembly change, no runtime event type, no termination reason, and no `SCHEMA_VE
 
 ### Tests for User Story 2
 
-- [ ] T010 [P] [US2] Add a failing document mapping test in `tests/unit/test_anthropic_mapping.py` for Anthropic native document source output.
-- [ ] T011 [P] [US2] Add a failing document mapping test in `tests/unit/test_gemini_mapping.py` for Gemini inline data output.
-- [ ] T012 [P] [US2] Add failing unsupported-document tests in `tests/unit/test_openai_mapping.py` proving OpenAI chat-compatible mapping raises before provider submission and does not include raw bytes, extracted text, private paths, or credentials in the message.
+- [X] T010 [P] [US2] Add a failing document mapping test in `tests/unit/test_anthropic_mapping.py` for Anthropic native document source output.
+- [X] T011 [P] [US2] Add a failing document mapping test in `tests/unit/test_gemini_mapping.py` for Gemini inline data output.
+- [X] T012 [P] [US2] Add failing unsupported-document tests in `tests/unit/test_openai_mapping.py` proving OpenAI chat-compatible mapping raises before provider submission and does not include raw bytes, extracted text, private paths, or credentials in the message.
 
 ### Implementation for User Story 2
 
-- [ ] T013 [US2] Map `DocumentBlock` to Anthropic native document content in `src/loopplane/adapters/anthropic/mapping.py`.
-- [ ] T014 [US2] Map `DocumentBlock` to Gemini native inline data in `src/loopplane/adapters/gemini/mapping.py`.
-- [ ] T015 [US2] Add an OpenAI chat-compatible unsupported-document guard in `src/loopplane/adapters/openai/mapping.py` that raises a generic public-safe error instead of dropping, stringifying, or converting the document.
-- [ ] T016 [US2] Run `uv run pytest -q tests/unit/test_anthropic_mapping.py tests/unit/test_gemini_mapping.py tests/unit/test_openai_mapping.py` and confirm US2 tests pass.
+- [X] T013 [US2] Map `DocumentBlock` to Anthropic native document content in `src/loopplane/adapters/anthropic/mapping.py`.
+- [X] T014 [US2] Map `DocumentBlock` to Gemini native inline data in `src/loopplane/adapters/gemini/mapping.py`.
+- [X] T015 [US2] Add an OpenAI chat-compatible unsupported-document guard in `src/loopplane/adapters/openai/mapping.py` that raises a generic public-safe error instead of dropping, stringifying, or converting the document.
+- [X] T016 [US2] Run `uv run pytest -q tests/unit/test_anthropic_mapping.py tests/unit/test_gemini_mapping.py tests/unit/test_openai_mapping.py` and confirm US2 tests pass.
 
 **Checkpoint**: Provider-capable paths preserve document metadata; unsupported paths fail safely before any provider request.
 
@@ -83,13 +83,13 @@ assembly change, no runtime event type, no termination reason, and no `SCHEMA_VE
 
 ### Tests for User Story 3
 
-- [ ] T017 [US3] Add public-safety assertions in `tests/unit/test_document_block.py` for unsafe `DocumentBlock.name` values and serialized document metadata.
-- [ ] T018 [US3] Add public-safety assertions in `tests/unit/test_openai_mapping.py` that unsupported-document errors do not contain the base64 payload, document text excerpts, private path-like names, or credential-like substrings.
+- [X] T017 [US3] Add public-safety assertions in `tests/unit/test_document_block.py` for unsafe `DocumentBlock.name` values and serialized document metadata.
+- [X] T018 [US3] Add public-safety assertions in `tests/unit/test_openai_mapping.py` that unsupported-document errors do not contain the base64 payload, document text excerpts, private path-like names, or credential-like substrings.
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] Harden `DocumentBlock.name` validation in `src/loopplane/model/content.py` so display names remain optional, relative, and public-safe.
-- [ ] T020 [US3] Review `src/loopplane/events/emitter.py`, `src/loopplane/checkpoint/rebuild.py`, and provider mapping errors for document-specific public-safety leaks; update only if tests expose a leak.
+- [X] T019 [US3] Harden `DocumentBlock.name` validation in `src/loopplane/model/content.py` so display names remain optional, relative, and public-safe.
+- [X] T020 [US3] Review `src/loopplane/events/emitter.py`, `src/loopplane/checkpoint/rebuild.py`, and provider mapping errors for document-specific public-safety leaks; update only if tests expose a leak.
 
 **Checkpoint**: Document metadata is public-safe and unsupported-provider failures remain generic.
 
@@ -97,10 +97,10 @@ assembly change, no runtime event type, no termination reason, and no `SCHEMA_VE
 
 ## Phase 6: Polish & gates
 
-- [ ] T021 Update `docs/api-reference.md` for the new `DocumentBlock` public exports from `loopplane.model` and `loopplane.host`.
-- [ ] T022 Run focused validation from `specs/069-document-block/quickstart.md`.
-- [ ] T023 Run full gates: `uv run ruff check`, `uv run ruff format --check src tests`, `uv run mypy src`, and `uv run pytest -q`.
-- [ ] T024 Run board audits: `git diff --check`, `openspec/` scan, public-safety scan, and local `sensitive-scan.txt` if present.
+- [X] T021 Update `docs/api-reference.md` for the new `DocumentBlock` public exports from `loopplane.model` and `loopplane.host`.
+- [X] T022 Run focused validation from `specs/069-document-block/quickstart.md`.
+- [X] T023 Run full gates: `uv run ruff check`, `uv run ruff format --check src tests`, `uv run mypy src`, and `uv run pytest -q`.
+- [X] T024 Run board audits: `git diff --check`, `openspec/` scan, public-safety scan, and local `sensitive-scan.txt` if present.
 
 ---
 

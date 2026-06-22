@@ -17,6 +17,7 @@ from loopplane.model.boundary import (
 from loopplane.model.capabilities import accepts_media, supports_structured_output
 from loopplane.model.content import (
     ContentBlock,
+    DocumentBlock,
     ImageBlock,
     OutputBlock,
     SummaryDigest,
@@ -36,6 +37,7 @@ from loopplane.model.scripted import (
 __all__ = [
     "ContentBlock",
     "ContextOverflowError",
+    "DocumentBlock",
     "GenerationLimits",
     "ImageBlock",
     "Message",

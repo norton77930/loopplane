@@ -31,7 +31,7 @@ from loopplane.host.host import (
     Session,
     build_host,
 )
-from loopplane.model import ContentBlock, ImageBlock, TextBlock
+from loopplane.model import ContentBlock, DocumentBlock, ImageBlock, TextBlock
 
 __all__ = [
     "ApprovalDecision",
@@ -39,6 +39,7 @@ __all__ = [
     "AssembledRuntime",
     "ConfigError",
     "ContentBlock",
+    "DocumentBlock",
     "ImageBlock",
     "LoopPlaneHost",
     "MemoryConfig",

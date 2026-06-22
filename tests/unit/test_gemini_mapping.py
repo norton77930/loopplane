@@ -24,6 +24,7 @@ from loopplane.model import (
     TurnEnd,
 )
 from loopplane.model.content import (
+    DocumentBlock,
     ImageBlock,
     TextBlock,
     ToolCallBlock,
@@ -58,6 +59,30 @@ def test_build_contents_maps_image_to_inline_data() -> None:
     ]
     part = build_contents(context)[0]["parts"][0]
     assert part == {"inline_data": {"mime_type": "image/png", "data": "QUJD"}}
+
+
+def test_build_contents_maps_document_to_inline_data() -> None:
+    context = [
+        Message(
+            role="user",
+            blocks=[
+                DocumentBlock(
+                    media="JVBERi0xLjcKJSVFT0Y=",
+                    format="application/pdf",
+                    name="report.pdf",
+                )
+            ],
+        )
+    ]
+
+    part = build_contents(context)[0]["parts"][0]
+
+    assert part == {
+        "inline_data": {
+            "mime_type": "application/pdf",
+            "data": "JVBERi0xLjcKJSVFT0Y=",
+        }
+    }
 
 
 def test_build_contents_tool_call_carries_skip_sentinel_not_in_args() -> None:

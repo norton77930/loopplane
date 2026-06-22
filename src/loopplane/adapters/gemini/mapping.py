@@ -34,6 +34,7 @@ from loopplane.model.boundary import (
     TurnEnd,
 )
 from loopplane.model.content import (
+    DocumentBlock,
     ImageBlock,
     SummaryMarkerBlock,
     TextBlock,
@@ -88,6 +89,10 @@ def _parts(blocks: Iterable[Any]) -> list[dict[str, Any]]:
         if isinstance(block, TextBlock):
             out.append({"text": block.text})
         elif isinstance(block, ImageBlock):
+            out.append(
+                {"inline_data": {"mime_type": block.format, "data": block.media}}
+            )
+        elif isinstance(block, DocumentBlock):
             out.append(
                 {"inline_data": {"mime_type": block.format, "data": block.media}}
             )

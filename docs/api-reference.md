@@ -29,6 +29,7 @@ model for offline tests.
 - `ContentBlock` — base type for message content blocks.
 - `TextBlock` — a text content block.
 - `ImageBlock` — an image content block.
+- `DocumentBlock` — a document content block for model input.
 - `OutputBlock` — an assistant output content block.
 - `TextIncrement` — a streamed assistant text increment.
 - `ReasoningIncrement` — a streamed assistant reasoning increment.
@@ -347,6 +348,7 @@ The Host Application Interface that exposes the runtime to host applications.
 - `ContentBlock` — base type for a run's input content blocks (036).
 - `TextBlock` — a text input block (036).
 - `ImageBlock` — an image input block (036).
+- `DocumentBlock` — a document input block (069).
 
 ## Loop-engineering & layers (units 003-013)
 

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from loopplane.errors import NormalizedError
 
@@ -22,6 +24,50 @@ class ImageBlock(_Block):
     kind: Literal["image"] = "image"
     media: str
     format: str
+
+
+_UNSAFE_NAME_MARKERS = (
+    "sk" + "-",
+    "ghp" + "_",
+    "api" + "_key",
+    "sec" + "ret",
+    "pass" + "word",
+    "tok" + "en",
+)
+
+
+class DocumentBlock(_Block):
+    kind: Literal["document"] = "document"
+    media: str = Field(min_length=1)
+    format: str = Field(min_length=1)
+    name: str | None = None
+
+    @field_validator("media")
+    @classmethod
+    def _valid_base64(cls, value: str) -> str:
+        try:
+            base64.b64decode(value.encode("ascii"), validate=True)
+        except (binascii.Error, UnicodeEncodeError) as exc:
+            raise ValueError("document media must be base64 encoded") from exc
+        return value
+
+    @field_validator("name")
+    @classmethod
+    def _public_safe_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        lowered = value.lower()
+        if (
+            not value.strip()
+            or value != value.strip()
+            or ":" in value
+            or "/" in value
+            or "\\" in value
+            or ".." in value
+            or any(marker in lowered for marker in _UNSAFE_NAME_MARKERS)
+        ):
+            raise ValueError("document name must be public-safe")
+        return value
 
 
 OutputBlock = Annotated[TextBlock | ImageBlock, Field(discriminator="kind")]
@@ -58,6 +104,11 @@ class SummaryMarkerBlock(_Block):
 
 
 ContentBlock = Annotated[
-    TextBlock | ImageBlock | ToolCallBlock | ToolResultBlock | SummaryMarkerBlock,
+    TextBlock
+    | ImageBlock
+    | DocumentBlock
+    | ToolCallBlock
+    | ToolResultBlock
+    | SummaryMarkerBlock,
     Field(discriminator="kind"),
 ]

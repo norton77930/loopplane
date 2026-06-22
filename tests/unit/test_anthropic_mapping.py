@@ -17,7 +17,12 @@ from loopplane.model import (
     ToolDescriptor,
     TurnEnd,
 )
-from loopplane.model.content import TextBlock, ToolCallBlock, ToolResultBlock
+from loopplane.model.content import (
+    DocumentBlock,
+    TextBlock,
+    ToolCallBlock,
+    ToolResultBlock,
+)
 
 
 def test_build_messages_maps_blocks() -> None:
@@ -42,6 +47,36 @@ def test_build_messages_maps_blocks() -> None:
     result = messages[2]["content"][0]
     assert result["type"] == "tool_result"
     assert result["tool_use_id"] == "c1"
+
+
+def test_build_messages_maps_document_block() -> None:
+    context = [
+        Message(
+            role="user",
+            blocks=[
+                TextBlock(text="read this"),
+                DocumentBlock(
+                    media="JVBERi0xLjcKJSVFT0Y=",
+                    format="application/pdf",
+                    name="report.pdf",
+                ),
+            ],
+        )
+    ]
+
+    content = build_messages(context)[0]["content"]
+
+    assert content == [
+        {"type": "text", "text": "read this"},
+        {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": "JVBERi0xLjcKJSVFT0Y=",
+            },
+        },
+    ]
 
 
 def test_build_tools_maps_descriptor() -> None:

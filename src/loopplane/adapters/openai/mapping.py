@@ -22,12 +22,17 @@ from loopplane.model.boundary import (
     TurnEnd,
 )
 from loopplane.model.content import (
+    DocumentBlock,
     ImageBlock,
     SummaryMarkerBlock,
     TextBlock,
     ToolCallBlock,
     ToolResultBlock,
 )
+
+
+class UnsupportedContentError(ValueError):
+    """Raised when chat-completions mapping cannot represent a content block."""
 
 
 def _int(value: object) -> int:
@@ -69,6 +74,7 @@ def build_tools(tools: Iterable[ToolDescriptor]) -> list[dict[str, Any]]:
 def build_messages(context: Iterable[Message]) -> list[dict[str, Any]]:
     messages: list[dict[str, Any]] = []
     for message in context:
+        _reject_unsupported_documents(message.blocks)
         results = [b for b in message.blocks if isinstance(b, ToolResultBlock)]
         if results:
             for result in results:
@@ -82,6 +88,13 @@ def build_messages(context: Iterable[Message]) -> list[dict[str, Any]]:
             continue
         messages.append(_assistant_or_user(message))
     return messages
+
+
+def _reject_unsupported_documents(blocks: Iterable[Any]) -> None:
+    if any(isinstance(block, DocumentBlock) for block in blocks):
+        raise UnsupportedContentError(
+            "document input is not supported by this provider"
+        )
 
 
 def _assistant_or_user(message: Message) -> dict[str, Any]:

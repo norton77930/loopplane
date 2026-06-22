@@ -22,6 +22,7 @@ from loopplane.model.boundary import (
 )
 from loopplane.model.content import (
     ContentBlock,
+    DocumentBlock,
     ImageBlock,
     SummaryMarkerBlock,
     TextBlock,
@@ -67,6 +68,8 @@ def _content(blocks: Iterable[ContentBlock]) -> list[dict[str, Any]]:
             out.append({"type": "text", "text": block.text})
         elif isinstance(block, ImageBlock):
             out.append(_image(block.media, block.format))
+        elif isinstance(block, DocumentBlock):
+            out.append(_document(block.media, block.format))
         elif isinstance(block, ToolCallBlock):
             out.append(
                 {
@@ -86,6 +89,13 @@ def _content(blocks: Iterable[ContentBlock]) -> list[dict[str, Any]]:
 def _image(media: str, fmt: str) -> dict[str, Any]:
     return {
         "type": "image",
+        "source": {"type": "base64", "media_type": fmt, "data": media},
+    }
+
+
+def _document(media: str, fmt: str) -> dict[str, Any]:
+    return {
+        "type": "document",
         "source": {"type": "base64", "media_type": fmt, "data": media},
     }
 

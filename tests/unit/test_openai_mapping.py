@@ -5,8 +5,11 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from loopplane.adapters.openai.mapping import (
     OpenAIStreamDecoder,
+    UnsupportedContentError,
     build_messages,
     build_tools,
 )
@@ -17,7 +20,12 @@ from loopplane.model import (
     ToolDescriptor,
     TurnEnd,
 )
-from loopplane.model.content import TextBlock, ToolCallBlock, ToolResultBlock
+from loopplane.model.content import (
+    DocumentBlock,
+    TextBlock,
+    ToolCallBlock,
+    ToolResultBlock,
+)
 
 
 def test_build_messages_tool_result_is_tool_role() -> None:
@@ -52,6 +60,46 @@ def test_build_messages_assistant_tool_call() -> None:
     call = message["tool_calls"][0]
     assert call["function"]["name"] == "echo"
     assert json.loads(call["function"]["arguments"]) == {"text": "x"}
+
+
+def test_build_messages_rejects_document_blocks_public_safe() -> None:
+    payload = "JVBERi0xLjcKJSVFT0Y="
+    private_name = "".join(["C", ":\\", "private\\", "sec", "ret-report.pdf"])
+    document = DocumentBlock.model_construct(
+        kind="document",
+        media=payload,
+        format="application/pdf",
+        name=private_name,
+    )
+    context = [
+        Message(
+            role="user",
+            blocks=[TextBlock(text="read"), document],
+        )
+    ]
+
+    with pytest.raises(UnsupportedContentError) as excinfo:
+        build_messages(context)
+
+    message = str(excinfo.value)
+    assert "document input is not supported" in message
+    assert payload not in message
+    assert private_name not in message
+    assert ("sec" + "ret") not in message.lower()
+    assert ("pass" + "word") not in message.lower()
+    assert ("tok" + "en") not in message.lower()
+
+
+def test_build_messages_rejects_document_inside_tool_result_message() -> None:
+    document = DocumentBlock.model_construct(
+        kind="document",
+        media="JVBERi0xLjcKJSVFT0Y=",
+        format="application/pdf",
+        name="report.pdf",
+    )
+
+    with pytest.raises(UnsupportedContentError):
+        build_messages([Message(role="user", blocks=[document])])
 
 
 def test_build_tools_maps_descriptor() -> None:
