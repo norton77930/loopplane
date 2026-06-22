@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import base64
 import binascii
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
 
 from loopplane.errors import NormalizedError
 
@@ -79,6 +79,14 @@ class ToolCallBlock(_Block):
     call_id: str
     tool_name: str
     input: dict[str, object]
+    provider_signature: str | None = Field(default=None, min_length=1)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: Any) -> dict[str, Any]:
+        data = cast(dict[str, Any], handler(self))
+        if self.provider_signature is None:
+            data.pop("provider_signature", None)
+        return data
 
 
 class ToolResultBlock(_Block):

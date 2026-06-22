@@ -9,9 +9,9 @@ tests can substitute it completely.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, cast, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from loopplane.model.content import ContentBlock
 
@@ -77,6 +77,14 @@ class ToolCallRequest(_Shape):
     call_id: str
     tool_name: str
     input: dict[str, object]
+    provider_signature: str | None = Field(default=None, min_length=1)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: Any) -> dict[str, Any]:
+        data = cast(dict[str, Any], handler(self))
+        if self.provider_signature is None:
+            data.pop("provider_signature", None)
+        return data
 
 
 class TurnEnd(_Shape):

@@ -161,6 +161,28 @@ async def test_resume_preserves_document_user_input(tmp_path: Path) -> None:
     assert rebuilt.entries[0].blocks == (TextBlock(text="read"), document)
 
 
+async def test_resume_preserves_signed_assistant_tool_call(tmp_path: Path) -> None:
+    tool_call = ToolCallBlock(
+        call_id="c1",
+        tool_name="echo",
+        input={"text": "hi"},
+        provider_signature="gemini-signature-1",
+    )
+    store = FileCheckpointStore(tmp_path)
+    await store.append(_meta("s1"))
+    await store.append(_user("s1", 2, "go"))
+    await store.append(_assistant("s1", 3, tool_call))
+    await store.append(_result("s1", 4, "c1", "hi"))
+    await store.append(_termination("s1", 5))
+
+    records, problems = FileCheckpointStore(tmp_path).load("s1")
+    rebuilt = rebuild_session(records)
+
+    assert problems == []
+    assert rebuilt.repairs == []
+    assert rebuilt.entries[1].blocks == (tool_call,)
+
+
 async def test_dangling_call_is_repaired_with_a_warning(tmp_path: Path) -> None:
     store = FileCheckpointStore(tmp_path)
     await store.append(_meta("s1"))

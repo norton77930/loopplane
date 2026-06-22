@@ -8,14 +8,12 @@ whose ``candidates[0].content.parts`` carry text / thought / ``function_call`` /
 **duck-typing** (``getattr``/``isinstance``), so it needs no SDK types and is exercised
 with plain stand-in chunks (mirroring the unit-020 adapters).
 
-``thought_signature`` (037, conservative path): Gemini 3 hard-requires a per-
-``function_call`` signature echoed back on the next turn. The shared content model
-(``ToolCallBlock``) has no field for it (ADR 0001 kept the content model unchanged), so
-when re-mapping a prior tool call this attaches Google's **official** sentinel
-``"skip_thought_signature_validator"`` to the ``function_call`` part to skip
-validation — never smuggling it into the tool-input ``args`` the gateway validates.
-Preserving the *real* signature would need a content-model field (a Constitution VI /
-ADR matter) and is a documented deferred follow-up.
+``thought_signature`` (037, 070): Gemini 3 can require a per-``function_call``
+signature echoed back on the next turn. When the provider supplies one, the decoder
+stores it as opaque ``provider_signature`` metadata on the normalized tool call and
+request mapping replays it on the native part. Older history or unsigned calls still
+use Google's official ``"skip_thought_signature_validator"`` sentinel. The metadata
+never enters tool-input ``args`` the gateway validates.
 """
 
 from __future__ import annotations
@@ -97,18 +95,17 @@ def _parts(blocks: Iterable[Any]) -> list[dict[str, Any]]:
                 {"inline_data": {"mime_type": block.format, "data": block.media}}
             )
         elif isinstance(block, ToolCallBlock):
-            out.append(
-                {
-                    "function_call": {
-                        "name": block.tool_name,
-                        "args": block.input,
-                    },
-                    # The official multi-turn bypass: a real per-call signature has
-                    # nowhere to live in the shared content model (ADR 0001), so skip
-                    # validation rather than invent a value or change the model.
-                    "thought_signature": SKIP_THOUGHT_SIGNATURE,
-                }
-            )
+            part = {
+                "function_call": {
+                    "name": block.tool_name,
+                    "args": block.input,
+                },
+                # The official multi-turn bypass: when a real per-call signature is
+                # absent (old history or provider omitted it), skip validation rather
+                # than invent a value or change tool args.
+                "thought_signature": block.provider_signature or SKIP_THOUGHT_SIGNATURE,
+            }
+            out.append(part)
         elif isinstance(block, ToolResultBlock):
             out.append(
                 {
@@ -179,11 +176,15 @@ class GeminiStreamDecoder:
         if call is not None:
             name = getattr(call, "name", None)
             args = getattr(call, "args", None)
+            signature = getattr(part, "thought_signature", None)
             self._calls.append(
                 ToolCallRequest(
                     call_id=f"call_{len(self._calls)}",
                     tool_name=str(name) if isinstance(name, str) else "",
                     input=dict(args) if isinstance(args, dict) else {},
+                    provider_signature=signature
+                    if isinstance(signature, str) and signature
+                    else None,
                 )
             )
             return []

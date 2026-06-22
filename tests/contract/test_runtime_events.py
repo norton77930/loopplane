@@ -35,7 +35,7 @@ from loopplane.events import (
 )
 from loopplane.events.envelope import RUNTIME_EVENT_TYPES
 from loopplane.model.boundary import TokenUsage
-from loopplane.model.content import DocumentBlock, ImageBlock, TextBlock
+from loopplane.model.content import DocumentBlock, ImageBlock, TextBlock, ToolCallBlock
 
 EXPECTED_VOCABULARY = {
     "user-input",
@@ -234,6 +234,54 @@ def test_user_input_with_document_block_round_trips_without_schema_change() -> N
         "media": "JVBERi0xLjcKJSVFT0Y=",
         "format": "application/pdf",
         "name": "report.pdf",
+    }
+
+
+def test_unsigned_tool_call_content_keeps_prior_serialized_shape() -> None:
+    event = UserInputEvent(
+        **_envelope(1),
+        payload={
+            "blocks": [
+                ToolCallBlock(call_id="call-1", tool_name="echo", input={"text": "x"})
+            ]
+        },
+    )
+
+    document = json.loads(serialize_event(event))
+
+    assert document["schema_version"] == SCHEMA_VERSION
+    assert set(RUNTIME_EVENT_TYPES) == EXPECTED_VOCABULARY
+    assert document["payload"]["blocks"][0] == {
+        "kind": "tool-call",
+        "call_id": "call-1",
+        "tool_name": "echo",
+        "input": {"text": "x"},
+    }
+
+
+def test_signature_bearing_tool_call_content_round_trips_without_schema_change() -> (
+    None
+):
+    block = ToolCallBlock(
+        call_id="call-1",
+        tool_name="echo",
+        input={"text": "x"},
+        provider_signature="gemini-signature-1",
+    )
+    event = UserInputEvent(**_envelope(1), payload={"blocks": [block]})
+
+    restored = deserialize_event(serialize_event(event))
+    document = json.loads(serialize_event(event))
+
+    assert restored == event
+    assert document["schema_version"] == SCHEMA_VERSION
+    assert set(RUNTIME_EVENT_TYPES) == EXPECTED_VOCABULARY
+    assert document["payload"]["blocks"][0] == {
+        "kind": "tool-call",
+        "call_id": "call-1",
+        "tool_name": "echo",
+        "input": {"text": "x"},
+        "provider_signature": "gemini-signature-1",
     }
 
 

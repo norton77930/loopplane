@@ -110,3 +110,49 @@ async def test_final_history_interleaves_coherently(
     assert result_block.outcome == "success"
     assert list(result_block.outputs) == [TextBlock(text="ping")]
     assert history[3].blocks == (TextBlock(text="Echoed: ping"),)
+
+
+async def test_provider_signature_stays_out_of_gateway_input(
+    harness: HarnessFactory, collector: EventCollector
+) -> None:
+    controller, session_id = harness(
+        [
+            ScriptedTurn(
+                increments=[
+                    ToolCallRequest(
+                        call_id="call-1",
+                        tool_name="echo",
+                        input={"text": "ping"},
+                        provider_signature="gemini-signature-1",
+                    )
+                ],
+                stop_reason="tool-use",
+                usage=TokenUsage(input_tokens=5, output_tokens=3),
+            ),
+            ScriptedTurn(
+                increments=[TextIncrement(text="Echoed: ping")],
+                stop_reason="end-turn",
+                usage=TokenUsage(input_tokens=9, output_tokens=4),
+            ),
+        ],
+        collector,
+    )
+
+    await controller.drive(session_id, [TextBlock(text="please echo ping")])
+
+    started = next(e for e in collector.events if e.type == "tool-call-started")
+    completed = next(e for e in collector.events if e.type == "tool-call-completed")
+    history = controller.history_snapshot(session_id)
+    assistant_blocks = history[1].blocks
+
+    assert started.payload.input == {"text": "ping"}
+    assert "provider_signature" not in started.payload.input
+    assert list(completed.payload.outputs) == [TextBlock(text="ping")]
+    assert assistant_blocks == (
+        ToolCallBlock(
+            call_id="call-1",
+            tool_name="echo",
+            input={"text": "ping"},
+            provider_signature="gemini-signature-1",
+        ),
+    )

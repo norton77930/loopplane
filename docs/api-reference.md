@@ -33,8 +33,8 @@ model for offline tests.
 - `OutputBlock` — an assistant output content block.
 - `TextIncrement` — a streamed assistant text increment.
 - `ReasoningIncrement` — a streamed assistant reasoning increment.
-- `ToolCallBlock` — a tool-call content block.
-- `ToolCallRequest` — a requested tool call.
+- `ToolCallBlock` — a tool-call content block, with optional provider metadata.
+- `ToolCallRequest` — a requested tool call, with optional provider metadata.
 - `ToolResultBlock` — a tool-result content block.
 - `ToolDescriptor` — a tool's public descriptor (name and schema).
 - `SummaryDigest` — a context-summary digest.

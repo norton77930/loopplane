@@ -232,7 +232,10 @@ class AgentLoop:
                 assistant_blocks.append(TextBlock(text="".join(outcome.text_parts)))
             assistant_blocks.extend(
                 ToolCallBlock(
-                    call_id=call.call_id, tool_name=call.tool_name, input=call.input
+                    call_id=call.call_id,
+                    tool_name=call.tool_name,
+                    input=call.input,
+                    provider_signature=call.provider_signature,
                 )
                 for call in outcome.calls
             )

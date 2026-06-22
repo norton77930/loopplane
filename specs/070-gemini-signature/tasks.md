@@ -15,7 +15,7 @@ Tool Gateway input/state; no new runtime event type, termination reason, depende
 
 **Purpose**: Create focused synthetic fixtures for provider-signature behavior.
 
-- [ ] T001 Create shared synthetic provider-signature helpers in `tests/unit/test_gemini_mapping.py` for signed function-call parts, unsigned function-call parts, and signature-bearing `ToolCallBlock` history.
+- [X] T001 Create shared synthetic provider-signature helpers in `tests/unit/test_gemini_mapping.py` for signed function-call parts, unsigned function-call parts, and signature-bearing `ToolCallBlock` history.
 
 ---
 
@@ -23,10 +23,10 @@ Tool Gateway input/state; no new runtime event type, termination reason, depende
 
 **Purpose**: Add the optional metadata field across the model increment and content-block handoff.
 
-- [ ] T002 Add failing tests in `tests/unit/test_gemini_mapping.py` proving `ToolCallRequest` and `ToolCallBlock` can carry an optional non-empty `provider_signature` while keeping tool `input` unchanged.
-- [ ] T003 Add failing unsigned-shape tests in `tests/contract/test_runtime_events.py` proving tool-call content without `provider_signature` serializes with the same public shape as before.
-- [ ] T004 Implement optional `provider_signature` on `ToolCallRequest` in `src/loopplane/model/boundary.py` and on `ToolCallBlock` in `src/loopplane/model/content.py`, including absent-by-default validation/serialization.
-- [ ] T005 Copy `provider_signature` from model increments into assistant history blocks in `src/loopplane/loop/loop.py` without changing gateway-facing `input`.
+- [X] T002 Add failing tests in `tests/unit/test_gemini_mapping.py` proving `ToolCallRequest` and `ToolCallBlock` can carry an optional non-empty `provider_signature` while keeping tool `input` unchanged.
+- [X] T003 Add failing unsigned-shape tests in `tests/contract/test_runtime_events.py` proving tool-call content without `provider_signature` serializes with the same public shape as before.
+- [X] T004 Implement optional `provider_signature` on `ToolCallRequest` in `src/loopplane/model/boundary.py` and on `ToolCallBlock` in `src/loopplane/model/content.py`, including absent-by-default validation/serialization.
+- [X] T005 Copy `provider_signature` from model increments into assistant history blocks in `src/loopplane/loop/loop.py` without changing gateway-facing `input`.
 
 **Checkpoint**: Tool-call metadata can travel from model increment to history, and unsigned content stays unchanged.
 
@@ -40,14 +40,14 @@ Tool Gateway input/state; no new runtime event type, termination reason, depende
 
 ### Tests for User Story 1
 
-- [ ] T006 [US1] Add failing Gemini decoder tests in `tests/unit/test_gemini_mapping.py` for one signed function call and multiple signed function calls preserving independent signatures.
-- [ ] T007 [US1] Add failing Gemini request-mapping tests in `tests/unit/test_gemini_mapping.py` proving a preserved provider signature is emitted on the function-call part and never inside `function_call.args`.
+- [X] T006 [US1] Add failing Gemini decoder tests in `tests/unit/test_gemini_mapping.py` for one signed function call and multiple signed function calls preserving independent signatures.
+- [X] T007 [US1] Add failing Gemini request-mapping tests in `tests/unit/test_gemini_mapping.py` proving a preserved provider signature is emitted on the function-call part and never inside `function_call.args`.
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Update `src/loopplane/adapters/gemini/mapping.py` to capture non-empty `thought_signature` metadata from function-call parts into `ToolCallRequest.provider_signature`.
-- [ ] T009 [US1] Update `src/loopplane/adapters/gemini/mapping.py` to replay `ToolCallBlock.provider_signature` on mapped function-call parts when present.
-- [ ] T010 [US1] Run `uv run pytest -q tests/unit/test_gemini_mapping.py` and confirm US1 tests pass.
+- [X] T008 [US1] Update `src/loopplane/adapters/gemini/mapping.py` to capture non-empty `thought_signature` metadata from function-call parts into `ToolCallRequest.provider_signature`.
+- [X] T009 [US1] Update `src/loopplane/adapters/gemini/mapping.py` to replay `ToolCallBlock.provider_signature` on mapped function-call parts when present.
+- [X] T010 [US1] Run `uv run pytest -q tests/unit/test_gemini_mapping.py` and confirm US1 tests pass.
 
 **Checkpoint**: Gemini signed tool calls round-trip through decode and request mapping.
 
@@ -61,14 +61,14 @@ Tool Gateway input/state; no new runtime event type, termination reason, depende
 
 ### Tests for User Story 2
 
-- [ ] T011 [US2] Add failing/no-regression tests in `tests/unit/test_gemini_mapping.py` for missing, empty, and non-string Gemini signatures using the existing skip-sentinel fallback.
-- [ ] T012 [US2] Add or verify non-Gemini unchanged tests in `tests/unit/test_openai_mapping.py`, `tests/unit/test_anthropic_mapping.py`, and `tests/contract/test_model_boundary.py` for unsigned tool calls.
+- [X] T011 [US2] Add failing/no-regression tests in `tests/unit/test_gemini_mapping.py` for missing, empty, and non-string Gemini signatures using the existing skip-sentinel fallback.
+- [X] T012 [US2] Add or verify non-Gemini unchanged tests in `tests/unit/test_openai_mapping.py`, `tests/unit/test_anthropic_mapping.py`, and `tests/contract/test_model_boundary.py` for unsigned tool calls.
 
 ### Implementation for User Story 2
 
-- [ ] T013 [US2] Ensure `src/loopplane/adapters/gemini/mapping.py` uses `SKIP_THOUGHT_SIGNATURE` only when no preserved signature exists.
-- [ ] T014 [US2] Verify `src/loopplane/adapters/openai/mapping.py` and `src/loopplane/adapters/anthropic/mapping.py` do not emit or require provider metadata for unsigned tool calls.
-- [ ] T015 [US2] Run `uv run pytest -q tests/unit/test_gemini_mapping.py tests/unit/test_openai_mapping.py tests/unit/test_anthropic_mapping.py tests/contract/test_model_boundary.py` and confirm US2 tests pass.
+- [X] T013 [US2] Ensure `src/loopplane/adapters/gemini/mapping.py` uses `SKIP_THOUGHT_SIGNATURE` only when no preserved signature exists.
+- [X] T014 [US2] Verify `src/loopplane/adapters/openai/mapping.py` and `src/loopplane/adapters/anthropic/mapping.py` do not emit or require provider metadata for unsigned tool calls.
+- [X] T015 [US2] Run `uv run pytest -q tests/unit/test_gemini_mapping.py tests/unit/test_openai_mapping.py tests/unit/test_anthropic_mapping.py tests/contract/test_model_boundary.py` and confirm US2 tests pass.
 
 **Checkpoint**: Existing non-signed behavior remains stable.
 
@@ -82,13 +82,13 @@ Tool Gateway input/state; no new runtime event type, termination reason, depende
 
 ### Tests for User Story 3
 
-- [ ] T016 [US3] Add failing gateway-separation coverage in `tests/integration/test_us1_tool_run.py` proving `ToolCallRequest.provider_signature` is copied to assistant history but absent from the executed tool input.
-- [ ] T017 [US3] Add failing event/checkpoint round-trip tests in `tests/contract/test_runtime_events.py` and `tests/contract/test_checkpoint.py` for signature-bearing tool-call content.
+- [X] T016 [US3] Add failing gateway-separation coverage in `tests/integration/test_us1_tool_run.py` proving `ToolCallRequest.provider_signature` is copied to assistant history but absent from the executed tool input.
+- [X] T017 [US3] Add failing event/checkpoint round-trip tests in `tests/contract/test_runtime_events.py` and `tests/contract/test_checkpoint.py` for signature-bearing tool-call content.
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Verify `src/loopplane/gateway/gateway.py`, `src/loopplane/events/envelope.py`, and `src/loopplane/checkpoint/records.py` need no gateway/schema changes beyond the existing content union; update only if tests expose a gap.
-- [ ] T019 [US3] Run `uv run pytest -q tests/integration/test_us1_tool_run.py tests/contract/test_runtime_events.py tests/contract/test_checkpoint.py` and confirm US3 tests pass.
+- [X] T018 [US3] Verify `src/loopplane/gateway/gateway.py`, `src/loopplane/events/envelope.py`, and `src/loopplane/checkpoint/records.py` need no gateway/schema changes beyond the existing content union; update only if tests expose a gap.
+- [X] T019 [US3] Run `uv run pytest -q tests/integration/test_us1_tool_run.py tests/contract/test_runtime_events.py tests/contract/test_checkpoint.py` and confirm US3 tests pass.
 
 **Checkpoint**: Provider metadata is replayable content metadata, not Gateway-owned tool data.
 
@@ -96,10 +96,10 @@ Tool Gateway input/state; no new runtime event type, termination reason, depende
 
 ## Phase 6: Polish & gates
 
-- [ ] T020 Update `docs/api-reference.md` only if public descriptions for `ToolCallRequest` or `ToolCallBlock` need to mention provider metadata.
-- [ ] T021 Run focused validation from `specs/070-gemini-signature/quickstart.md`.
-- [ ] T022 Run full gates: `uv run ruff check`, `uv run ruff format --check src tests`, `uv run mypy src`, and `uv run pytest -q`.
-- [ ] T023 Run board audits: `git diff --check`, `openspec/` scan, public-safety scan, and local `sensitive-scan.txt` if present.
+- [X] T020 Update `docs/api-reference.md` only if public descriptions for `ToolCallRequest` or `ToolCallBlock` need to mention provider metadata.
+- [X] T021 Run focused validation from `specs/070-gemini-signature/quickstart.md`.
+- [X] T022 Run full gates: `uv run ruff check`, `uv run ruff format --check src tests`, `uv run mypy src`, and `uv run pytest -q`.
+- [X] T023 Run board audits: `git diff --check`, `openspec/` scan, public-safety scan, and local `sensitive-scan.txt` if present.
 
 ---
 
@@ -148,4 +148,4 @@ Tool Gateway input/state; no new runtime event type, termination reason, depende
 
 ## Cross-Artifact Analysis (gate)
 
-Pending `/speckit-analyze`.
+Passed `/speckit-analyze`: no blocking cross-artifact inconsistencies.
