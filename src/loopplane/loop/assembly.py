@@ -28,6 +28,18 @@ class AugmentationProvider(Protocol):
     def re_establish(self) -> str | None: ...
 
 
+def estimate_request_tokens(request: ModelRequest, *, chars_per_token: int = 4) -> int:
+    """Estimate request tokens with the assembler's local sizing heuristic."""
+    chars = 0
+    for message in request.context:
+        for block in message.blocks:
+            if isinstance(block, TextBlock):
+                chars += len(block.text)
+            else:
+                chars += _NON_TEXT_BLOCK_COST
+    return chars // chars_per_token
+
+
 class PromptAssembler:
     def __init__(
         self,
@@ -158,11 +170,4 @@ class PromptAssembler:
         return int(capacity * self._compact_threshold)
 
     def _estimate_tokens(self, request: ModelRequest) -> int:
-        chars = 0
-        for message in request.context:
-            for block in message.blocks:
-                if isinstance(block, TextBlock):
-                    chars += len(block.text)
-                else:
-                    chars += _NON_TEXT_BLOCK_COST
-        return chars // self._chars_per_token
+        return estimate_request_tokens(request, chars_per_token=self._chars_per_token)

@@ -202,6 +202,12 @@ class RuntimeConfig:
     # money; the ledger/DSN carries no secret in this config object.
     per_user_monthly_usd: Decimal | None = None
     usd_ledger: UsdLedger | None = None
+    # Opt-in pre-turn predictive cost guard (spec 068; ADR 0014): None by
+    # default. When set, this host-owned max-output token estimate is combined
+    # with assembled request-token estimation before the model call. It does not
+    # alter provider generation limits. A bare non-negative integer; carries no
+    # secret.
+    pre_turn_max_output_tokens: int | None = None
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -244,6 +250,10 @@ class RuntimeConfig:
             model_id=data.get("model_id"),
             per_user_monthly_usd=_coerce_usd(data.get("per_user_monthly_usd")),
             usd_ledger=data.get("usd_ledger"),
+            pre_turn_max_output_tokens=_coerce_optional_non_negative_int(
+                data.get("pre_turn_max_output_tokens"),
+                field="pre_turn_max_output_tokens",
+            ),
         )
 
 
@@ -251,6 +261,14 @@ def _coerce_usd(value: Any) -> Decimal | None:
     if value is None or isinstance(value, Decimal):
         return value
     return Decimal(str(value))
+
+
+def _coerce_optional_non_negative_int(value: Any, *, field: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ConfigError(f"{field} must be a non-negative integer")
+    return value
 
 
 def _coerce_tool(item: Any) -> ToolSpec:
@@ -428,6 +446,11 @@ def validate_config(config: RuntimeConfig) -> None:
     ):
         if _cap is not None and _cap < 0:
             raise ConfigError(f"{_label} must be a non-negative USD amount")
+
+    _coerce_optional_non_negative_int(
+        config.pre_turn_max_output_tokens,
+        field="pre_turn_max_output_tokens",
+    )
 
 
 def approval_effects(

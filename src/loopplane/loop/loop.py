@@ -27,7 +27,7 @@ from loopplane.hooks.points import (
     ModelStopPayload,
     UserPromptSubmitPayload,
 )
-from loopplane.loop.assembly import PromptAssembler
+from loopplane.loop.assembly import PromptAssembler, estimate_request_tokens
 from loopplane.loop.compaction import compact_history
 from loopplane.loop.history import HistoryEntry, SessionHistory
 from loopplane.loop.summarizer import summarize_compaction
@@ -174,6 +174,17 @@ class AgentLoop:
                 ):
                     await self._summarize_compaction(before)
                     request = self._assemble(prompt, context.output_schema)
+                if (
+                    self._budget_checker is not None
+                    and self._budget_checker.pre_turn_enabled()
+                    and self._budget_checker.pre_turn_exceeded(
+                        estimate_request_tokens(request)
+                    )
+                ):
+                    await self._emitter.run_terminated(
+                        "budget-exceeded", turns_completed
+                    )
+                    return
                 try:
                     outcome = await self._stream_model_turn(
                         request, turn_index, context

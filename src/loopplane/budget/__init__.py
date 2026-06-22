@@ -57,6 +57,7 @@ class BudgetChecker:
     caps: UsdBudgetCaps
     pricing: PricingTable
     model_id: str
+    pre_turn_max_output_tokens: int | None = None
     # 063 (G22 Phase C; ADR 0010) — the OPTIONAL durable per-user-monthly dimension.
     # When ``ledger`` + ``principal_id`` + ``per_user_monthly_usd`` are ALL set,
     # ``record_turn`` (async) adds this turn's cost to the ``(principal_id, month)``
@@ -83,6 +84,37 @@ class BudgetChecker:
     def start_run(self) -> None:
         """Reset the per-message accumulator; the per-session total persists."""
         self._message_spent = Decimal(0)
+
+    def pre_turn_enabled(self) -> bool:
+        """Whether enough local state exists to run a pre-turn estimate."""
+        return self.pre_turn_max_output_tokens is not None and self.caps.any_set()
+
+    def pre_turn_exceeded(self, estimated_input_tokens: int) -> bool:
+        """Whether the next estimated turn would exceed a known in-memory cap.
+
+        This is non-mutating and fail-open: without a configured max-output estimate,
+        active per-message/per-session cap, or price for the model, it returns False.
+        """
+        if not self.pre_turn_enabled():
+            return False
+        cost = self.pricing.cost(
+            TokenUsage(
+                input_tokens=estimated_input_tokens,
+                output_tokens=self.pre_turn_max_output_tokens,
+            ),
+            self.model_id,
+        )
+        if cost is None:
+            return False
+        if (
+            self.caps.per_message_usd is not None
+            and self._message_spent + cost > self.caps.per_message_usd
+        ):
+            return True
+        return (
+            self.caps.per_session_usd is not None
+            and self._session_spent + cost > self.caps.per_session_usd
+        )
 
     async def record_turn(self, usage: TokenUsage) -> Decimal | None:
         """Add this turn's USD cost to the per-message + per-session totals (and, when

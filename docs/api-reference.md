@@ -167,14 +167,18 @@ rates. Metadata only — not wired into the runtime; no enforcement (G22 caps de
 - `PricingRate` — a model's per-token USD rates (input + output, exact decimals).
 - `PricingTable` — a host-supplied model→rate table with a pure usage→USD `cost` (spec 053).
 
-### `loopplane.budget` (unit 055)
+### `loopplane.budget` (units 055, 068)
 
 USD budget enforcement (gap G22, Phase B; ADR 0005): wires 053's pricing into the Agent
 Loop to enforce per-message / per-session USD caps. Default-off (no caps → byte-identical);
 fail-soft on an unpriced model; a crossing terminates the run `budget-exceeded`.
+Unit 068 adds an optional pre-turn estimate using `RuntimeConfig.pre_turn_max_output_tokens`;
+when complete pricing, model id, max-output estimate, and a known cap are present, an over-budget
+turn can be refused before the model call with the same `budget-exceeded` reason.
 
 - `UsdBudgetCaps` — the per-message / per-session USD caps (each `None` = that dimension off).
-- `BudgetChecker` — the in-loop per-session USD accumulator + cap test (spec 055).
+- `BudgetChecker` — the in-loop per-session USD accumulator + cap test, including the optional
+  non-mutating pre-turn decision (specs 055 and 068).
 
 ### `loopplane.ledger` (unit 062)
 

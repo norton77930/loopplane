@@ -150,6 +150,7 @@ class RuntimeController:
         model_id: str | None = None,
         per_message_usd: Decimal | None = None,
         per_session_usd: Decimal | None = None,
+        pre_turn_max_output_tokens: int | None = None,
         usd_ledger: UsdLedger | None = None,
         per_user_monthly_usd: Decimal | None = None,
     ) -> None:
@@ -197,6 +198,7 @@ class RuntimeController:
         self._budget_model_id = model_id
         self._per_message_usd = per_message_usd
         self._per_session_usd = per_session_usd
+        self._pre_turn_max_output_tokens = pre_turn_max_output_tokens
         # USD per-user-monthly cap (spec 063; G22 Phase C; ADR 0010): a host-supplied
         # durable UsdLedger + the monthly cap. Off by default (None) → byte-identical;
         # when both are set (+ pricing + model-id) _assemble gives the per-session
@@ -382,6 +384,7 @@ class RuntimeController:
                 ),
                 pricing=self._pricing_table,
                 model_id=self._budget_model_id,
+                pre_turn_max_output_tokens=self._pre_turn_max_output_tokens,
                 ledger=self._usd_ledger,
                 principal_id=principal_id,
                 per_user_monthly_usd=self._per_user_monthly_usd,
