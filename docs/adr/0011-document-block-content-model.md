@@ -2,8 +2,8 @@
 
 - **Status**: Accepted (2026-06-22)
 - **Deciders**: LoopPlane maintainer; specs 069 and 070 roadmap batch.
-- **Supersedes / superseded by**: narrows ADR 0001 D2 for document input; 070 will extend this ADR
-  for provider tool-call signatures.
+- **Supersedes / superseded by**: narrows ADR 0001 D2 for document input and covers the narrow
+  provider tool-call signature field needed by 070.
 - **Related**: Constitution IV (Runtime Boundary Clarity), V (Tool Gateway Ownership), VI (Runtime
   Event Bus Ownership), VII (Public-Safe Documentation), X (Testable Evolution).
 
@@ -19,6 +19,12 @@ The existing runtime already carries `ContentBlock` values through host input, h
 checkpoint/event serialization, prompt assembly, and provider mappings. Adding document input
 therefore changes the loop-model content boundary and needs this ADR, but it does not require a new
 runtime event, Tool Gateway path, or SDK/framework replacement.
+
+The native Gemini adapter also needs to preserve provider continuity metadata on model-emitted tool
+calls. The provider returns this metadata with a function call and expects it to be echoed when that
+prior function call is replayed. The existing conservative fallback is still useful for old history,
+but when the provider supplies real metadata LoopPlane should carry it with the tool-call content
+instead of placing it in tool arguments.
 
 ## Decision
 
@@ -59,6 +65,25 @@ Unsupported document input and unreadable/invalid document data fail with generi
 messages. Diagnostics and errors must not include raw document content, private paths, credentials,
 or extracted text.
 
+### D6 - Add optional provider signature metadata for tool calls
+
+Add optional `provider_signature` metadata to the model-emitted tool-call path. The field is absent
+by default and is carried only as opaque provider continuity metadata. Gemini may set it when the
+provider supplies a real function-call signature; Gemini request mapping may replay it on the
+provider function-call part. Unsigned tool calls must keep their existing serialized shape.
+
+### D7 - Keep signatures outside the Tool Gateway
+
+Provider signatures are not tool input, tool output, permission state, or Tool Gateway state. The
+Agent Loop may copy the opaque metadata from the model increment into replayable assistant history,
+but the Tool Gateway continues to receive only the tool name and validated input dictionary.
+
+### D8 - Keep runtime events unchanged for signatures
+
+A signature-bearing tool call remains normal assistant content carried by existing event and
+checkpoint records. No new runtime event type, termination reason, or schema-version bump is
+introduced. Tests must prove both signature-bearing and unsigned tool-call content round-trip.
+
 ## Consequences
 
 ### Positive
@@ -67,6 +92,8 @@ or extracted text.
 - Event vocabulary and schema version stay stable.
 - Existing text/image/tool content behavior remains unchanged.
 - Unsupported providers fail explicitly instead of losing user context silently.
+- Native Gemini tool-call replay can use provider-supplied continuity metadata instead of relying on
+  the skip fallback when the metadata is available.
 
 ### Negative / trade-offs
 
@@ -75,6 +102,8 @@ or extracted text.
 - Large durable binary artifact storage remains out of scope.
 - Base64 document input increases request/event payload size; host size limits and follow-up binary
   storage remain important.
+- The shared content model gains a provider-specific optional metadata field, so tests must guard
+  that unsigned content stays unchanged and provider metadata does not leak into tool input.
 
 ### Follow-ups
 
@@ -93,3 +122,7 @@ or extracted text.
   keeping binary durability separate.
 - **Silently downgrade documents to text**: rejected because it hides loss of context and would
   require extraction behavior outside the feature scope.
+- **Store Gemini signatures inside tool input**: rejected because provider continuity metadata is
+  not a tool argument and must not be validated or executed by the Tool Gateway.
+- **Use only the Gemini skip fallback**: rejected because it discards real provider metadata when
+  the provider supplies it.
