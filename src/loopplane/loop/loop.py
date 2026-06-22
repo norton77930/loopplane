@@ -19,6 +19,7 @@ import anyio.lowlevel
 from loopplane.budget import BudgetChecker
 from loopplane.context import RunContext
 from loopplane.events.emitter import EventEmitter
+from loopplane.fairness import PlatformFairnessGate
 from loopplane.gateway.gateway import ToolGateway
 from loopplane.hooks.decisions import PromptAnnotate, PromptBlock
 from loopplane.hooks.dispatcher import HookDispatcher
@@ -81,6 +82,7 @@ class AgentLoop:
         hooks: HookDispatcher | None = None,
         summarizer: ModelBoundary | None = None,
         budget_checker: BudgetChecker | None = None,
+        platform_fairness: PlatformFairnessGate | None = None,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -100,6 +102,7 @@ class AgentLoop:
         # when caps + a pricing table + a model-id are configured (loopplane.budget is a
         # foundational package, not the tools layer — so the gateway audit is intact).
         self._budget_checker = budget_checker
+        self._platform_fairness = platform_fairness
 
     def current_session_cost(self) -> Decimal | None:
         """The session's accumulated USD, or ``None`` when no budget checker is
@@ -326,6 +329,14 @@ class AgentLoop:
         )
 
     async def _stream_model_turn(
+        self, request: ModelRequest, turn_index: int, context: RunContext
+    ) -> _TurnOutcome:
+        if self._platform_fairness is not None and context.principal_id is not None:
+            async with self._platform_fairness.model_turn(context.principal_id):
+                return await self._stream_model_turn_now(request, turn_index, context)
+        return await self._stream_model_turn_now(request, turn_index, context)
+
+    async def _stream_model_turn_now(
         self, request: ModelRequest, turn_index: int, context: RunContext
     ) -> _TurnOutcome:
         outcome = _TurnOutcome(text_parts=[], calls=[], turn_ended=False)

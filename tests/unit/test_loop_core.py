@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import anyio
@@ -13,6 +15,7 @@ from pydantic import ValidationError
 from loopplane.context import RunContext
 from loopplane.events import EventSequencer, RuntimeEvent
 from loopplane.events.emitter import EventEmitter
+from loopplane.fairness import PlatformFairness, PlatformFairnessPolicy
 from loopplane.gateway import ToolGateway
 from loopplane.loop import AgentLoop, SessionHistory, partition_calls
 from loopplane.model import (
@@ -64,6 +67,16 @@ def _context(tmp_path: Path, *, turn_budget: int | None = None) -> RunContext:
     return RunContext(
         session_id="session-1", working_scope=tmp_path, turn_budget=turn_budget
     )
+
+
+class _RecordingFairness:
+    def __init__(self) -> None:
+        self.tenants: list[str] = []
+
+    @asynccontextmanager
+    async def model_turn(self, tenant_id: str) -> AsyncIterator[None]:
+        self.tenants.append(tenant_id)
+        yield
 
 
 # --- partitioning -----------------------------------------------------------
@@ -158,6 +171,69 @@ async def test_sequential_batch_never_overlaps(tmp_path: Path) -> None:
         "tool-call-started",
         "tool-call-completed",
     ]
+
+
+async def test_agent_loop_uses_platform_fairness_permit(tmp_path: Path) -> None:
+    fairness = _RecordingFairness()
+    sink = _Collector()
+    loop = AgentLoop(
+        model=ScriptedModel(
+            script=[ScriptedTurn(increments=[TextIncrement(text="ok")])],
+            context_capacity=1000,
+        ),
+        gateway=ToolGateway(),
+        emitter=_emitter(sink),
+        history=SessionHistory(),
+        platform_fairness=fairness,
+    )
+
+    await loop.run(
+        [TextBlock(text="go")],
+        RunContext(
+            session_id="session-1",
+            working_scope=tmp_path,
+            principal_id="tenant-a",
+        ),
+    )
+
+    assert fairness.tenants == ["tenant-a"]
+    assert "platform-fairness" not in sink.types
+
+
+async def test_agent_loop_releases_platform_fairness_permit_on_model_failure(
+    tmp_path: Path,
+) -> None:
+    fairness = PlatformFairness(
+        PlatformFairnessPolicy(
+            max_outstanding_per_tenant=2,
+            max_active_model_calls=1,
+            max_consecutive_starts=1,
+        )
+    )
+    sink = _Collector()
+    loop = AgentLoop(
+        model=ScriptedModel(
+            script=[ScriptedFailure(error=RuntimeError("provider failed"))],
+            context_capacity=1000,
+        ),
+        gateway=ToolGateway(),
+        emitter=_emitter(sink),
+        history=SessionHistory(),
+        platform_fairness=fairness,
+    )
+
+    await loop.run(
+        [TextBlock(text="go")],
+        RunContext(
+            session_id="session-1",
+            working_scope=tmp_path,
+            principal_id="tenant-a",
+        ),
+    )
+
+    with anyio.fail_after(1):
+        async with fairness.model_turn("tenant-a"):
+            pass
 
 
 # --- snapshot immutability ---------------------------------------------------

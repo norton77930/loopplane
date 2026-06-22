@@ -270,6 +270,8 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         controller_kwargs["usd_ledger"] = config.usd_ledger
     if config.per_user_monthly_usd is not None:
         controller_kwargs["per_user_monthly_usd"] = config.per_user_monthly_usd
+    if config.platform_fairness is not None:
+        controller_kwargs["platform_fairness"] = config.platform_fairness
 
     controller = RuntimeController(
         model=config.model,

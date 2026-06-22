@@ -16,9 +16,9 @@ implemented and tested independently.
 **Purpose**: Add reusable test scaffolding for deterministic fairness and web/API
 quota checks.
 
-- [ ] T001 [P] Add deterministic async scheduler fixtures for tenant work in `tests/unit/test_platform_fairness.py`
-- [ ] T002 [P] Add a controllable streaming model fixture for fairness-gated turns in `tests/unit/test_loop_core.py`
-- [ ] T003 [P] Add web/API fairness test helpers for quota rejection responses in `tests/unit/test_webapi_core.py`
+- [x] T001 [P] Add deterministic async scheduler fixtures for tenant work in `tests/unit/test_platform_fairness.py`
+- [x] T002 [P] Add a controllable streaming model fixture for fairness-gated turns in `tests/unit/test_loop_core.py`
+- [x] T003 [P] Add web/API fairness test helpers for quota rejection responses in `tests/unit/test_webapi_core.py`
 
 ---
 
@@ -27,12 +27,12 @@ quota checks.
 **Purpose**: Introduce the explicit fairness boundary and wire it through config
 without enabling behavior by default.
 
-- [ ] T004 Create `PlatformFairnessPolicy`, `PlatformFairnessRejected`, and `PlatformFairness` API skeleton in `src/loopplane/fairness.py`
-- [ ] T005 Add `platform_fairness` to `RuntimeConfig`, `from_mapping()`, and `validate_config()` in `src/loopplane/host/config.py`
-- [ ] T006 Export platform fairness types from `src/loopplane/host/__init__.py` and package-level public modules as needed
-- [ ] T007 Thread optional platform fairness from `assemble()` to `RuntimeController` in `src/loopplane/host/assembly.py`
-- [ ] T008 Add `principal_id` and optional platform fairness fields to `RunContext` and `RuntimeController` wiring in `src/loopplane/context.py` and `src/loopplane/controller/controller.py`
-- [ ] T009 Pass optional platform fairness into `AgentLoop` without changing default behavior in `src/loopplane/loop/loop.py`
+- [x] T004 Create `PlatformFairnessPolicy`, `PlatformFairnessRejected`, and `PlatformFairness` API skeleton in `src/loopplane/fairness.py`
+- [x] T005 Add `platform_fairness` to `RuntimeConfig`, `from_mapping()`, and `validate_config()` in `src/loopplane/host/config.py`
+- [x] T006 Export platform fairness types from `src/loopplane/host/__init__.py` and package-level public modules as needed
+- [x] T007 Thread optional platform fairness from `assemble()` to `RuntimeController` in `src/loopplane/host/assembly.py`
+- [x] T008 Add `principal_id` and optional platform fairness fields to `RunContext` and `RuntimeController` wiring in `src/loopplane/context.py` and `src/loopplane/controller/controller.py`
+- [x] T009 Pass optional platform fairness into `AgentLoop` without changing default behavior in `src/loopplane/loop/loop.py`
 
 **Checkpoint**: Runtime config and controller/loop boundaries can name fairness,
 but no user story is complete until the tests and behavior below are done.
@@ -50,16 +50,16 @@ turn before either tenant monopolizes the scheduler.
 
 ### Tests for User Story 1
 
-- [ ] T010 [P] [US1] Add failing two-tenant round-robin progress tests in `tests/unit/test_platform_fairness.py`
-- [ ] T011 [P] [US1] Add failing single-tenant no-artificial-delay test in `tests/unit/test_platform_fairness.py`
-- [ ] T012 [P] [US1] Add failing AgentLoop model-turn permit integration test in `tests/unit/test_loop_core.py`
+- [x] T010 [P] [US1] Add failing two-tenant round-robin progress tests in `tests/unit/test_platform_fairness.py`
+- [x] T011 [P] [US1] Add failing single-tenant no-artificial-delay test in `tests/unit/test_platform_fairness.py`
+- [x] T012 [P] [US1] Add failing AgentLoop model-turn permit integration test in `tests/unit/test_loop_core.py`
 
 ### Implementation for User Story 1
 
-- [ ] T013 [US1] Implement async fair model-turn queue, shared capacity, and consecutive-start window in `src/loopplane/fairness.py`
-- [ ] T014 [US1] Gate `AgentLoop._stream_model_turn()` with `PlatformFairness.model_turn()` in `src/loopplane/loop/loop.py`
-- [ ] T015 [US1] Stamp session principal id into `RunContext` during `RuntimeController.drive()` in `src/loopplane/controller/controller.py`
-- [ ] T016 [US1] Run focused US1 tests: `uv run pytest tests/unit/test_platform_fairness.py tests/unit/test_loop_core.py`
+- [x] T013 [US1] Implement async fair model-turn queue, shared capacity, and consecutive-start window in `src/loopplane/fairness.py`
+- [x] T014 [US1] Gate `AgentLoop._stream_model_turn()` with `PlatformFairness.model_turn()` in `src/loopplane/loop/loop.py`
+- [x] T015 [US1] Stamp session principal id into `RunContext` during `RuntimeController.drive()` in `src/loopplane/controller/controller.py`
+- [x] T016 [US1] Run focused US1 tests: `uv run pytest tests/unit/test_platform_fairness.py tests/unit/test_loop_core.py`
 
 **Checkpoint**: Fair model-call scheduling works independently of quota
 admission and without changing event/schema/tool behavior.
@@ -78,18 +78,18 @@ admit again.
 
 ### Tests for User Story 2
 
-- [ ] T017 [P] [US2] Add failing quota admit/reject/release tests in `tests/unit/test_platform_fairness.py`
-- [ ] T018 [P] [US2] Add failing cross-tenant quota isolation test in `tests/unit/test_platform_fairness.py`
-- [ ] T019 [P] [US2] Add failing public-safe HTTP 429 quota test for one-shot runs in `tests/unit/test_webapi_core.py`
-- [ ] T020 [P] [US2] Add failing host config validation tests for invalid fairness policy values in `tests/contract/test_host_config.py`
+- [x] T017 [P] [US2] Add failing quota admit/reject/release tests in `tests/unit/test_platform_fairness.py`
+- [x] T018 [P] [US2] Add failing cross-tenant quota isolation test in `tests/unit/test_platform_fairness.py`
+- [x] T019 [P] [US2] Add failing public-safe HTTP 429 quota test for one-shot runs in `tests/unit/test_webapi_core.py`
+- [x] T020 [P] [US2] Add failing host config validation tests for invalid fairness policy values in `tests/contract/test_host_config.py`
 
 ### Implementation for User Story 2
 
-- [ ] T021 [US2] Implement tenant outstanding-work admission and exactly-once reservation release in `src/loopplane/fairness.py`
-- [ ] T022 [US2] Wrap `LoopPlaneHost.run()` and `Session.submit()` work with fairness admission when a principal id is present in `src/loopplane/host/host.py`
-- [ ] T023 [US2] Map `PlatformFairnessRejected` to public-safe HTTP 429 for one-shot run routes in `src/loopplane/webapi/app.py`
-- [ ] T024 [US2] Preserve existing 409 active-run conflicts separately from fairness 429 in `src/loopplane/webapi/app.py`
-- [ ] T025 [US2] Run focused US2 tests: `uv run pytest tests/unit/test_platform_fairness.py tests/unit/test_webapi_core.py tests/contract/test_host_config.py`
+- [x] T021 [US2] Implement tenant outstanding-work admission and exactly-once reservation release in `src/loopplane/fairness.py`
+- [x] T022 [US2] Wrap `RuntimeController.drive()` work with fairness admission when a principal id is present in `src/loopplane/controller/controller.py`
+- [x] T023 [US2] Map `PlatformFairnessRejected` to public-safe HTTP 429 for one-shot run routes in `src/loopplane/webapi/app.py`
+- [x] T024 [US2] Preserve existing 409 active-run conflicts separately from fairness 429 in `src/loopplane/webapi/app.py`
+- [x] T025 [US2] Run focused US2 tests: `uv run pytest tests/unit/test_platform_fairness.py tests/unit/test_webapi_core.py tests/contract/test_host_config.py`
 
 **Checkpoint**: Quota rejection is public-safe, local, and independent per
 tenant.
@@ -107,15 +107,15 @@ termination reason is required.
 
 ### Tests for User Story 3
 
-- [ ] T026 [P] [US3] Add default-off regression tests for `RuntimeConfig.from_mapping()` and `validate_config()` in `tests/contract/test_host_config.py`
-- [ ] T027 [P] [US3] Add default-off tenant host pool regression coverage in `tests/unit/test_tenant_host_pool.py`
-- [ ] T028 [P] [US3] Add event/termination vocabulary regression assertions in `tests/unit/test_loop_core.py`
+- [x] T026 [P] [US3] Add default-off regression tests for `RuntimeConfig.from_mapping()` and `validate_config()` in `tests/contract/test_host_config.py`
+- [x] T027 [P] [US3] Add default-off tenant host pool regression coverage in `tests/unit/test_tenant_host_pool.py`
+- [x] T028 [P] [US3] Add event/termination vocabulary regression assertions in `tests/unit/test_loop_core.py`
 
 ### Implementation for User Story 3
 
-- [ ] T029 [US3] Keep all fairness branches inert when no fairness object or no principal id is present in `src/loopplane/controller/controller.py` and `src/loopplane/loop/loop.py`
-- [ ] T030 [US3] Ensure host and web/API default paths do not create fairness state in `src/loopplane/host/host.py` and `src/loopplane/webapi/app.py`
-- [ ] T031 [US3] Run focused US3 tests: `uv run pytest tests/contract/test_host_config.py tests/unit/test_tenant_host_pool.py tests/unit/test_loop_core.py`
+- [x] T029 [US3] Keep all fairness branches inert when no fairness object or no principal id is present in `src/loopplane/controller/controller.py` and `src/loopplane/loop/loop.py`
+- [x] T030 [US3] Ensure host and web/API default paths do not create fairness state in `src/loopplane/host/host.py` and `src/loopplane/webapi/app.py`
+- [x] T031 [US3] Run focused US3 tests: `uv run pytest tests/contract/test_host_config.py tests/unit/test_tenant_host_pool.py tests/unit/test_loop_core.py`
 
 **Checkpoint**: Default-off behavior and boundary preservation are verified.
 
@@ -132,16 +132,16 @@ work proceeds.
 
 ### Tests for User Story 4
 
-- [ ] T032 [P] [US4] Add failing queued-cancellation cleanup tests in `tests/unit/test_platform_fairness.py`
-- [ ] T033 [P] [US4] Add failing model-stream-exception permit-release test in `tests/unit/test_loop_core.py`
-- [ ] T034 [P] [US4] Add failing SSE/session public-safe quota error tests in `tests/unit/test_webapi_core.py`
+- [x] T032 [P] [US4] Add failing queued-cancellation cleanup tests in `tests/unit/test_platform_fairness.py`
+- [x] T033 [P] [US4] Add failing model-stream-exception permit-release test in `tests/unit/test_loop_core.py`
+- [x] T034 [P] [US4] Add failing SSE/session public-safe quota error tests in `tests/unit/test_webapi_core.py`
 
 ### Implementation for User Story 4
 
-- [ ] T035 [US4] Make queued waiter cancellation remove scheduler entries and notify the next waiter in `src/loopplane/fairness.py`
-- [ ] T036 [US4] Make model-turn permit release idempotent across normal completion, exceptions, and cancellation in `src/loopplane/fairness.py`
-- [ ] T037 [US4] Map fairness quota errors to generic public-safe SSE/session errors without raw exception details in `src/loopplane/webapi/streaming.py`, `src/loopplane/webapi/app.py`, and `src/loopplane/webapi/sessions.py`
-- [ ] T038 [US4] Run focused US4 tests: `uv run pytest tests/unit/test_platform_fairness.py tests/unit/test_loop_core.py tests/unit/test_webapi_core.py`
+- [x] T035 [US4] Make queued waiter cancellation remove scheduler entries and notify the next waiter in `src/loopplane/fairness.py`
+- [x] T036 [US4] Make model-turn permit release idempotent across normal completion, exceptions, and cancellation in `src/loopplane/fairness.py`
+- [x] T037 [US4] Map fairness quota errors to generic public-safe SSE/session errors without raw exception details in `src/loopplane/webapi/streaming.py` and `src/loopplane/webapi/app.py`
+- [x] T038 [US4] Run focused US4 tests: `uv run pytest tests/unit/test_platform_fairness.py tests/unit/test_loop_core.py tests/unit/test_webapi_core.py`
 
 **Checkpoint**: Failure cleanup and public-safe error behavior are verified.
 
@@ -151,14 +151,14 @@ work proceeds.
 
 **Purpose**: Documentation, contract alignment, and full gates.
 
-- [ ] T039 [P] Update public API reference or quickstart snippets for platform fairness in `docs/api-reference.md` if the public export surface changes
-- [ ] T040 [P] Update 072 quickstart validation notes in `specs/072-platform-fairness/quickstart.md` if implementation paths differ from the plan
-- [ ] T041 Run `uv run ruff check`
-- [ ] T042 Run `uv run ruff format --check src tests`
-- [ ] T043 Run `uv run mypy src`
-- [ ] T044 Run `uv run pytest`
-- [ ] T045 Run `git diff --check`, changed-file scope check, private-reference scan, and public-safety scan
-- [ ] T046 Update `docs/loopplane-agent-board.md` to mark 072 Verified after all gates pass
+- [x] T039 [P] Update public API reference or quickstart snippets for platform fairness in `docs/api-reference.md` if the public export surface changes
+- [x] T040 [P] Update 072 quickstart validation notes in `specs/072-platform-fairness/quickstart.md` if implementation paths differ from the plan
+- [x] T041 Run `uv run ruff check`
+- [x] T042 Run `uv run ruff format --check src tests`
+- [x] T043 Run `uv run mypy src`
+- [x] T044 Run `uv run pytest`
+- [x] T045 Run `git diff --check`, changed-file scope check, private-reference scan, and public-safety scan
+- [x] T046 Update `docs/loopplane-agent-board.md` to mark 072 Verified after all gates pass
 
 ---
 

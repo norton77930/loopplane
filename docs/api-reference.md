@@ -181,6 +181,20 @@ turn can be refused before the model call with the same `budget-exceeded` reason
 - `BudgetChecker` — the in-loop per-session USD accumulator + cap test, including the optional
   non-mutating pre-turn decision (specs 055 and 068).
 
+### Platform fairness (unit 072)
+
+In-process platform fairness (gap G20 tail; ADR 0013): a host-supplied,
+default-off collaborator for tenant-scoped outstanding-work quota and fair
+model-turn starts. It is process-local only; distributed fairness and durable
+queues are deferred.
+
+- `PlatformFairnessPolicy` — positive local limits for per-tenant outstanding
+  work, active model calls, and the consecutive-start fairness window.
+- `PlatformFairness` — the in-memory quota admission and model-turn permit gate.
+- `PlatformFairnessGate` — the Protocol accepted by `RuntimeConfig.platform_fairness`.
+- `PlatformFairnessRejected` — public-safe quota rejection; web/API maps it to
+  `capacity exceeded`.
+
 ### `loopplane.ledger` (unit 062)
 
 Durable per-user-monthly USD ledger (gap G22, Phase C; ADR 0010): an atomic
@@ -341,6 +355,9 @@ The Host Application Interface that exposes the runtime to host applications.
 - `MemoryConfig` — memory configuration.
 - `StorageConfig` — storage configuration.
 - `SkillsConfig` — skills configuration.
+- `PlatformFairness` — in-process platform fairness collaborator (072).
+- `PlatformFairnessPolicy` — platform fairness policy limits (072).
+- `PlatformFairnessRejected` — platform fairness quota rejection (072).
 - `ToolSpec` — a tool specification for the host.
 - `ApprovalPolicy` — the host approval policy.
 - `ApprovalDecision` — a host approval decision.

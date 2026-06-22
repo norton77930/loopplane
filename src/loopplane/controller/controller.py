@@ -60,6 +60,7 @@ from loopplane.events.envelope import (
     UserInputPayload,
 )
 from loopplane.events.sequencer import EventSequencer
+from loopplane.fairness import PlatformFairnessGate
 from loopplane.gateway.gateway import ToolGateway
 from loopplane.hooks.dispatcher import HookDispatcher
 from loopplane.hooks.points import (
@@ -153,6 +154,7 @@ class RuntimeController:
         pre_turn_max_output_tokens: int | None = None,
         usd_ledger: UsdLedger | None = None,
         per_user_monthly_usd: Decimal | None = None,
+        platform_fairness: PlatformFairnessGate | None = None,
     ) -> None:
         self._model = model
         self._gateway = gateway
@@ -206,6 +208,7 @@ class RuntimeController:
         # create AND resume. The ledger is a foundational package (not the tools layer).
         self._usd_ledger = usd_ledger
         self._per_user_monthly_usd = per_user_monthly_usd
+        self._platform_fairness = platform_fairness
         # Optional lifecycle hooks (feature 015); absent by default (FR-011).
         # process_setup fires at most once per controller lifetime.
         self._hooks = hooks
@@ -416,6 +419,7 @@ class RuntimeController:
                 hooks=self._hooks,
                 summarizer=self._compaction_summarizer,
                 budget_checker=budget_checker,
+                platform_fairness=self._platform_fairness,
             ),
             broker=InteractionBroker(emitter=emitter),
             approval_memory={},
@@ -552,6 +556,7 @@ class RuntimeController:
         context = RunContext(
             session_id=session_id,
             working_scope=session.working_scope,
+            principal_id=session.principal_id,
             cancellation=session.cancellation,
             turn_budget=session.turn_budget,
             session_approval_memory=session.approval_memory,
@@ -566,7 +571,11 @@ class RuntimeController:
             worktrees=worktree_manager,
         )
         try:
-            await session.loop.run(input_blocks, context)
+            if self._platform_fairness is None or session.principal_id is None:
+                await session.loop.run(input_blocks, context)
+            else:
+                async with self._platform_fairness.admit(session.principal_id):
+                    await session.loop.run(input_blocks, context)
         finally:
             session.driving = False
             session.last_active_at = datetime.now(UTC)

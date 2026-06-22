@@ -17,7 +17,7 @@ from contextlib import suppress
 import anyio
 
 from loopplane.events import RuntimeEvent, serialize_event
-from loopplane.host import LoopPlaneHost, Prompt
+from loopplane.host import LoopPlaneHost, PlatformFairnessRejected, Prompt
 from loopplane.webapi.models import ErrorResponse, RunResult
 
 _STREAM_CLOSED = (anyio.BrokenResourceError, anyio.ClosedResourceError)
@@ -55,6 +55,11 @@ async def run_event_stream(
                 )
                 final = _frame(
                     RunResult.from_outcome(outcome).model_dump_json(), event="outcome"
+                )
+            except PlatformFairnessRejected:
+                final = _frame(
+                    ErrorResponse(detail="capacity exceeded").model_dump_json(),
+                    event="error",
                 )
             except RuntimeError:
                 final = _frame(

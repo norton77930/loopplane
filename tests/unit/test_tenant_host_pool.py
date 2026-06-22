@@ -14,6 +14,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+from loopplane.fairness import PlatformFairness, PlatformFairnessPolicy  # noqa: E402
 from loopplane.host import LoopPlaneHost  # noqa: E402
 from loopplane.webapi import TenantHostPool, create_app  # noqa: E402
 from tests.webapi_helpers import (  # noqa: E402
@@ -125,3 +126,42 @@ def test_create_app_default_uses_the_single_shared_host(tmp_path: Path) -> None:
     assert (
         response.status_code == 200
     )  # default path runs on the shared host (unchanged)
+
+
+def test_host_pool_default_path_does_not_require_platform_fairness(
+    tmp_path: Path,
+) -> None:
+    pool = TenantHostPool(_factory(tmp_path))
+    default = build_test_host(tmp_path, model=multi_text_model("z"))
+    client = make_client(create_app(default, authenticator=allow_all, host_pool=pool))
+
+    response = client.post("/v1/runs", json={"prompt": "hi"})
+
+    assert response.status_code == 200
+
+
+def test_host_pool_accepts_hosts_with_shared_platform_fairness(
+    tmp_path: Path,
+) -> None:
+    fairness = PlatformFairness(
+        PlatformFairnessPolicy(
+            max_outstanding_per_tenant=2,
+            max_active_model_calls=1,
+            max_consecutive_starts=1,
+        )
+    )
+
+    def make(model: str | None = None) -> LoopPlaneHost:
+        return build_test_host(
+            tmp_path,
+            model=multi_text_model("x", "y"),
+            platform_fairness=fairness,
+        )
+
+    pool = TenantHostPool(make)
+    default = build_test_host(tmp_path, model=multi_text_model("z"))
+    client = make_client(create_app(default, authenticator=allow_all, host_pool=pool))
+
+    response = client.post("/v1/runs", json={"prompt": "hi"})
+
+    assert response.status_code == 200

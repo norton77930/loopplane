@@ -11,12 +11,15 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+from collections.abc import AsyncIterator  # noqa: E402
+from contextlib import asynccontextmanager  # noqa: E402
 from datetime import UTC, datetime  # noqa: E402
 
 from fastapi import Depends, FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from loopplane.host import RunOutcome  # noqa: E402
+from loopplane.fairness import PlatformFairnessRejected  # noqa: E402
+from loopplane.host import LoopPlaneHost, RunOutcome, RuntimeConfig  # noqa: E402
 from loopplane.loop.history import HistoryEntry  # noqa: E402
 from loopplane.model import TextBlock  # noqa: E402
 from loopplane.webapi import create_app  # noqa: E402
@@ -36,8 +39,22 @@ from tests.webapi_helpers import (  # noqa: E402
     allow_all,
     build_test_host,
     deny_all,
+    make_client,
+    multi_text_model,
     raising,
 )
+
+
+class _RejectingFairness:
+    @asynccontextmanager
+    async def admit(self, tenant_id: str) -> AsyncIterator[None]:
+        raise PlatformFairnessRejected("capacity exceeded")
+        yield
+
+    @asynccontextmanager
+    async def model_turn(self, tenant_id: str) -> AsyncIterator[None]:
+        yield
+
 
 # --- metadata-only projections ----------------------------------------------
 
@@ -128,3 +145,66 @@ def test_denial_never_echoes_the_credential() -> None:
 def test_create_app_builds(tmp_path) -> None:  # type: ignore[no-untyped-def]
     app = create_app(build_test_host(tmp_path))
     assert isinstance(app, FastAPI)
+
+
+def test_run_quota_rejection_is_public_safe_429(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    host = LoopPlaneHost(
+        RuntimeConfig(
+            model=multi_text_model("ok"),
+            platform_fairness=_RejectingFairness(),
+        ),
+        working_scope=tmp_path,
+    )
+    client = make_client(create_app(host, authenticator=allow_all))
+
+    response = client.post("/v1/runs", json={"prompt": "hi"})
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "capacity exceeded"}
+    assert "RejectingFairness" not in response.text
+
+
+def test_run_event_stream_quota_rejection_is_public_safe_error(
+    tmp_path,
+) -> None:  # type: ignore[no-untyped-def]
+    host = LoopPlaneHost(
+        RuntimeConfig(
+            model=multi_text_model("ok"),
+            platform_fairness=_RejectingFairness(),
+        ),
+        working_scope=tmp_path,
+    )
+    client = make_client(create_app(host, authenticator=allow_all))
+
+    with client.stream("POST", "/v1/runs/events", json={"prompt": "hi"}) as response:
+        body = "".join(response.iter_text())
+
+    assert response.status_code == 200
+    assert "event: error" in body
+    assert "capacity exceeded" in body
+    assert "a run is already active" not in body
+    assert "RejectingFairness" not in body
+
+
+def test_session_submit_quota_rejection_is_public_safe_429(
+    tmp_path,
+) -> None:  # type: ignore[no-untyped-def]
+    host = LoopPlaneHost(
+        RuntimeConfig(
+            model=multi_text_model("ok"),
+            platform_fairness=_RejectingFairness(),
+        ),
+        working_scope=tmp_path,
+    )
+    with make_client(create_app(host, authenticator=allow_all)) as client:
+        opened = client.post("/v1/sessions")
+        assert opened.status_code == 200
+        session_id = opened.json()["session_id"]
+
+        response = client.post(
+            f"/v1/sessions/{session_id}/submit", json={"prompt": "hi"}
+        )
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "capacity exceeded"}
+    assert "RejectingFairness" not in response.text

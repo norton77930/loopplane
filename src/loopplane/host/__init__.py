@@ -12,6 +12,11 @@ Typical use::
     outcome = await host.run("please echo hello", on_event=my_sink)
 """
 
+from loopplane.fairness import (
+    PlatformFairness,
+    PlatformFairnessPolicy,
+    PlatformFairnessRejected,
+)
 from loopplane.host.assembly import AssembledRuntime, assemble
 from loopplane.host.config import (
     ApprovalPolicy,
@@ -43,6 +48,9 @@ __all__ = [
     "ImageBlock",
     "LoopPlaneHost",
     "MemoryConfig",
+    "PlatformFairness",
+    "PlatformFairnessPolicy",
+    "PlatformFairnessRejected",
     "Prompt",
     "RunOutcome",
     "RuntimeConfig",

@@ -150,6 +150,7 @@ WorktreeManagerFactory = Callable[["Path"], "WorktreeManager | None"]
 class RunContext:
     session_id: str
     working_scope: Path
+    principal_id: str | None = None
     cancellation: anyio.Event = field(default_factory=anyio.Event)
     turn_budget: int | None = None
     session_approval_memory: dict[str, Literal["allow", "deny"]] = field(

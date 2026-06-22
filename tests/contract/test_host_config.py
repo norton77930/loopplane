@@ -7,6 +7,7 @@ import dataclasses
 
 import pytest
 
+from loopplane.fairness import PlatformFairness, PlatformFairnessPolicy
 from loopplane.host import (
     ApprovalPolicy,
     ConfigError,
@@ -226,6 +227,47 @@ def test_allow_network_round_trips_from_mapping_and_has_no_secret() -> None:
     config = RuntimeConfig.from_mapping({"model": _model(), "allow_network": True})
     assert config.allow_network is True
     assert RuntimeConfig.from_mapping({"model": _model()}).allow_network is False
+
+
+def test_platform_fairness_round_trips_from_mapping() -> None:
+    fairness = PlatformFairness(
+        PlatformFairnessPolicy(
+            max_outstanding_per_tenant=2,
+            max_active_model_calls=1,
+            max_consecutive_starts=1,
+        )
+    )
+
+    config = RuntimeConfig.from_mapping(
+        {"model": _model(), "platform_fairness": fairness}
+    )
+
+    assert config.platform_fairness is fairness
+
+
+def test_platform_fairness_defaults_off() -> None:
+    assert RuntimeConfig(model=_model()).platform_fairness is None
+    assert RuntimeConfig.from_mapping({"model": _model()}).platform_fairness is None
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "max_outstanding_per_tenant",
+        "max_active_model_calls",
+        "max_consecutive_starts",
+    ],
+)
+def test_platform_fairness_policy_rejects_non_positive_values(field: str) -> None:
+    values = {
+        "max_outstanding_per_tenant": 1,
+        "max_active_model_calls": 1,
+        "max_consecutive_starts": 1,
+    }
+    values[field] = 0
+
+    with pytest.raises(ValueError, match=field):
+        PlatformFairnessPolicy(**values)
 
 
 # --- plan-mode wiring (spec 038) ---------------------------------------------

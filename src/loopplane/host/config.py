@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from loopplane.approval import RuleEffect
+from loopplane.fairness import PlatformFairnessGate
 from loopplane.gateway import ToolAdapter, ToolHandler
 from loopplane.governance import (
     PERMISSION_MODES,
@@ -208,6 +209,10 @@ class RuntimeConfig:
     # alter provider generation limits. A bare non-negative integer; carries no
     # secret.
     pre_turn_max_output_tokens: int | None = None
+    # Opt-in in-process platform fairness (spec 072; ADR 0013): None by default.
+    # The host-supplied collaborator gates tenant admission and model-turn starts.
+    # It carries no secret; tenant ids are existing opaque principal ids.
+    platform_fairness: PlatformFairnessGate | None = None
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> RuntimeConfig:
@@ -254,6 +259,7 @@ class RuntimeConfig:
                 data.get("pre_turn_max_output_tokens"),
                 field="pre_turn_max_output_tokens",
             ),
+            platform_fairness=data.get("platform_fairness"),
         )
 
 
@@ -374,6 +380,12 @@ def validate_config(config: RuntimeConfig) -> None:
 
     if config.model is None:
         raise ConfigError("a model provider is required")
+    if config.platform_fairness is not None:
+        for name in ("admit", "model_turn"):
+            if not callable(getattr(config.platform_fairness, name, None)):
+                raise ConfigError(
+                    "platform_fairness must provide admit() and model_turn()"
+                )
 
     names = collect_tool_names(config)
     seen: set[str] = set()

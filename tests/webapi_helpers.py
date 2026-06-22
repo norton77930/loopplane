@@ -112,6 +112,7 @@ def build_test_host(
     tools: tuple[ToolSpec, ...] = (ECHO_TOOL,),
     approval: ApprovalPolicy | None = None,
     storage: bool = False,
+    platform_fairness: object | None = None,
 ) -> LoopPlaneHost:
     """A ``LoopPlaneHost`` over the fake model + echo tool, scoped to a tmp dir.
 
@@ -130,6 +131,7 @@ def build_test_host(
             tools=tools,
             approval=approval,
             storage=store,
+            platform_fairness=platform_fairness,
         ),
         working_scope=working_scope,
     )

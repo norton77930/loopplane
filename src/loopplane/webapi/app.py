@@ -25,7 +25,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from loopplane.commands import CommandContext, default_registry
 from loopplane.events import RuntimeEvent
-from loopplane.host import ContentBlock, LoopPlaneHost, TextBlock
+from loopplane.host import (
+    ContentBlock,
+    LoopPlaneHost,
+    PlatformFairnessRejected,
+    TextBlock,
+)
 from loopplane.webapi.auth import (
     DENY_ALL,
     Authenticator,
@@ -280,6 +285,8 @@ def create_app(
                     principal_id=principal.id,
                     output_schema=body.output_schema,
                 )
+        except PlatformFairnessRejected as exc:
+            raise HTTPException(status_code=429, detail="capacity exceeded") from exc
         except RuntimeError as exc:
             raise HTTPException(
                 status_code=409, detail="a run is already active"
@@ -382,7 +389,12 @@ def create_app(
         entry = _require(session_id, principal)
         _check_output_schema(body.output_schema, entry.supports_structured_output)
         blocks = _build_blocks(body, principal.id, entry.accepts_media)
-        outcome = await entry.session.submit(blocks, output_schema=body.output_schema)
+        try:
+            outcome = await entry.session.submit(
+                blocks, output_schema=body.output_schema
+            )
+        except PlatformFairnessRejected as exc:
+            raise HTTPException(status_code=429, detail="capacity exceeded") from exc
         return RunResult.from_outcome(outcome)
 
     @router.post("/sessions/{session_id}/approvals/{request_id}")
