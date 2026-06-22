@@ -27,7 +27,7 @@ Expected outcomes:
 Run the web/API reconnect integration tests:
 
 ```powershell
-uv run pytest -q tests/integration/test_webapi_replay_store.py tests/unit/test_webapi_reconnect.py
+uv run pytest -q tests/integration/test_webapi_replay_store.py tests/unit/test_sse_reconnect.py
 ```
 
 Expected outcomes:

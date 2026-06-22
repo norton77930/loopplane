@@ -102,7 +102,7 @@ src/loopplane/webapi/__init__.py     # MODIFIED only if new public exports are r
 docs/api-reference.md                # MODIFIED only if new public names are exported
 tests/contract/test_event_replay_store.py
 tests/integration/test_webapi_replay_store.py
-tests/unit/test_webapi_reconnect.py
+tests/unit/test_sse_reconnect.py
 ```
 
 **Structure Decision**: Keep the replay store in `loopplane.webapi` because it stores SSE frames for

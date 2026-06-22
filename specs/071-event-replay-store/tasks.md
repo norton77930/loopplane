@@ -43,7 +43,7 @@ continuation.
 
 ### Tests for User Story 1
 
-- [ ] T008 [US1] Add failing unit tests in `tests/unit/test_webapi_reconnect.py` for durable replay ordering, malformed `Last-Event-ID`, replay/live deduplication, and store-polled tailing without a local live channel.
+- [ ] T008 [US1] Add failing unit tests in `tests/unit/test_sse_reconnect.py` for durable replay ordering, malformed `Last-Event-ID`, replay/live deduplication, and store-polled tailing without a local live channel.
 - [ ] T009 [US1] Add failing integration tests in `tests/integration/test_webapi_replay_store.py` proving a session reconnect replays stored frames after `Last-Event-ID` and then continues with later events.
 
 ### Implementation for User Story 1
@@ -51,7 +51,7 @@ continuation.
 - [ ] T010 [US1] Update `src/loopplane/webapi/sessions.py` so `reconnect_stream` can merge durable replay records, the existing in-memory buffer, and live frames while deduplicating by sequence.
 - [ ] T011 [US1] Update `src/loopplane/webapi/sessions.py` so `run_session` appends streamed `id:` frames to an optional `EventReplayStore` without breaking live delivery when the append fails.
 - [ ] T012 [US1] Update `src/loopplane/webapi/app.py` to accept an optional replay store and retention/polling settings, wire them into session opening and event streaming, and preserve existing route ownership checks.
-- [ ] T013 [US1] Run `uv run pytest -q tests/unit/test_webapi_reconnect.py tests/integration/test_webapi_replay_store.py tests/contract/test_event_replay_store.py` and confirm US1 tests pass.
+- [ ] T013 [US1] Run `uv run pytest -q tests/unit/test_sse_reconnect.py tests/integration/test_webapi_replay_store.py tests/contract/test_event_replay_store.py` and confirm US1 tests pass.
 
 **Checkpoint**: Durable replay works for the MVP with the file store and webapi session stream.
 
@@ -67,12 +67,12 @@ without expected-output changes when no replay store is configured.
 ### Tests for User Story 2
 
 - [ ] T014 [US2] Add failing/no-regression tests in `tests/integration/test_webapi_replay_store.py` for no-store default behavior, disabled-buffer byte identity, and in-memory ring replay staying unchanged.
-- [ ] T015 [US2] Verify existing unit 058 tests in `tests/integration/test_webapi_us3.py` and `tests/integration/test_webapi_sse_reconnect.py` require no expected-output changes.
+- [ ] T015 [US2] Verify existing unit 058 tests in `tests/integration/test_webapi_us3.py` and `tests/unit/test_sse_reconnect.py` require no expected-output changes.
 
 ### Implementation for User Story 2
 
 - [ ] T016 [US2] Ensure `src/loopplane/webapi/app.py` and `src/loopplane/webapi/sessions.py` take the durable replay path only when a store is configured and keep no-store behavior byte-identical.
-- [ ] T017 [US2] Run `uv run pytest -q tests/integration/test_webapi_replay_store.py tests/integration/test_webapi_us3.py tests/integration/test_webapi_sse_reconnect.py` and confirm US2 tests pass.
+- [ ] T017 [US2] Run `uv run pytest -q tests/integration/test_webapi_replay_store.py tests/integration/test_webapi_us3.py tests/unit/test_sse_reconnect.py` and confirm US2 tests pass.
 
 **Checkpoint**: Durable replay remains opt-in and existing SSE behavior is stable.
 
@@ -146,7 +146,7 @@ and webapi tests prove non-owner reconnect attempts cannot replay another princi
 
 1. Complete Phase 1 and Phase 2 with `FileEventReplayStore`.
 2. Complete US1 only.
-3. Validate with `uv run pytest -q tests/unit/test_webapi_reconnect.py tests/integration/test_webapi_replay_store.py tests/contract/test_event_replay_store.py`.
+3. Validate with `uv run pytest -q tests/unit/test_sse_reconnect.py tests/integration/test_webapi_replay_store.py tests/contract/test_event_replay_store.py`.
 4. Confirm durable replay emits only sequence-greater frames and does not duplicate live frames.
 
 ### Incremental Delivery
