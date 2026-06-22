@@ -11,15 +11,17 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import anyio
 from anyio.streams.memory import MemoryObjectReceiveStream
 
 from loopplane.events import RuntimeEvent, serialize_event
 from loopplane.host import LoopPlaneHost, Session
+from loopplane.webapi.replay import EventReplayRecord, EventReplayStore
 
 _STREAM_CLOSED = (anyio.BrokenResourceError, anyio.ClosedResourceError)
 
@@ -59,7 +61,9 @@ def frame_sequence(frame: str) -> int | None:
 async def reconnect_stream(
     buffer: deque[tuple[int, str]] | None,
     last_event_id: str | None,
-    live: MemoryObjectReceiveStream[str],
+    live: AsyncIterator[str],
+    *,
+    durable_records: Iterable[EventReplayRecord] = (),
 ) -> AsyncIterator[str]:
     """The session SSE stream with 058 reconnect support.
 
@@ -74,8 +78,9 @@ async def reconnect_stream(
     and keeps the merged backlog in order.
     """
 
+    durable_records = tuple(durable_records)
     last_id: int | None = None
-    if buffer is not None and last_event_id is not None:
+    if (buffer is not None or durable_records) and last_event_id is not None:
         try:
             last_id = int(last_event_id)
         except ValueError:
@@ -93,14 +98,18 @@ async def reconnect_stream(
     merged: dict[int, str] = {
         seq: frame for seq, frame in list(buffer or ()) if seq > last_id
     }
-    while True:
-        try:
-            frame = live.receive_nowait()
-        except (anyio.WouldBlock, anyio.EndOfStream, *_STREAM_CLOSED):
-            break
-        seq = frame_sequence(frame)
-        if seq is not None and seq > last_id:
-            merged[seq] = frame
+    for record in durable_records:
+        if record.sequence > last_id:
+            merged[record.sequence] = record.frame
+    if isinstance(live, MemoryObjectReceiveStream):
+        while True:
+            try:
+                frame = live.receive_nowait()
+            except (anyio.WouldBlock, anyio.EndOfStream, *_STREAM_CLOSED):
+                break
+            seq = frame_sequence(frame)
+            if seq is not None and seq > last_id:
+                merged[seq] = frame
     max_yielded = last_id
     for seq in sorted(merged):
         yield merged[seq]
@@ -115,6 +124,40 @@ async def reconnect_stream(
             max_yielded = max(max_yielded, seq)
 
 
+async def replay_store_stream(
+    store: EventReplayStore,
+    session_id: str,
+    principal_id: str,
+    last_event_id: str | None,
+    *,
+    limit: int,
+    poll_interval_seconds: float,
+    idle_polls: int | None = None,
+) -> AsyncIterator[str]:
+    """Replay frames from a durable store and tail until no more frames arrive."""
+
+    try:
+        last_seen = int(last_event_id) if last_event_id is not None else -1
+    except ValueError:
+        last_seen = -1
+    idle_count = 0
+    while True:
+        records, _problems = store.load_after(
+            session_id, principal_id, last_seen, limit=limit
+        )
+        if records:
+            idle_count = 0
+            for record in records:
+                yield record.frame
+                last_seen = max(last_seen, record.sequence)
+            continue
+        if idle_polls is not None:
+            idle_count += 1
+            if idle_count >= idle_polls:
+                return
+        await anyio.sleep(poll_interval_seconds)
+
+
 async def run_session(
     host: LoopPlaneHost,
     sessions: dict[str, SessionEntry],
@@ -124,6 +167,7 @@ async def run_session(
     accepts_media: bool = False,
     supports_structured_output: bool = False,
     replay_buffer: int = 0,
+    replay_store: EventReplayStore | None = None,
 ) -> None:
     """Hold a ``host.session`` open until closed; register its handle + SSE
     channel under its owning principal. On a sequential-host conflict, signal the
@@ -142,9 +186,21 @@ async def run_session(
 
     async def sink(event: RuntimeEvent) -> None:
         # A gone client must never crash or hang the session (FR-006 posture).
-        if buf is not None:
+        if buf is not None or replay_store is not None:
             frame = f"id: {event.sequence}\ndata: {serialize_event(event)}\n\n"
-            buf.append((event.sequence, frame))
+            if replay_store is not None:
+                with suppress(Exception):
+                    await replay_store.append(
+                        EventReplayRecord(
+                            session_id=box["sid"],
+                            sequence=event.sequence,
+                            principal_id=owner,
+                            frame=frame,
+                            recorded_at=datetime.now(UTC),
+                        )
+                    )
+            if buf is not None:
+                buf.append((event.sequence, frame))
         else:
             frame = f"data: {serialize_event(event)}\n\n"
         with suppress(*_STREAM_CLOSED):

@@ -31,7 +31,13 @@ from loopplane.model import TextBlock  # noqa: E402
 from loopplane.webapi.sessions import (  # noqa: E402
     frame_sequence,
     reconnect_stream,
+    replay_store_stream,
     run_session,
+)
+from tests.replay_helpers import (  # noqa: E402
+    file_replay_store,
+    replay_frame,
+    replay_record,
 )
 from tests.webapi_helpers import build_test_host, multi_text_model  # noqa: E402
 
@@ -145,6 +151,75 @@ async def test_bounded_buffer_retains_last_n_only() -> None:
     out = [f async for f in reconnect_stream(buf, "0", _live_stream([]))]
     # 1 was evicted (maxlen=2); only 2,3 retained + replayed (empty live backlog).
     assert out == ["id: 2\ndata: e2\n\n", "id: 3\ndata: e3\n\n"]
+
+
+@pytest.mark.anyio
+async def test_reconnect_stream_replays_durable_records_before_live() -> None:
+    frames = {i: replay_frame(i) for i in (2, 3, 4)}
+    live = _live_stream([frames[4]])
+    durable = [replay_record(2), replay_record(3)]
+
+    out = [
+        frame
+        async for frame in reconnect_stream(None, "1", live, durable_records=durable)
+    ]
+
+    assert out == [frames[2], frames[3], frames[4]]
+
+
+@pytest.mark.anyio
+async def test_reconnect_stream_dedupes_durable_buffer_and_live() -> None:
+    frames = {i: replay_frame(i) for i in (2, 3)}
+    durable = [replay_record(2), replay_record(3)]
+    buf = deque([(2, frames[2])])
+    live = _live_stream([frames[3]])
+
+    out = [
+        frame
+        async for frame in reconnect_stream(buf, "1", live, durable_records=durable)
+    ]
+
+    assert out == [frames[2], frames[3]]
+
+
+@pytest.mark.anyio
+async def test_reconnect_stream_ignores_durable_records_on_bad_last_event_id() -> None:
+    frames = {i: replay_frame(i) for i in (1, 2)}
+    durable = [replay_record(2)]
+    live = _agen([frames[1]])
+
+    out = [
+        frame
+        async for frame in reconnect_stream(
+            None, "not-an-int", live, durable_records=durable
+        )
+    ]
+
+    assert out == [frames[1]]
+
+
+@pytest.mark.anyio
+async def test_replay_store_stream_tails_without_local_live_channel(
+    tmp_path: Path,
+) -> None:
+    store = file_replay_store(tmp_path)
+    await store.append(replay_record(2))
+    out: list[str] = []
+
+    async for frame in replay_store_stream(
+        store,
+        "session-1",
+        "owner-1",
+        "1",
+        limit=10,
+        poll_interval_seconds=0.01,
+        idle_polls=3,
+    ):
+        out.append(frame)
+        if len(out) == 1:
+            await store.append(replay_record(3))
+
+    assert out == [replay_frame(2), replay_frame(3)]
 
 
 # --- run_session sink: buffer fill vs default-off byte-identity -------------

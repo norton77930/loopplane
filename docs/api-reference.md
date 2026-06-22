@@ -586,6 +586,11 @@ The web/API host transport over the Host Application Interface.
 - `token_authenticator` — a reference token→principal verifier (dev/tests).
 - `jwt_authenticator` — a host-supplied OAuth/JWT/OIDC verifier (JWKS, iss/aud/exp/nbf; 056).
 - `TenantHostPool` — a per-principal host pool for concurrent multi-tenant serving (061; ADR 0009).
+- `EventReplayRecord` — a replayable session SSE frame record.
+- `EventReplayStore` — the durable event replay store protocol.
+- `FileEventReplayStore` — a filesystem event replay store.
+- `SqliteEventReplayStore` — a local SQLite event replay store.
+- `PostgresEventReplayStore` — a PostgreSQL event replay store (`loopplane[postgres]`).
 - `RunRequest` — a run request body.
 - `UploadRef` — a reference to an uploaded file a run carries (036).
 - `RunResult` — a run result (metadata only).

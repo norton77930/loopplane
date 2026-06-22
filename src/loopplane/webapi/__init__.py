@@ -29,20 +29,32 @@ from loopplane.webapi.models import (
     UploadRef,
 )
 from loopplane.webapi.pool import TenantHostPool
+from loopplane.webapi.replay import (
+    EventReplayRecord,
+    EventReplayStore,
+    FileEventReplayStore,
+    PostgresEventReplayStore,
+    SqliteEventReplayStore,
+)
 
 __all__ = [
     "ArtifactContent",
     "Authenticator",
     "ErrorResponse",
+    "EventReplayRecord",
+    "EventReplayStore",
+    "FileEventReplayStore",
     "HistoryEntryView",
     "OpenedSession",
     "Principal",
     "QuestionAnswer",
+    "PostgresEventReplayStore",
     "Resolved",
     "RunRequest",
     "RunResult",
     "SessionAnswer",
     "SessionSummaryView",
+    "SqliteEventReplayStore",
     "TenantHostPool",
     "UploadRef",
     "create_app",

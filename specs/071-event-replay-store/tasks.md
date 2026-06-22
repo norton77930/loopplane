@@ -13,8 +13,8 @@ event type, termination reason, content block, Tool Gateway change, or `SCHEMA_V
 
 **Purpose**: Create reusable replay-store test fixtures and frame helpers used by all stories.
 
-- [ ] T001 Create shared replay-store test helpers in `tests/replay_helpers.py` for synthetic SSE frames, `EventReplayRecord` builders, owner ids, and temp backend factories.
-- [ ] T002 Add import/export expectations for the new replay API in `tests/contract/test_api_reference.py` and `docs/api-reference.md` only for public names that will be exported.
+- [X] T001 Create shared replay-store test helpers in `tests/replay_helpers.py` for synthetic SSE frames, `EventReplayRecord` builders, owner ids, and temp backend factories.
+- [X] T002 Add import/export expectations for the new replay API in `tests/contract/test_api_reference.py` and `docs/api-reference.md` only for public names that will be exported.
 
 ---
 
@@ -22,11 +22,11 @@ event type, termination reason, content block, Tool Gateway change, or `SCHEMA_V
 
 **Purpose**: Establish the protocol, record shape, validation, and first local backend contract.
 
-- [ ] T003 Add failing contract tests in `tests/contract/test_event_replay_store.py` for `EventReplayRecord` validation: non-empty ids/frame, non-negative sequence, matching `id:` frame sequence, and public-safe construction.
-- [ ] T004 Add failing contract tests in `tests/contract/test_event_replay_store.py` for shared `EventReplayStore` behavior: append, ordered `load_after`, owner filtering, unknown session empty result, retention, duplicate sequence handling, and delete.
-- [ ] T005 Implement `EventReplayRecord`, `EventReplayStore`, public-safe problem messages, and `FileEventReplayStore` in `src/loopplane/webapi/replay.py`.
-- [ ] T006 Export replay-store public names from `src/loopplane/webapi/__init__.py` only if required by the API reference contract.
-- [ ] T007 Run `uv run pytest -q tests/contract/test_event_replay_store.py tests/contract/test_api_reference.py` and confirm the foundational boundary tests pass.
+- [X] T003 Add failing contract tests in `tests/contract/test_event_replay_store.py` for `EventReplayRecord` validation: non-empty ids/frame, non-negative sequence, matching `id:` frame sequence, and public-safe construction.
+- [X] T004 Add failing contract tests in `tests/contract/test_event_replay_store.py` for shared `EventReplayStore` behavior: append, ordered `load_after`, owner filtering, unknown session empty result, retention, duplicate sequence handling, and delete.
+- [X] T005 Implement `EventReplayRecord`, `EventReplayStore`, public-safe problem messages, and `FileEventReplayStore` in `src/loopplane/webapi/replay.py`.
+- [X] T006 Export replay-store public names from `src/loopplane/webapi/__init__.py` only if required by the API reference contract.
+- [X] T007 Run `uv run pytest -q tests/contract/test_event_replay_store.py tests/contract/test_api_reference.py` and confirm the foundational boundary tests pass.
 
 **Checkpoint**: A file-backed replay store can persist and replay bounded, owner-scoped SSE frames.
 
@@ -43,15 +43,15 @@ continuation.
 
 ### Tests for User Story 1
 
-- [ ] T008 [US1] Add failing unit tests in `tests/unit/test_sse_reconnect.py` for durable replay ordering, malformed `Last-Event-ID`, replay/live deduplication, and store-polled tailing without a local live channel.
-- [ ] T009 [US1] Add failing integration tests in `tests/integration/test_webapi_replay_store.py` proving a session reconnect replays stored frames after `Last-Event-ID` and then continues with later events.
+- [X] T008 [US1] Add failing unit tests in `tests/unit/test_sse_reconnect.py` for durable replay ordering, malformed `Last-Event-ID`, replay/live deduplication, and store-polled tailing without a local live channel.
+- [X] T009 [US1] Add failing integration tests in `tests/integration/test_webapi_replay_store.py` proving a session reconnect replays stored frames after `Last-Event-ID` and then continues with later events.
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Update `src/loopplane/webapi/sessions.py` so `reconnect_stream` can merge durable replay records, the existing in-memory buffer, and live frames while deduplicating by sequence.
-- [ ] T011 [US1] Update `src/loopplane/webapi/sessions.py` so `run_session` appends streamed `id:` frames to an optional `EventReplayStore` without breaking live delivery when the append fails.
-- [ ] T012 [US1] Update `src/loopplane/webapi/app.py` to accept an optional replay store and retention/polling settings, wire them into session opening and event streaming, and preserve existing route ownership checks.
-- [ ] T013 [US1] Run `uv run pytest -q tests/unit/test_sse_reconnect.py tests/integration/test_webapi_replay_store.py tests/contract/test_event_replay_store.py` and confirm US1 tests pass.
+- [X] T010 [US1] Update `src/loopplane/webapi/sessions.py` so `reconnect_stream` can merge durable replay records, the existing in-memory buffer, and live frames while deduplicating by sequence.
+- [X] T011 [US1] Update `src/loopplane/webapi/sessions.py` so `run_session` appends streamed `id:` frames to an optional `EventReplayStore` without breaking live delivery when the append fails.
+- [X] T012 [US1] Update `src/loopplane/webapi/app.py` to accept an optional replay store and retention/polling settings, wire them into session opening and event streaming, and preserve existing route ownership checks.
+- [X] T013 [US1] Run `uv run pytest -q tests/unit/test_sse_reconnect.py tests/integration/test_webapi_replay_store.py tests/contract/test_event_replay_store.py` and confirm US1 tests pass.
 
 **Checkpoint**: Durable replay works for the MVP with the file store and webapi session stream.
 
@@ -66,13 +66,13 @@ without expected-output changes when no replay store is configured.
 
 ### Tests for User Story 2
 
-- [ ] T014 [US2] Add failing/no-regression tests in `tests/integration/test_webapi_replay_store.py` for no-store default behavior, disabled-buffer byte identity, and in-memory ring replay staying unchanged.
-- [ ] T015 [US2] Verify existing unit 058 tests in `tests/integration/test_webapi_us3.py` and `tests/unit/test_sse_reconnect.py` require no expected-output changes.
+- [X] T014 [US2] Add failing/no-regression tests in `tests/integration/test_webapi_replay_store.py` for no-store default behavior, disabled-buffer byte identity, and in-memory ring replay staying unchanged.
+- [X] T015 [US2] Verify existing unit 058 tests in `tests/integration/test_webapi_us3.py` and `tests/unit/test_sse_reconnect.py` require no expected-output changes.
 
 ### Implementation for User Story 2
 
-- [ ] T016 [US2] Ensure `src/loopplane/webapi/app.py` and `src/loopplane/webapi/sessions.py` take the durable replay path only when a store is configured and keep no-store behavior byte-identical.
-- [ ] T017 [US2] Run `uv run pytest -q tests/integration/test_webapi_replay_store.py tests/integration/test_webapi_us3.py tests/unit/test_sse_reconnect.py` and confirm US2 tests pass.
+- [X] T016 [US2] Ensure `src/loopplane/webapi/app.py` and `src/loopplane/webapi/sessions.py` take the durable replay path only when a store is configured and keep no-store behavior byte-identical.
+- [X] T017 [US2] Run `uv run pytest -q tests/integration/test_webapi_replay_store.py tests/integration/test_webapi_us3.py tests/unit/test_sse_reconnect.py` and confirm US2 tests pass.
 
 **Checkpoint**: Durable replay remains opt-in and existing SSE behavior is stable.
 
@@ -88,16 +88,16 @@ and webapi tests prove non-owner reconnect attempts cannot replay another princi
 
 ### Tests for User Story 3
 
-- [ ] T018 [US3] Extend `tests/contract/test_event_replay_store.py` with shared backend contract coverage for `FileEventReplayStore`, `SqliteEventReplayStore`, and `PostgresEventReplayStore` import-guard behavior.
-- [ ] T019 [US3] Add failing corruption, unavailable-store, and retention tests in `tests/contract/test_event_replay_store.py` for file and SQLite stores.
-- [ ] T020 [US3] Add failing owner-scoping and delete-cleanup tests in `tests/integration/test_webapi_replay_store.py` for cross-principal reconnect attempts and session deletion.
+- [X] T018 [US3] Extend `tests/contract/test_event_replay_store.py` with shared backend contract coverage for `FileEventReplayStore`, `SqliteEventReplayStore`, and `PostgresEventReplayStore` import-guard behavior.
+- [X] T019 [US3] Add failing corruption, unavailable-store, and retention tests in `tests/contract/test_event_replay_store.py` for file and SQLite stores.
+- [X] T020 [US3] Add failing owner-scoping and delete-cleanup tests in `tests/integration/test_webapi_replay_store.py` for cross-principal reconnect attempts and session deletion.
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Implement `SqliteEventReplayStore` in `src/loopplane/webapi/replay.py` using standard-library SQLite, ordered range reads, retention pruning, corruption tolerance, and owner filtering.
-- [ ] T022 [US3] Implement `PostgresEventReplayStore` in `src/loopplane/webapi/replay.py` using the existing import-guarded `loopplane[postgres]` posture and sync thread-bridge style from ADR 0008.
-- [ ] T023 [US3] Update `src/loopplane/webapi/app.py` so session deletion also removes replay records when a store is configured.
-- [ ] T024 [US3] Run `uv run pytest -q tests/contract/test_event_replay_store.py tests/integration/test_webapi_replay_store.py` and confirm US3 tests pass.
+- [X] T021 [US3] Implement `SqliteEventReplayStore` in `src/loopplane/webapi/replay.py` using standard-library SQLite, ordered range reads, retention pruning, corruption tolerance, and owner filtering.
+- [X] T022 [US3] Implement `PostgresEventReplayStore` in `src/loopplane/webapi/replay.py` using the existing import-guarded `loopplane[postgres]` posture and sync thread-bridge style from ADR 0008.
+- [X] T023 [US3] Update `src/loopplane/webapi/app.py` so session deletion also removes replay records when a store is configured.
+- [X] T024 [US3] Run `uv run pytest -q tests/contract/test_event_replay_store.py tests/integration/test_webapi_replay_store.py` and confirm US3 tests pass.
 
 **Checkpoint**: Replay storage is backend-agnostic, bounded, owner-scoped, and safe on failures.
 
@@ -105,10 +105,10 @@ and webapi tests prove non-owner reconnect attempts cannot replay another princi
 
 ## Phase 6: Polish & gates
 
-- [ ] T025 Update `docs/api-reference.md` for any exported replay-store names and keep descriptions metadata-only.
-- [ ] T026 Run focused validation from `specs/071-event-replay-store/quickstart.md`.
-- [ ] T027 Run full gates: `uv run ruff check`, `uv run ruff format --check src tests`, `uv run mypy src`, and `uv run pytest -q`.
-- [ ] T028 Run board audits: `git diff --check`, `openspec/` scan, public-safety scan, and local `sensitive-scan.txt` if present.
+- [X] T025 Update `docs/api-reference.md` for any exported replay-store names and keep descriptions metadata-only.
+- [X] T026 Run focused validation from `specs/071-event-replay-store/quickstart.md`.
+- [X] T027 Run full gates: `uv run ruff check`, `uv run ruff format --check src tests`, `uv run mypy src`, and `uv run pytest -q`.
+- [X] T028 Run board audits: `git diff --check`, `openspec/` scan, public-safety scan, and local `sensitive-scan.txt` if present.
 
 ---
 

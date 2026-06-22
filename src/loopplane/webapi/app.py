@@ -14,7 +14,7 @@ sessions live in a lifespan-held task group (see :mod:`loopplane.webapi.sessions
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
-from contextlib import asynccontextmanager, nullcontext
+from contextlib import asynccontextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -63,7 +63,13 @@ from loopplane.webapi.multimodal import (
     assemble_blocks,
 )
 from loopplane.webapi.pool import TenantHostPool
-from loopplane.webapi.sessions import SessionEntry, reconnect_stream, run_session
+from loopplane.webapi.replay import EventReplayRecord, EventReplayStore
+from loopplane.webapi.sessions import (
+    SessionEntry,
+    reconnect_stream,
+    replay_store_stream,
+    run_session,
+)
 from loopplane.webapi.streaming import run_event_stream
 from loopplane.webapi.uploads import UploadStore, UploadTooLarge
 
@@ -102,6 +108,10 @@ def create_app(
     default_supports_structured_output: bool = False,
     max_image_bytes: int = 5 * 1024 * 1024,
     sse_replay_buffer: int = 0,
+    event_replay_store: EventReplayStore | None = None,
+    event_replay_limit: int = 1000,
+    event_replay_poll_interval_seconds: float = 0.25,
+    event_replay_idle_polls: int | None = None,
     host_pool: TenantHostPool | None = None,
 ) -> FastAPI:
     """Build the web/API host app embedding ``host`` behind the auth boundary.
@@ -115,6 +125,8 @@ def create_app(
     image input (036); ``max_image_bytes`` caps an embedded image (ADR 0001 D6).
     ``sse_replay_buffer`` (058; default 0 = off, byte-identical) sizes the bounded
     per-session SSE replay buffer for ``Last-Event-ID`` reconnect (ADR 0006).
+    ``event_replay_store`` (071; default None = off) persists the same session SSE
+    frames for durable reconnect replay after ownership checks.
     ``host_pool`` (061; default None = off, byte-identical) routes each principal to
     its OWN host so principals run concurrently, while each principal's host keeps
     its sequential ``_active`` invariant (ADR 0009, pool-above-host).
@@ -307,6 +319,7 @@ def create_app(
             accepts_media,
             supports_so,
             sse_replay_buffer,
+            event_replay_store,
         )
         await ready.wait()
         if box.get("error"):
@@ -319,13 +332,43 @@ def create_app(
         principal: Principal = Depends(require),
         last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     ) -> StreamingResponse:
-        # 058: when the replay buffer is enabled and the client reconnects with
-        # Last-Event-ID, replay the buffered frames after that id then continue live,
-        # deduped by sequence. Default-off (no buffer) is the byte-identical live
-        # pass-through. The replay/dedup is the pure reconnect_stream helper.
-        entry = _require(session_id, principal)
+        # 058 + 071: replay the in-memory and optional durable frames after
+        # Last-Event-ID, then continue live. If this worker has no live entry, the
+        # durable store can still serve/tail replay after the existing ownership
+        # check. With no durable store, unknown/non-live sessions keep 404 behavior.
+        entry = sessions.get(session_id)
+        if entry is None:
+            _owned_or_404(session_id, principal)
+            if event_replay_store is None:
+                raise HTTPException(status_code=404, detail="not found")
+            return StreamingResponse(
+                replay_store_stream(
+                    event_replay_store,
+                    session_id,
+                    principal.id,
+                    last_event_id,
+                    limit=event_replay_limit,
+                    poll_interval_seconds=event_replay_poll_interval_seconds,
+                    idle_polls=event_replay_idle_polls,
+                ),
+                media_type="text/event-stream",
+            )
+        if entry.owner != principal.id:
+            raise HTTPException(status_code=404, detail="not found")
+        durable_records: list[EventReplayRecord] = []
+        if event_replay_store is not None and last_event_id is not None:
+            with suppress(Exception):
+                last_id = int(last_event_id)
+                durable_records, _problems = event_replay_store.load_after(
+                    session_id, principal.id, last_id, limit=event_replay_limit
+                )
         return StreamingResponse(
-            reconnect_stream(entry.replay_buffer, last_event_id, entry.events),
+            reconnect_stream(
+                entry.replay_buffer,
+                last_event_id,
+                entry.events,
+                durable_records=durable_records,
+            ),
             media_type="text/event-stream",
         )
 
@@ -413,6 +456,9 @@ def create_app(
             entry.session.cancel()
             entry.close.set()
         host.delete_session(session_id)
+        if event_replay_store is not None:
+            with suppress(Exception):
+                event_replay_store.delete_session(session_id)
         return Resolved(resolved=True)
 
     @router.get("/sessions/{session_id}/history")

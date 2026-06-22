@@ -43,7 +43,7 @@ Expected outcomes:
 Run the existing web/API SSE tests that cover unit 058 behavior:
 
 ```powershell
-uv run pytest -q tests/integration/test_webapi_us3.py tests/integration/test_webapi_sse_reconnect.py
+uv run pytest -q tests/integration/test_webapi_us3.py tests/unit/test_sse_reconnect.py
 ```
 
 Expected outcomes:
