@@ -32,12 +32,12 @@
 
 **Critical**: No user story implementation starts until these tests exist and fail for the missing behavior.
 
-- [ ] T006 [P] Add live envelope and ticket contract tests in `tests/contract/test_web_live_contract.py`
-- [ ] T007 [P] Add session management contract tests in `tests/contract/test_web_session_management_contract.py`
-- [ ] T008 [P] Add type artifact drift contract tests in `tests/contract/test_web_type_artifacts.py`
-- [ ] T009 [P] Add web transport boundary tests in `apps/web/src/__tests__/transport.test.ts`
-- [ ] T010 [P] Add REST/SSE compatibility regression tests in `apps/web/src/__tests__/restTransport.test.ts`
-- [ ] T011 Add shared transport usage seam in `apps/web/src/api/client.ts`
+- [x] T006 [P] Add live envelope and ticket contract tests in `tests/contract/test_web_live_contract.py`
+- [x] T007 [P] Add session management contract tests in `tests/contract/test_web_session_management_contract.py`
+- [x] T008 [P] Add type artifact drift contract tests in `tests/contract/test_web_type_artifacts.py`
+- [x] T009 [P] Add web transport boundary tests in `apps/web/src/__tests__/transport.test.ts`
+- [x] T010 [P] Add REST/SSE compatibility regression tests in `apps/web/src/__tests__/restTransport.test.ts`
+- [x] T011 Add shared transport usage seam in `apps/web/src/api/client.ts`
 
 **Checkpoint**: Contract tests and transport boundary tests are in place. User stories can now be implemented in priority order.
 

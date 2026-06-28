@@ -2,6 +2,8 @@
 // fetch is injectable so tests run the full client against a stubbed network.
 
 import { streamEvents } from "./events";
+import { RestSessionTransport } from "./restTransport";
+import type { SessionTransport } from "./transport";
 import type {
   McpServerView,
   MemoryEntryView,
@@ -30,6 +32,10 @@ export interface ApprovalDecision {
   allow: boolean;
   scope?: "once" | "session";
   reason?: string;
+}
+
+export function createRestSessionTransport(client: ApiClient): SessionTransport {
+  return new RestSessionTransport(client);
 }
 
 export class ApiClient {
