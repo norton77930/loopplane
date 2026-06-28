@@ -153,6 +153,17 @@ git history) — not invented.
 | **071-event-replay-store** | `specs/071-event-replay-store` | **Verified** | **P2** (gap **G23** durable): durable cross-process / multi-worker SSE reconnect — adds a pluggable `EventReplayStore` Protocol keyed by `(session_id, sequence)`, File/SQLite/Postgres replay backends, durable merge into `reconnect_stream`, optional webapi replay-store wiring, store-polled no-live tailing, owner-scoped replay, and delete cleanup. Default stays the 058 in-memory ring / disabled replay behavior unless a store is configured. **ADR 0012** (new webapi replay-store boundary). | 058, 060 | None — implemented & verified on `main` (EventReplayRecord/EventReplayStore + File/SQLite/Postgres backends; session durable append/replay/tail; webapi opt-in knobs; backend contract + owner/delete integration tests; quickstart focused validation; four gates green: ruff, format, mypy, full pytest 1315 passed / 8 skipped; openspec + public-safety scans clean). |
 | **072-platform-fairness** | `specs/072-platform-fairness` | **Verified** | **P2** (gap **G20** in-process slice): per-tenant quota (beyond in-flight counts) + in-process fair model-call scheduling (anti-noisy-neighbor) above the 061 `TenantHostPool`. Distributed/cross-process DEFERRED (gated by remote exec, P3). **ADR 0013** (extends 0009; SETTLED: in-process slice only). | 061 | None - implemented & verified on `main` (`loopplane.fairness` in-process fairness gate + policy; host/controller/loop wiring; webapi 429/SSE public-safe quota rejection; shared host-pool fairness regression; default-off behavior preserved; four gates green: ruff, format, mypy, full pytest 1333 passed / 8 skipped; openspec + public-safety scans clean; no Event-Bus/content/SCHEMA/termination-reason change). |
 | **073-code-review-remediation** | `specs/073-code-review-remediation` | **Verified** | Review remediation for the 001-072 audit: restores locked dev sync and desktop gates, expands desktop CI path coverage for `apps/web/**`, normalizes public-safe MCP and `web_fetch` errors, bounds `web_fetch` return/cache content, adds a Spec Kit task-drift audit with documented historical exceptions, and cleans the lower-priority web/desktop hardening findings. No runtime schema, Event Bus, content-model, or public API change. | 001-072 | None - implemented & verified on `main` (073 artifacts + review report + docs index; MCP/web-fetch regression tests; desktop/web gates; full final gates green: `uv sync --locked`, ruff, format, mypy, full pytest 1343 passed / 8 skipped, web typecheck/test/build, desktop typecheck/test; openspec + public-safety scans clean aside from intentional fake-secret regression fixtures). |
+| **074-web-parity-foundation** | `specs/074-web-parity-foundation` | **Not started** | Web parity foundation: additive transport and session-management groundwork so the web frontend can align with the Orion-style agent chat mechanism while preserving the existing REST/SSE API. Scope includes a Web transport abstraction, an additive WebSocket session endpoint, reconnect/history replay semantics, draft sessions, model preference, star/fork/search/bulk-delete session affordances, and generated API/WS type workflow. | 011, 018, 025-032, 058, 071 | Run `/speckit.specify` to create the 074 feature spec. |
+| **075-web-capability-management** | `specs/075-web-capability-management` | **Not started** | Web capability management: turn the read-only inspection surface into first-class capability settings for memory, skills, MCP config, projects/workspaces, schedules, and model defaults. Browser UI must not collect provider secrets unless separately authorized. | 074, 027, 028, 059, 065 | Wait for 074 Verified, then run `/speckit.specify`. |
+| **076-web-agent-controls** | `specs/076-web-agent-controls` | **Not started** | Web agent controls: first-class plan mode, permission mode/rules, server-side cost and budget controls, workspace files/artifact references, and optional follow-up suggestions with explicit cost tracking. | 074, 075, 055, 064, 066, 068 | Wait for 075 Verified, then run `/speckit.specify`. |
+| **077-desktop-cowork-parity** | `specs/077-desktop-cowork-parity` | **Not started** | Desktop cowork parity: upgrade the desktop shell into a local-first Electron app with typed preload IPC, versioned stdio JSON-RPC sidecar contract, reused web chat/settings components through a desktop adapter, desktop projects/workspaces, multi-pane collaboration, right sidebar, keyboard shortcuts, fork prompt, turn audit, and local backup/restore. | 012, 019, 074-076 | Wait for 076 Verified, then run `/speckit.specify`. |
+| **078-cli-remote-parity** | `specs/078-cli-remote-parity` | **Not started** | CLI/remote parity: expand slash commands and interactive CLI affordances, then add a remote-control bridge with remote-safe command policy, permission callbacks, interrupt, and reconnect. Vim, voice, and IDE-like UX parity are P3 follow-ups unless separately authorized. | 017, 065, 074-077 | Wait for 077 Verified, then run `/speckit.specify`. |
+
+> **Parity roadmap constraint:** Claude Code and Orion are behavior references only. Do not copy
+> implementation code, private names, private paths, raw `openspec/`, credentials, tokens, or other
+> non-public material into LoopPlane. All 074-078 changes must be re-derived through public-safe
+> Spec Kit artifacts and preserve earlier Tool Gateway, Event Bus, checkpoint, approval, and public
+> API boundaries unless a maintainer-approved ADR explicitly changes them.
 
 **Status evidence (for audit):**
 
@@ -520,7 +531,14 @@ git history) — not invented.
 >
 > **025–029 are all `Verified`** (shipped on `main`) — the **web-UI extension is COMPLETE**. The unit-018 SPA now has: a styled two-pane shell + markdown + tool cards + dialogs + theme (025); reasoning / multi-option questions / token usage (026); read-only skills/tools/MCP/memory inspection panels (027); per-session model selection + file attachments (028); and i18n + syntax highlighting + a command palette + a client-side cost estimate (029). The autopilot has **no further unit to advance** and stops cleanly. Only reserved/out-of-scope items remain: multimodal embedded file content + backend-semantic slash commands (need an ADR / backend) and authoritative server-side pricing.
 
-> **🏁 CURRENT STATUS — units `000–024` are all `Verified` on `main`; the gap-closure plan
+> **🧭 CURRENT STATUS — units `000–073` are `Verified` on `main`; the parity roadmap
+> (`074-web-parity-foundation` → `078-cli-remote-parity`) is authorized and starts at 074.**
+> The next autopilot step is `/speckit.specify` for `specs/074-web-parity-foundation`.
+> The sequence is web parity first (074-076), then desktop cowork parity (077), then CLI/remote
+> parity (078). The parity roadmap is behavior-parity only: Claude Code and Orion remain references,
+> not code sources.
+
+> **🏁 HISTORICAL STATUS — units `000–024` are all `Verified` on `main`; the gap-closure plan
 > is COMPLETE.** Beyond the original runtime + release roadmap (**000–019**, shipped as
 > **v0.1.0**, MIT), the four-phase **gap-closure** plan is done: **A — model providers
 > (020)**, **B — checkpoint persistence + optional SQLite (021)**, **C — per-principal web
@@ -560,13 +578,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **073-code-review-remediation VERIFIED** - 001-073 are verified on `main`; the 001-072 code-review remediation batch is complete. |
-| Active feature directory | `.specify/feature.json` → `specs/072-platform-fairness` (072 verified). |
+| Active unit | **074-web-parity-foundation NOT STARTED** - 001-073 are verified on `main`; the parity roadmap is authorized and starts with web parity foundation. |
+| Active feature directory | `.specify/feature.json` → `specs/074-web-parity-foundation` (spec not created yet). |
 | Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **073 COMPLETE** (specify → checklist → plan → tasks → implement → final review → Verified; code-review remediation; focused + full gates and board scans green). |
-| Depends on | 072 built above 061's `TenantHostPool` and ADR 0013's in-process-only decision; no Tool Gateway ownership move, runtime event vocabulary change, termination-reason change, content block change, or SCHEMA_VERSION bump. |
-| Next command | None in this batch. P3 items, parity work, and distributed/cross-process G20 or SSE halves need separate maintainer direction. |
-| Stop condition status | **Stopped** - 001-073 are `Verified`; the 073 code-review remediation batch is complete. |
+| Current Spec Kit step | **074 specify pending** — no 074 Spec Kit artifacts exist yet; next step is to generate `spec.md` only. |
+| Depends on | 011/018/025-032 web surfaces plus 058/071 reconnect/replay work. Do not remove existing REST/SSE behavior while adding web parity mechanisms. |
+| Next command | `/speckit.specify` for `specs/074-web-parity-foundation`. |
+| Stop condition status | **Ready** - 074 is queued for Spec Kit specify; implementation remains blocked until the normal specify → plan → tasks → analyze gates complete. |
 
 ---
 
