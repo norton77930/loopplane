@@ -18,11 +18,11 @@
 
 **Purpose**: Create shared contract/type and transport seams used by all stories.
 
-- [ ] T001 Create backend web contract type module in `src/loopplane/webapi/contract_types.py`
-- [ ] T002 [P] Create web transport interface scaffold in `apps/web/src/api/transport.ts`
-- [ ] T003 [P] Create REST/SSE transport wrapper scaffold in `apps/web/src/api/restTransport.ts`
-- [ ] T004 [P] Create generated web API/event type artifact scaffold in `apps/web/src/api/generated.ts`
-- [ ] T005 [P] Create backend live-channel test helper scaffold in `tests/integration/webapi_live_helpers.py`
+- [x] T001 Create backend web contract type module in `src/loopplane/webapi/contract_types.py`
+- [x] T002 [P] Create web transport interface scaffold in `apps/web/src/api/transport.ts`
+- [x] T003 [P] Create REST/SSE transport wrapper scaffold in `apps/web/src/api/restTransport.ts`
+- [x] T004 [P] Create generated web API/event type artifact scaffold in `apps/web/src/api/generated.ts`
+- [x] T005 [P] Create backend live-channel test helper scaffold in `tests/integration/webapi_live_helpers.py`
 
 ---
 
