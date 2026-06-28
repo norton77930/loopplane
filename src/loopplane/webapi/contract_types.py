@@ -6,6 +6,8 @@ with deterministic fixtures used by contract/type drift tests.
 
 from __future__ import annotations
 
+from typing import cast
+
 WEB_CONTRACT_VERSION = "074-web-parity-foundation"
 
 
@@ -96,8 +98,10 @@ def contract_type_artifacts() -> dict[str, object]:
 def validate_contract_artifact(artifact: dict[str, object]) -> None:
     """Fail clearly when a required web-facing field or event type drifts."""
 
-    required_session_fields = contract_type_artifacts()["session_summary_fields"]
-    required_event_types = contract_type_artifacts()["event_types"]
+    required_session_fields = cast(
+        set[str], contract_type_artifacts()["session_summary_fields"]
+    )
+    required_event_types = cast(set[str], contract_type_artifacts()["event_types"])
     actual_session_fields = artifact.get("session_summary_fields")
     actual_event_types = artifact.get("event_types")
     if not isinstance(actual_session_fields, set):

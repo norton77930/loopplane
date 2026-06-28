@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
-import { ApiClient, ApiError, type ApprovalDecision } from "./api/client";
+import {
+  ApiClient,
+  ApiError,
+  createRestSessionTransport,
+  type ApprovalDecision,
+} from "./api/client";
+import type { SessionTransport } from "./api/transport";
 import type { RawEvent, SessionSummary } from "./api/types";
 import { AppShell } from "./components/AppShell";
 import { ApprovalDialog } from "./components/ApprovalDialog";
@@ -20,9 +26,11 @@ import { errored, initialState, reduce, userPrompt } from "./state/chat";
 
 export function App({
   client = new ApiClient(),
+  transport: providedTransport,
   onUnauthorized,
 }: {
   client?: ApiClient;
+  transport?: SessionTransport;
   onUnauthorized?: () => void;
 }) {
   const [state, setState] = useState(initialState);
@@ -37,6 +45,9 @@ export function App({
   const { t } = useTranslation();
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [transport] = useState(
+    () => providedTransport ?? createRestSessionTransport(client),
+  );
 
   function fail(error: unknown) {
     // An authorization failure logs the user out (back to login); any other error shows the
@@ -52,7 +63,7 @@ export function App({
     if (reading.current) return;
     reading.current = true;
     try {
-      for await (const event of client.streamSession(id)) {
+      for await (const event of transport.streamSession(id)) {
         setState((current) => reduce(current, event));
       }
     } catch (error) {
@@ -64,7 +75,7 @@ export function App({
 
   async function ensureSession(): Promise<string> {
     if (sessionId.current) return sessionId.current;
-    const { session_id } = await client.openSession(selectedModel ?? undefined);
+    const { session_id } = await transport.openSession(selectedModel ?? undefined);
     sessionId.current = session_id;
     setActiveId(session_id);
     void readEvents(session_id);
@@ -82,7 +93,7 @@ export function App({
     setState((current) => userPrompt(current, prompt));
     setAttachments([]);
     try {
-      await client.submit(await ensureSession(), full);
+      await transport.submit(await ensureSession(), full);
       void refreshSessions();
     } catch (error) {
       fail(error);
@@ -102,14 +113,14 @@ export function App({
 
   async function approve(requestId: string, decision: ApprovalDecision) {
     if (sessionId.current) {
-      await client.answerApproval(sessionId.current, requestId, decision);
+      await transport.answerApproval(sessionId.current, requestId, decision);
     }
     setState((current) => ({ ...current, pendingApproval: undefined }));
   }
 
   async function answer(requestId: string, answers: string[]) {
     if (sessionId.current) {
-      await client.answerQuestion(sessionId.current, requestId, answers);
+      await transport.answerQuestion(sessionId.current, requestId, answers);
     }
     setState((current) => ({ ...current, pendingQuestion: undefined }));
   }
@@ -117,7 +128,7 @@ export function App({
   async function stop() {
     if (!sessionId.current) return;
     try {
-      await client.cancel(sessionId.current);
+      await transport.cancel(sessionId.current);
     } catch (error) {
       fail(error);
     }

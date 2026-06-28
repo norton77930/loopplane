@@ -51,24 +51,24 @@
 
 ### Tests for User Story 1
 
-- [ ] T012 [P] [US1] Add ticket issuance and owner-scope integration tests in `tests/integration/test_webapi_live_channel.py`
-- [ ] T013 [P] [US1] Add live submit, abort, approval, and question integration tests in `tests/integration/test_webapi_live_channel.py`
-- [ ] T014 [P] [US1] Add reconnect replay and dedupe integration tests in `tests/integration/test_webapi_live_channel.py`
-- [ ] T015 [P] [US1] Add live transport send/reconnect queue tests in `apps/web/src/__tests__/liveTransport.test.ts`
-- [ ] T016 [P] [US1] Add App live transport behavior tests in `apps/web/src/__tests__/App.live.test.tsx`
+- [x] T012 [P] [US1] Add ticket issuance and owner-scope integration tests in `tests/integration/test_webapi_live_channel.py`
+- [x] T013 [P] [US1] Add live submit, abort, approval, and question integration tests in `tests/integration/test_webapi_live_channel.py`
+- [x] T014 [P] [US1] Add reconnect replay and dedupe integration tests in `tests/integration/test_webapi_live_channel.py`
+- [x] T015 [P] [US1] Add live transport send/reconnect queue tests in `apps/web/src/__tests__/liveTransport.test.ts`
+- [x] T016 [P] [US1] Add App live transport behavior tests in `apps/web/src/__tests__/App.live.test.tsx`
 
 ### Implementation for User Story 1
 
-- [ ] T017 [US1] Define `LiveSessionTicket`, `LiveClientMessage`, and `LiveServerMessage` models in `src/loopplane/webapi/models.py`
-- [ ] T018 [US1] Implement live ticket issuance and expiry checks in `src/loopplane/webapi/sessions.py`
-- [ ] T019 [US1] Add additive live session endpoint wiring in `src/loopplane/webapi/app.py`
-- [ ] T020 [US1] Implement live channel coordinator in `src/loopplane/webapi/live.py`
-- [ ] T021 [US1] Route submit, abort, approval decision, and question answer messages through existing host/session boundaries in `src/loopplane/webapi/live.py`
-- [ ] T022 [US1] Reuse existing replay/history semantics for reconnect recovery in `src/loopplane/webapi/live.py`
-- [ ] T023 [US1] Implement live transport adapter in `apps/web/src/api/liveTransport.ts`
-- [ ] T024 [US1] Refactor chat state to consume the transport boundary in `apps/web/src/state/chat.ts`
-- [ ] T025 [US1] Wire transport selection into `apps/web/src/App.tsx`
-- [ ] T026 [US1] Preserve existing REST/SSE behavior through `apps/web/src/api/restTransport.ts`
+- [x] T017 [US1] Define `LiveSessionTicket`, `LiveClientMessage`, and `LiveServerMessage` models in `src/loopplane/webapi/models.py`
+- [x] T018 [US1] Implement live ticket issuance and expiry checks in `src/loopplane/webapi/app.py`
+- [x] T019 [US1] Add additive live session endpoint wiring in `src/loopplane/webapi/app.py`
+- [x] T020 [US1] Implement live channel coordinator in `src/loopplane/webapi/live.py`
+- [x] T021 [US1] Route submit, abort, approval decision, and question answer messages through existing host/session boundaries in `src/loopplane/webapi/app.py`
+- [x] T022 [US1] Reuse existing replay/history semantics for reconnect recovery in `src/loopplane/webapi/live.py`
+- [x] T023 [US1] Implement live transport adapter in `apps/web/src/api/liveTransport.ts`
+- [x] T024 [US1] Refactor App chat flow to consume the transport boundary in `apps/web/src/App.tsx`
+- [x] T025 [US1] Wire transport selection into `apps/web/src/App.tsx`
+- [x] T026 [US1] Preserve existing REST/SSE behavior through `apps/web/src/api/restTransport.ts`
 
 **Checkpoint**: User Story 1 is functional and independently testable. Existing REST/SSE web session tests and desktop tests still pass.
 

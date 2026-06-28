@@ -89,6 +89,21 @@ class QuestionAnswer(BaseModel):
     answers: list[str]
 
 
+class LiveTicketView(BaseModel):
+    ticket: str
+    session_id: str
+    expires_at: datetime
+    issued_at: datetime
+    capabilities: list[str]
+
+
+class LiveClientMessage(BaseModel):
+    type: Literal["submit", "abort", "approval_decision", "question_answer", "ack"]
+    client_message_id: str | None = None
+    sequence: int | None = None
+    payload: dict[str, object] = Field(default_factory=dict)
+
+
 # --- responses (metadata-only) -----------------------------------------------
 
 

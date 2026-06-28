@@ -19,9 +19,18 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import anyio
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Request,
+    WebSocket,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.websockets import WebSocketDisconnect
 
 from loopplane.commands import CommandContext, default_registry
 from loopplane.events import RuntimeEvent
@@ -37,12 +46,19 @@ from loopplane.webapi.auth import (
     Principal,
     make_auth_dependency,
 )
+from loopplane.webapi.live import (
+    LiveTicketStore,
+    latest_sequence,
+    replay_event_messages,
+)
 from loopplane.webapi.models import (
     ArtifactContent,
     CommandRequest,
     CommandResultView,
     ErrorResponse,
     HistoryEntryView,
+    LiveClientMessage,
+    LiveTicketView,
     McpServerView,
     MemoryEntryView,
     ModelInfo,
@@ -140,6 +156,7 @@ def create_app(
     auth = authenticator or DENY_ALL
     require = make_auth_dependency(auth)
     sessions: dict[str, SessionEntry] = {}
+    live_tickets = LiveTicketStore()
     catalog = dict(models or {})
     command_registry = default_registry()  # 065: backend slash commands
 
@@ -378,6 +395,102 @@ def create_app(
             ),
             media_type="text/event-stream",
         )
+
+    @router.post("/sessions/{session_id}/live-ticket")
+    async def live_ticket(
+        session_id: str, principal: Principal = Depends(require)
+    ) -> LiveTicketView:
+        _require(session_id, principal)
+        record = live_tickets.issue(principal.id, session_id)
+        return LiveTicketView(
+            ticket=record.ticket,
+            session_id=record.session_id,
+            issued_at=record.issued_at,
+            expires_at=record.expires_at,
+            capabilities=list(record.capabilities),
+        )
+
+    @router.websocket("/sessions/{session_id}/live")
+    async def live_session_channel(
+        websocket: WebSocket,
+        session_id: str,
+        ticket: str,
+        last_sequence: int = 0,
+    ) -> None:
+        record = live_tickets.consume(ticket, session_id)
+        entry = sessions.get(session_id)
+        if record is None or entry is None or entry.owner != record.principal_id:
+            await websocket.close(code=1008)
+            return
+        await websocket.accept()
+        await websocket.send_json(
+            {
+                "type": "ready",
+                "session_id": session_id,
+                "sequence": latest_sequence(entry.replay_buffer),
+                "payload": {"latest_sequence": latest_sequence(entry.replay_buffer)},
+            }
+        )
+        seen_sequence = last_sequence
+        while True:
+            try:
+                message = LiveClientMessage.model_validate(
+                    await websocket.receive_json()
+                )
+            except WebSocketDisconnect:
+                return
+            if message.sequence is not None:
+                seen_sequence = max(seen_sequence, message.sequence)
+            if message.type == "ack":
+                continue
+            if message.type == "abort":
+                entry.session.cancel()
+                entry.close.set()
+                await websocket.send_json(
+                    {"type": "notice", "payload": {"aborted": True}}
+                )
+                continue
+            if message.type == "approval_decision":
+                request_id = str(message.payload.get("request_id", ""))
+                scope = message.payload.get("scope", "once")
+                resolved = entry.session.answer_approval(
+                    request_id,
+                    allow=bool(message.payload.get("allow", False)),
+                    scope=scope if scope in ("once", "session") else "once",
+                    reason=(
+                        str(message.payload["reason"])
+                        if "reason" in message.payload
+                        else None
+                    ),
+                )
+                await websocket.send_json(
+                    {"type": "notice", "payload": {"resolved": resolved}}
+                )
+                continue
+            if message.type == "question_answer":
+                request_id = str(message.payload.get("request_id", ""))
+                raw_answers = message.payload.get("answers", [])
+                answers = (
+                    [str(answer) for answer in raw_answers]
+                    if isinstance(raw_answers, list)
+                    else []
+                )
+                resolved = entry.session.answer_question(request_id, answers)
+                await websocket.send_json(
+                    {"type": "notice", "payload": {"resolved": resolved}}
+                )
+                continue
+            body = RunRequest.model_validate(message.payload)
+            _check_output_schema(body.output_schema, entry.supports_structured_output)
+            blocks = _build_blocks(body, record.principal_id, entry.accepts_media)
+            await entry.session.submit(blocks, output_schema=body.output_schema)
+            for event_message in replay_event_messages(
+                entry.replay_buffer, seen_sequence
+            ):
+                await websocket.send_json(event_message)
+                sequence = event_message.get("sequence")
+                if isinstance(sequence, int):
+                    seen_sequence = max(seen_sequence, sequence)
 
     @router.post("/sessions/{session_id}/submit")
     async def submit_to_session(
