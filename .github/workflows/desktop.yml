@@ -1,15 +1,17 @@
 name: desktop
 
-# The isolated gate for the desktop app (unit 019). Runs only on changes to
-# apps/desktop and skips the Electron binary; it does not touch the Python or web gate.
+# The isolated gate for the desktop app. It also runs on apps/web changes because
+# the desktop renderer imports current web source through @web/*.
 on:
   push:
     paths:
       - "apps/desktop/**"
+      - "apps/web/**"
       - ".github/workflows/desktop.yml"
   pull_request:
     paths:
       - "apps/desktop/**"
+      - "apps/web/**"
       - ".github/workflows/desktop.yml"
 
 jobs:

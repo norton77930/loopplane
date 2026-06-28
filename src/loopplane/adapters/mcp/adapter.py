@@ -223,10 +223,10 @@ class MCPToolAdapter:
         session, remote_name = self._tools[name]
         try:
             result = await session.call_tool(remote_name, dict(call_input))
-        except Exception as exc:
+        except Exception:
             yield ErrorOutput(
                 category=ErrorCategory.ADAPTER_FAULT,
-                message=f"external server call failed: {type(exc).__name__}: {exc}",
+                message="external server call failed",
             )
             return
 
@@ -283,12 +283,10 @@ class MCPToolAdapter:
                 )
                 return
             result = await session.read_resource(AnyUrl(uri))
-        except Exception as exc:
+        except Exception:
             yield ErrorOutput(
                 category=ErrorCategory.ADAPTER_FAULT,
-                message=(
-                    f"external server resource call failed: {type(exc).__name__}: {exc}"
-                ),
+                message="external server resource call failed",
             )
             return
 

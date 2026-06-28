@@ -27,6 +27,28 @@ from loopplane.model.content import TextBlock
 
 _DEFAULT_SEARCH_LIMIT = 5
 _FETCH_TIMEOUT_SECONDS = 30.0
+_FETCH_MAX_CONTENT_CHARS = 65_536
+_FETCH_TRUNCATION_MARKER = "\n\n[web_fetch response truncated]"
+
+
+def _safe_url_label(url: str) -> str:
+    """Return a URL label safe for model-visible error messages."""
+
+    parsed = urlparse(url)
+    if not parsed.scheme or not parsed.hostname:
+        return "the provided URL"
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    host = parsed.hostname if port is None else f"{parsed.hostname}:{port}"
+    return f"{parsed.scheme}://{host}{parsed.path or ''}"
+
+
+def _bound_fetch_text(text: str) -> str:
+    if len(text) <= _FETCH_MAX_CONTENT_CHARS:
+        return text
+    return f"{text[:_FETCH_MAX_CONTENT_CHARS]}{_FETCH_TRUNCATION_MARKER}"
 
 
 class SearchResult(BaseModel):
@@ -145,10 +167,11 @@ class WebToolAdapter:
     ) -> AsyncIterator[AdapterOutput]:
         url = str(call_input["url"])
         parsed = urlparse(url)
+        safe_url = _safe_url_label(url)
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             yield ErrorOutput(
                 category=ErrorCategory.VALIDATION,
-                message=(f"web_fetch only supports http(s) URLs; refused {url!r}"),
+                message=(f"web_fetch only supports http(s) URLs; refused {safe_url}"),
             )
             return
 
@@ -173,25 +196,26 @@ class WebToolAdapter:
         except TimeoutError:
             yield ErrorOutput(
                 category=ErrorCategory.EXECUTION,
-                message=f"web_fetch timed out fetching {url}",
+                message=f"web_fetch timed out fetching {safe_url}",
             )
             return
         except Exception:  # noqa: BLE001 - normalize any transport fault, no leak
             yield ErrorOutput(
                 category=ErrorCategory.EXECUTION,
-                message=f"web_fetch could not reach {url}",
+                message=f"web_fetch could not reach {safe_url}",
             )
             return
 
         if not 200 <= status < 300:
             yield ErrorOutput(
                 category=ErrorCategory.EXECUTION,
-                message=f"web_fetch got HTTP {status} for {url}",
+                message=f"web_fetch got HTTP {status} for {safe_url}",
             )
             return
 
-        self._cache[key] = text
-        yield TextBlock(text=text)
+        bounded = _bound_fetch_text(text)
+        self._cache[key] = bounded
+        yield TextBlock(text=bounded)
 
     async def _web_search(
         self, call_input: dict[str, object], context: RunContext

@@ -118,6 +118,54 @@ async def test_web_fetch_second_call_is_served_from_cache(tmp_path: Path) -> Non
     assert fetcher.calls == ["https://example.com/a"]
 
 
+async def test_web_fetch_oversized_response_is_truncated(tmp_path: Path) -> None:
+    body = "x" * 70_000
+    fetcher = _FakeFetcher(text=body)
+    adapter = WebToolAdapter(fetcher=fetcher)
+
+    (block,) = await _invoke(
+        adapter, "web_fetch", {"url": "https://example.com/large"}, _context(tmp_path)
+    )
+
+    assert isinstance(block, TextBlock)
+    assert block.text != body
+    assert len(block.text) < len(body)
+    assert "truncated" in block.text.lower()
+
+
+async def test_web_fetch_cache_reuses_bounded_response(tmp_path: Path) -> None:
+    body = "x" * 70_000
+    fetcher = _FakeFetcher(text=body)
+    adapter = WebToolAdapter(fetcher=fetcher)
+    context = _context(tmp_path)
+
+    (first,) = await _invoke(
+        adapter, "web_fetch", {"url": "https://example.com/large"}, context
+    )
+    (second,) = await _invoke(
+        adapter, "web_fetch", {"url": "https://example.com/large"}, context
+    )
+
+    assert isinstance(first, TextBlock)
+    assert isinstance(second, TextBlock)
+    assert first.text == second.text
+    assert len(second.text) < len(body)
+    assert fetcher.calls == ["https://example.com/large"]
+
+
+async def test_web_fetch_within_limit_response_is_unchanged(tmp_path: Path) -> None:
+    body = "small page contents"
+    fetcher = _FakeFetcher(text=body)
+    adapter = WebToolAdapter(fetcher=fetcher)
+
+    (block,) = await _invoke(
+        adapter, "web_fetch", {"url": "https://example.com/small"}, _context(tmp_path)
+    )
+
+    assert isinstance(block, TextBlock)
+    assert block.text == body
+
+
 async def test_web_fetch_cache_is_per_session(tmp_path: Path) -> None:
     fetcher = _FakeFetcher(text="body")
     adapter = WebToolAdapter(fetcher=fetcher)
@@ -165,6 +213,26 @@ async def test_web_fetch_rejects_malformed_url(tmp_path: Path) -> None:
     assert fetcher.calls == []
 
 
+async def test_web_fetch_invalid_url_error_omits_query_secret(
+    tmp_path: Path,
+) -> None:
+    fetcher = _FakeFetcher()
+    adapter = WebToolAdapter(fetcher=fetcher)
+
+    (error,) = await _invoke(
+        adapter,
+        "web_fetch",
+        {"url": "ftp://example.com/private?token=abc123"},
+        _context(tmp_path),
+    )
+
+    assert isinstance(error, ErrorOutput)
+    assert error.category == "validation"
+    assert "token=abc123" not in error.message
+    assert "?token" not in error.message
+    assert fetcher.calls == []
+
+
 async def test_web_fetch_timeout_is_normalized(tmp_path: Path) -> None:
     fetcher = _FakeFetcher(error=TimeoutError("connect timed out for secret-host"))
     adapter = WebToolAdapter(fetcher=fetcher)
@@ -177,6 +245,24 @@ async def test_web_fetch_timeout_is_normalized(tmp_path: Path) -> None:
     # A timeout is an execution failure, not validation.
     assert error.category == "execution"
     # The raw transport detail must not leak into the normalized message.
+    assert "secret-host" not in error.message
+
+
+async def test_web_fetch_timeout_error_omits_query_secret(tmp_path: Path) -> None:
+    fetcher = _FakeFetcher(error=TimeoutError("connect timed out for secret-host"))
+    adapter = WebToolAdapter(fetcher=fetcher)
+
+    (error,) = await _invoke(
+        adapter,
+        "web_fetch",
+        {"url": "https://example.com/private?signature=abc123"},
+        _context(tmp_path),
+    )
+
+    assert isinstance(error, ErrorOutput)
+    assert error.category == "execution"
+    assert "signature=abc123" not in error.message
+    assert "?signature" not in error.message
     assert "secret-host" not in error.message
 
 
@@ -193,6 +279,23 @@ async def test_web_fetch_transport_error_is_normalized(tmp_path: Path) -> None:
     assert "token=abc123" not in error.message
 
 
+async def test_web_fetch_transport_error_omits_query_secret(tmp_path: Path) -> None:
+    fetcher = _FakeFetcher(error=ConnectionError("low-level password=abc123"))
+    adapter = WebToolAdapter(fetcher=fetcher)
+
+    (error,) = await _invoke(
+        adapter,
+        "web_fetch",
+        {"url": "https://example.com/down?password=abc123"},
+        _context(tmp_path),
+    )
+
+    assert isinstance(error, ErrorOutput)
+    assert error.category == "execution"
+    assert "password=abc123" not in error.message
+    assert "?password" not in error.message
+
+
 async def test_web_fetch_non_2xx_status_is_an_error(tmp_path: Path) -> None:
     fetcher = _FakeFetcher(status=404, text="not found")
     adapter = WebToolAdapter(fetcher=fetcher)
@@ -204,6 +307,24 @@ async def test_web_fetch_non_2xx_status_is_an_error(tmp_path: Path) -> None:
     assert isinstance(error, ErrorOutput)
     assert error.category == "execution"
     assert "404" in error.message
+
+
+async def test_web_fetch_non_2xx_error_omits_query_secret(tmp_path: Path) -> None:
+    fetcher = _FakeFetcher(status=403, text="forbidden")
+    adapter = WebToolAdapter(fetcher=fetcher)
+
+    (error,) = await _invoke(
+        adapter,
+        "web_fetch",
+        {"url": "https://example.com/forbidden?api_key=abc123"},
+        _context(tmp_path),
+    )
+
+    assert isinstance(error, ErrorOutput)
+    assert error.category == "execution"
+    assert "403" in error.message
+    assert "api_key=abc123" not in error.message
+    assert "?api_key" not in error.message
 
 
 async def test_web_fetch_without_httpx_degrades(

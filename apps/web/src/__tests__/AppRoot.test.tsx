@@ -34,7 +34,7 @@ describe("AppRoot", () => {
     expect(screen.queryByLabelText("prompt")).not.toBeInTheDocument();
   });
 
-  it("logs in with a token and shows the authenticated app", () => {
+  it("logs in with a token and shows the authenticated app", async () => {
     let captured: string | undefined;
     render(
       <AppRoot
@@ -51,21 +51,22 @@ describe("AppRoot", () => {
     fireEvent.click(screen.getByText("Log in"));
 
     expect(captured).toBe("tok-alice");
-    expect(screen.getByLabelText("prompt")).toBeInTheDocument();
+    expect(await screen.findByLabelText("prompt")).toBeInTheDocument();
     expect(screen.queryByLabelText("access token")).not.toBeInTheDocument();
   });
 
-  it("stays logged in when a token is already stored for the tab", () => {
+  it("stays logged in when a token is already stored for the tab", async () => {
     sessionStorage.setItem(TOKEN_KEY, "tok-stored");
     render(<AppRoot makeClient={() => stubClient()} />);
 
-    expect(screen.getByLabelText("prompt")).toBeInTheDocument();
+    expect(await screen.findByLabelText("prompt")).toBeInTheDocument();
   });
 
-  it("logs out and clears the stored token", () => {
+  it("logs out and clears the stored token", async () => {
     sessionStorage.setItem(TOKEN_KEY, "tok-stored");
     render(<AppRoot makeClient={() => stubClient()} />);
 
+    await screen.findByLabelText("prompt");
     fireEvent.click(screen.getByText("Log out"));
 
     expect(screen.getByLabelText("access token")).toBeInTheDocument();

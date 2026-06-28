@@ -19,6 +19,7 @@ pytest.importorskip("mcp")
 
 from loopplane.adapters.mcp import MCPServerConfig, MCPToolAdapter  # noqa: E402
 from loopplane.context import RunContext  # noqa: E402
+from loopplane.errors import ErrorCategory  # noqa: E402
 from loopplane.gateway.spi import ErrorOutput  # noqa: E402
 from loopplane.model.content import ImageBlock, TextBlock  # noqa: E402
 
@@ -49,11 +50,15 @@ class _FakeSession:
         resources: list[Any] | None = None,
         read_contents: list[Any] | None = None,
         supports_resources: bool = True,
+        call_error: Exception | None = None,
+        read_error: Exception | None = None,
     ) -> None:
         self._tools = tools
         self._resources = resources or []
         self._read_contents = read_contents or []
         self._supports = supports_resources
+        self._call_error = call_error
+        self._read_error = read_error
         self.tool_calls: list[tuple[str, dict[str, Any]]] = []
 
     async def __aenter__(self) -> _FakeSession:
@@ -74,10 +79,14 @@ class _FakeSession:
         return _Obj(resources=list(self._resources))
 
     async def read_resource(self, uri: Any) -> Any:
+        if self._read_error is not None:
+            raise self._read_error
         return _Obj(contents=list(self._read_contents))
 
     async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
         self.tool_calls.append((name, args))
+        if self._call_error is not None:
+            raise self._call_error
         return _Obj(content=[_Obj(text="tool-ok")], isError=False)
 
 
@@ -239,3 +248,44 @@ async def test_token_never_echoed(
         )
     blob = "".join(getattr(b, "text", "") for b in [*listed, *read])
     assert "SEKRIT" not in blob
+
+
+async def test_call_tool_exception_is_public_safe(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    session = _FakeSession(
+        tools=(_Obj(name="echo", description="", inputSchema={"type": "object"}),),
+        supports_resources=False,
+        call_error=RuntimeError("token=abc123"),
+    )
+    _patch(monkeypatch, session)
+    cfg = MCPServerConfig(name="srv", transport="stdio", command="x")
+    async with MCPToolAdapter([cfg]) as adapter:
+        (error,) = await _collect(adapter, "srv:echo", {}, tmp_path)
+
+    assert isinstance(error, ErrorOutput)
+    assert error.category == ErrorCategory.ADAPTER_FAULT
+    assert error.message == "external server call failed"
+    assert "RuntimeError" not in error.message
+    assert "token=abc123" not in error.message
+
+
+async def test_read_resource_exception_is_public_safe(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    session = _FakeSession(
+        resources=[_Obj(uri="res://a", name="A", description="d")],
+        read_error=RuntimeError("password=abc123"),
+    )
+    _patch(monkeypatch, session)
+    cfg = MCPServerConfig(name="srv", transport="stdio", command="x")
+    async with MCPToolAdapter([cfg]) as adapter:
+        (error,) = await _collect(
+            adapter, "srv:read_resource", {"uri": "res://a"}, tmp_path
+        )
+
+    assert isinstance(error, ErrorOutput)
+    assert error.category == ErrorCategory.ADAPTER_FAULT
+    assert error.message == "external server resource call failed"
+    assert "RuntimeError" not in error.message
+    assert "password=abc123" not in error.message

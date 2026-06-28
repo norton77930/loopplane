@@ -1,8 +1,8 @@
 import { useState } from "react";
 
-import { Conversation } from "@web/components/Conversation";
-import { Prompts } from "@web/components/Prompts";
-import { Timeline } from "@web/components/Timeline";
+import { ApprovalDialog } from "@web/components/ApprovalDialog";
+import { MessageList } from "@web/components/MessageList";
+import { QuestionDialog } from "@web/components/QuestionDialog";
 import { errored, initialState, reduce, userPrompt } from "@web/state/chat";
 
 import type { SidecarTransport } from "./sidecar";
@@ -10,6 +10,8 @@ import type { SidecarTransport } from "./sidecar";
 export function App({ transport }: { transport: SidecarTransport }) {
   const [state, setState] = useState(initialState);
   const [input, setInput] = useState("");
+  const pendingApproval = state.pendingApproval;
+  const pendingQuestion = state.pendingQuestion;
 
   async function send(prompt: string) {
     if (!prompt.trim()) return;
@@ -31,13 +33,29 @@ export function App({ transport }: { transport: SidecarTransport }) {
           Disconnected — please retry.
         </div>
       )}
-      <Conversation turns={state.turns} />
-      <Timeline entries={state.timeline} />
-      <Prompts
-        state={state}
-        onApproval={(id, allow) => transport.answerApproval(id, allow)}
-        onQuestion={(id, text) => transport.answerQuestion(id, [text])}
-      />
+      <MessageList entries={state.entries} loading={state.status === "running"} />
+      {pendingApproval && (
+        <ApprovalDialog
+          toolName={pendingApproval.toolName}
+          onDecide={(decision) => {
+            transport.answerApproval(pendingApproval.requestId, decision.allow);
+            setState((current) => ({ ...current, pendingApproval: undefined }));
+          }}
+        />
+      )}
+      {pendingQuestion && (
+        <QuestionDialog
+          prompt={pendingQuestion.prompt}
+          options={pendingQuestion.options}
+          onAnswer={(answers) => {
+            transport.answerQuestion(pendingQuestion.requestId, answers);
+            setState((current) => ({ ...current, pendingQuestion: undefined }));
+          }}
+          onClose={() =>
+            setState((current) => ({ ...current, pendingQuestion: undefined }))
+          }
+        />
+      )}
       <form
         className="composer"
         onSubmit={(event) => {

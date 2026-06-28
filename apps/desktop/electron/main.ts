@@ -37,7 +37,10 @@ function createWindow(): void {
     width: 1000,
     height: 700,
     webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
       preload: fileURLToPath(new URL("./preload.cjs", import.meta.url)),
+      sandbox: true,
     },
   });
 

@@ -3,6 +3,15 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) return "vendor";
+        },
+      },
+    },
+  },
   server: {
     // Proxy the API to a running unit-011 web/API host during development.
     proxy: { "/v1": "http://localhost:8000" },
