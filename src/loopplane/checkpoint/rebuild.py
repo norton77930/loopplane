@@ -29,6 +29,10 @@ class RebuildResult:
     label: str | None = None
     created_at: datetime | None = None
     principal_id: str | None = None  # 063: reconstructed so resume re-threads it
+    model: str | None = None
+    starred: bool = False
+    forked_from_session_id: str | None = None
+    forked_from_sequence: int | None = None
     repairs: list[str] = field(default_factory=list)
 
 
@@ -87,6 +91,10 @@ def rebuild_session(records: list[CheckpointRecord]) -> RebuildResult:
             result.label = record.payload.label
             result.created_at = record.payload.created_at
             result.principal_id = record.payload.principal_id
+            result.model = record.payload.model
+            result.starred = record.payload.starred
+            result.forked_from_session_id = record.payload.forked_from_session_id
+            result.forked_from_sequence = record.payload.forked_from_sequence
         elif isinstance(record, UserInputRecord):
             flush_results()
             entries.append(

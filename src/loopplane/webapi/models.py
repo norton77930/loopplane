@@ -79,6 +79,32 @@ class RenameRequest(BaseModel):
         return trimmed
 
 
+class ForkSessionRequest(BaseModel):
+    sequence: int = Field(ge=0)
+    title: str | None = None
+    model: str | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _trim_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
+
+
+class BulkDeleteRequest(BaseModel):
+    session_ids: list[str] = Field(min_length=1)
+    confirm: bool
+
+    @field_validator("confirm")
+    @classmethod
+    def _confirmed(cls, value: bool) -> bool:
+        if not value:
+            raise ValueError("confirm must be true")
+        return value
+
+
 class SessionAnswer(BaseModel):
     allow: bool
     scope: Literal["once", "session"] = "once"
@@ -174,6 +200,11 @@ class SessionSummaryView(BaseModel):
     label: str | None
     last_active_at: datetime
     created_at: datetime
+    model: str | None = None
+    starred: bool = False
+    forked_from_session_id: str | None = None
+    forked_from_sequence: int | None = None
+    search_snippet: str | None = None
 
     @classmethod
     def from_summary(cls, summary: _SummaryLike) -> SessionSummaryView:
@@ -182,11 +213,20 @@ class SessionSummaryView(BaseModel):
             label=summary.label,
             last_active_at=summary.last_active_at,
             created_at=summary.created_at,
+            model=getattr(summary, "model", None),
+            starred=getattr(summary, "starred", False),
+            forked_from_session_id=getattr(summary, "forked_from_session_id", None),
+            forked_from_sequence=getattr(summary, "forked_from_sequence", None),
+            search_snippet=getattr(summary, "search_snippet", None),
         )
 
 
 class OpenedSession(BaseModel):
     session_id: str
+
+
+class BulkDeleteResult(BaseModel):
+    deleted: list[str]
 
 
 class Resolved(BaseModel):

@@ -168,6 +168,7 @@ async def run_session(
     supports_structured_output: bool = False,
     replay_buffer: int = 0,
     replay_store: EventReplayStore | None = None,
+    model: str | None = None,
 ) -> None:
     """Hold a ``host.session`` open until closed; register its handle + SSE
     channel under its owning principal. On a sequential-host conflict, signal the
@@ -208,7 +209,7 @@ async def run_session(
 
     close = anyio.Event()
     try:
-        async with host.session(sink, principal_id=owner) as session:
+        async with host.session(sink, principal_id=owner, model=model) as session:
             box["sid"] = session.session_id
             sessions[session.session_id] = SessionEntry(
                 session,

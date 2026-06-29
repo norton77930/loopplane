@@ -128,6 +128,7 @@ class LoopPlaneHost:
         working_scope: Path | None = None,
         principal_id: str | None = None,
         output_schema: dict[str, object] | None = None,
+        model: str | None = None,
     ) -> RunOutcome:
         """Start a run and return its outcome (FR-003). ``on_event`` receives
         every normalized event in order (FR-004). ``output_schema`` is an optional
@@ -140,6 +141,7 @@ class LoopPlaneHost:
         session_id = controller.create_session(
             working_scope=working_scope or self._working_scope,
             principal_id=principal_id,
+            model=model,
         )
         self._bind(sink, controller, session_id, on_event, on_approval)
         # Worktree isolation (spec 051): a per-session manager from the working scope
@@ -208,6 +210,7 @@ class LoopPlaneHost:
         on_approval: OnApproval | None = None,
         working_scope: Path | None = None,
         principal_id: str | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[Session]:
         """Open an interactive round-trip: submit input, answer approvals and
         questions, and cancel — over the Phase-1 controller (US3)."""
@@ -218,6 +221,7 @@ class LoopPlaneHost:
         session_id = controller.create_session(
             working_scope=working_scope or self._working_scope,
             principal_id=principal_id,
+            model=model,
         )
         controller.attach_reviewer(session_id)
         self._bind(sink, controller, session_id, on_event, on_approval)
@@ -236,6 +240,42 @@ class LoopPlaneHost:
     async def set_session_title(self, session_id: str, title: str) -> None:
         """Persist a new title for a session (030)."""
         await self._assembled.controller.set_session_title(session_id, title)
+
+    async def set_session_starred(self, session_id: str, starred: bool) -> None:
+        """Persist a session's starred flag."""
+        await self._assembled.controller.set_session_starred(session_id, starred)
+
+    async def fork_session(
+        self,
+        source_session_id: str,
+        *,
+        principal_id: str | None,
+        source_sequence: int,
+        title: str | None = None,
+        model: str | None = None,
+    ) -> str:
+        """Create a new owned fork summary from an existing session point."""
+        return await self._assembled.controller.fork_session(
+            source_session_id,
+            principal_id=principal_id,
+            source_sequence=source_sequence,
+            title=title,
+            model=model,
+        )
+
+    def search_sessions(
+        self, query: str, principal_id: str | None
+    ) -> list[SessionSummary]:
+        """Search sessions visible to the supplied principal."""
+        return self._assembled.controller.search_sessions(query, principal_id)
+
+    def bulk_delete_sessions(
+        self, session_ids: Sequence[str], *, principal_id: str | None
+    ) -> list[str]:
+        """Delete owned sessions from a caller-supplied set of ids."""
+        return self._assembled.controller.bulk_delete_sessions(
+            session_ids, principal_id=principal_id
+        )
 
     def delete_session(self, session_id: str) -> None:
         """Delete a session and its durable records (030)."""

@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -117,6 +117,10 @@ class _Session:
     driving: bool = False
     started: bool = False
     principal_id: str | None = None
+    model: str | None = None
+    starred: bool = False
+    forked_from_session_id: str | None = None
+    forked_from_sequence: int | None = None
 
 
 class RuntimeController:
@@ -245,6 +249,7 @@ class RuntimeController:
         label: str | None = None,
         turn_budget: int | None = None,
         principal_id: str | None = None,
+        model: str | None = None,
     ) -> str:
         session_id = uuid.uuid4().hex
         now = datetime.now(UTC)
@@ -260,6 +265,7 @@ class RuntimeController:
             next_record_sequence=1,
             meta_recorded=False,
             principal_id=principal_id,
+            model=model,
         )
         return session_id
 
@@ -295,6 +301,10 @@ class RuntimeController:
             next_record_sequence=max(record.sequence for record in records) + 1,
             meta_recorded=True,
             principal_id=rebuilt.principal_id,
+            model=rebuilt.model,
+            starred=rebuilt.starred,
+            forked_from_session_id=rebuilt.forked_from_session_id,
+            forked_from_sequence=rebuilt.forked_from_sequence,
         )
         self._sessions[session_id] = session
         for problem in problems:
@@ -316,6 +326,10 @@ class RuntimeController:
         next_record_sequence: int,
         meta_recorded: bool,
         principal_id: str | None = None,
+        model: str | None = None,
+        starred: bool = False,
+        forked_from_session_id: str | None = None,
+        forked_from_sequence: int | None = None,
     ) -> _Session:
         ledger: ReplacementLedger | None = None
         if self._artifacts is not None:
@@ -335,6 +349,9 @@ class RuntimeController:
                 created_at=created_at,
                 label=label,
                 principal_id=principal_id,
+                model=model,
+                forked_from_session_id=forked_from_session_id,
+                forked_from_sequence=forked_from_sequence,
                 next_sequence=next_record_sequence,
                 meta_recorded=meta_recorded,
             )
@@ -426,6 +443,10 @@ class RuntimeController:
             cancellation=anyio.Event(),
             ledger=ledger,
             principal_id=principal_id,
+            model=model,
+            starred=starred,
+            forked_from_session_id=forked_from_session_id,
+            forked_from_sequence=forked_from_sequence,
         )
 
     def _make_history_hook(
@@ -720,6 +741,10 @@ class RuntimeController:
                 created_at=session.created_at,
                 last_active_at=session.last_active_at,
                 principal_id=session.principal_id,
+                model=session.model,
+                starred=session.starred,
+                forked_from_session_id=session.forked_from_session_id,
+                forked_from_sequence=session.forked_from_sequence,
             )
             for session in self._sessions.values()
         ]
@@ -733,6 +758,104 @@ class RuntimeController:
         session = self._sessions.get(session_id)
         if session is not None:
             session.label = title
+
+    async def set_session_starred(self, session_id: str, starred: bool) -> None:
+        """Persist a session's starred flag and update any loaded session."""
+        if self._checkpoint is not None:
+            await self._checkpoint.update_session_metadata(session_id, starred=starred)
+        session = self._sessions.get(session_id)
+        if session is not None:
+            session.starred = starred
+
+    async def fork_session(
+        self,
+        source_session_id: str,
+        *,
+        principal_id: str | None,
+        source_sequence: int,
+        title: str | None = None,
+        model: str | None = None,
+    ) -> str:
+        """Create an owned fork summary from an existing session point."""
+        source = next(
+            (
+                summary
+                for summary in self.list_sessions()
+                if summary.session_id == source_session_id
+            ),
+            None,
+        )
+        if source is None or source.principal_id != principal_id:
+            raise KeyError(f"unknown session: {source_session_id}")
+        session_id = uuid.uuid4().hex
+        now = datetime.now(UTC)
+        label = title if title is not None else source.label
+        if self._checkpoint is not None:
+            await self._checkpoint.create_session_metadata(
+                session_id,
+                created_at=now,
+                label=label,
+                principal_id=principal_id,
+                model=model if model is not None else source.model,
+                forked_from_session_id=source_session_id,
+                forked_from_sequence=source_sequence,
+            )
+        self._sessions[session_id] = self._assemble(
+            session_id=session_id,
+            working_scope=Path.cwd(),
+            label=label,
+            turn_budget=None,
+            created_at=now,
+            state="created",
+            entries=None,
+            decisions=(),
+            next_record_sequence=2 if self._checkpoint is not None else 1,
+            meta_recorded=self._checkpoint is not None,
+            principal_id=principal_id,
+            model=model if model is not None else source.model,
+            forked_from_session_id=source_session_id,
+            forked_from_sequence=source_sequence,
+        )
+        return session_id
+
+    def search_sessions(
+        self, query: str, principal_id: str | None
+    ) -> list[SessionSummary]:
+        """Search owned session labels and retained text content."""
+        needle = query.strip().lower()
+        if not needle:
+            return [
+                summary
+                for summary in self.list_sessions()
+                if summary.principal_id == principal_id
+            ]
+        matches: list[SessionSummary] = []
+        for summary in self.list_sessions():
+            if summary.principal_id != principal_id:
+                continue
+            snippet = self._summary_search_snippet(summary, needle)
+            if snippet is None:
+                snippet = self._history_search_snippet(summary.session_id, needle)
+            if snippet is not None:
+                matches.append(replace(summary, search_snippet=snippet))
+        return matches
+
+    def bulk_delete_sessions(
+        self, session_ids: Sequence[str], *, principal_id: str | None
+    ) -> list[str]:
+        """Delete the subset of supplied sessions owned by ``principal_id``."""
+        owned = {
+            summary.session_id
+            for summary in self.list_sessions()
+            if summary.principal_id == principal_id
+        }
+        deleted: list[str] = []
+        for session_id in session_ids:
+            if session_id not in owned or session_id in deleted:
+                continue
+            self.delete_session(session_id)
+            deleted.append(session_id)
+        return deleted
 
     def delete_session(self, session_id: str) -> None:
         """Delete a session (030): drop the in-memory session and durably
@@ -752,6 +875,33 @@ class RuntimeController:
         state (FR-006).
         """
         return self._require(session_id).history.snapshot()
+
+    def _summary_search_snippet(
+        self, summary: SessionSummary, needle: str
+    ) -> str | None:
+        for candidate in (summary.label, summary.model):
+            if candidate is not None and needle in candidate.lower():
+                return candidate
+        return None
+
+    def _history_search_snippet(self, session_id: str, needle: str) -> str | None:
+        entries = self._entries_for_search(session_id)
+        for entry in entries:
+            for block in entry.blocks:
+                if isinstance(block, TextBlock) and needle in block.text.lower():
+                    return block.text[:240]
+        return None
+
+    def _entries_for_search(self, session_id: str) -> tuple[HistoryEntry, ...]:
+        session = self._sessions.get(session_id)
+        if session is not None:
+            return session.history.snapshot()
+        if self._checkpoint is None:
+            return ()
+        records, _ = self._checkpoint.load(session_id)
+        if not records:
+            return ()
+        return tuple(rebuild_session(records).entries)
 
     def session_cost(self, session_id: str) -> Decimal | None:
         """The session's accumulated USD, or ``None`` when no budget checker is

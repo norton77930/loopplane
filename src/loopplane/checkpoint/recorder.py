@@ -41,6 +41,9 @@ class SessionRecorder:
         created_at: datetime,
         label: str | None = None,
         principal_id: str | None = None,
+        model: str | None = None,
+        forked_from_session_id: str | None = None,
+        forked_from_sequence: int | None = None,
         next_sequence: int = 1,
         meta_recorded: bool = False,
     ) -> None:
@@ -49,6 +52,9 @@ class SessionRecorder:
         self._created_at = created_at
         self._label = label
         self._principal_id = principal_id
+        self._model = model
+        self._forked_from_session_id = forked_from_session_id
+        self._forked_from_sequence = forked_from_sequence
         self._next_sequence = next_sequence
         self._meta_recorded = meta_recorded
 
@@ -73,6 +79,9 @@ class SessionRecorder:
                     created_at=self._created_at,
                     label=self._label,
                     principal_id=self._principal_id,
+                    model=self._model,
+                    forked_from_session_id=self._forked_from_session_id,
+                    forked_from_sequence=self._forked_from_sequence,
                 ),
             )
         )

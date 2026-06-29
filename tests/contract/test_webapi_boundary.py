@@ -103,6 +103,11 @@ def test_webapi_response_models_are_metadata_only() -> None:
         "label",
         "last_active_at",
         "created_at",
+        "model",
+        "starred",
+        "forked_from_session_id",
+        "forked_from_sequence",
+        "search_snippet",
     }
     assert set(ErrorResponse.model_fields) == {"detail"}
 

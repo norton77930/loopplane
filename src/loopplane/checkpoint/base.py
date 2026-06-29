@@ -21,6 +21,11 @@ class SessionSummary:
     created_at: datetime
     last_active_at: datetime
     principal_id: str | None = None
+    model: str | None = None
+    starred: bool = False
+    forked_from_session_id: str | None = None
+    forked_from_sequence: int | None = None
+    search_snippet: str | None = None
 
 
 class CheckpointStore(Protocol):
@@ -39,6 +44,33 @@ class CheckpointStore(Protocol):
     def list_sessions(self) -> list[SessionSummary]:
         """Identity + recency for every session, most-recent-first; a
         missing/never-written store yields an empty list (FR-085)."""
+        ...
+
+    async def create_session_metadata(
+        self,
+        session_id: str,
+        *,
+        created_at: datetime,
+        label: str | None = None,
+        principal_id: str | None = None,
+        model: str | None = None,
+        forked_from_session_id: str | None = None,
+        forked_from_sequence: int | None = None,
+    ) -> None:
+        """Create an empty durable session by appending its initial metadata."""
+        ...
+
+    async def update_session_metadata(
+        self,
+        session_id: str,
+        *,
+        label: str | None = None,
+        model: str | None = None,
+        starred: bool | None = None,
+        forked_from_session_id: str | None = None,
+        forked_from_sequence: int | None = None,
+    ) -> None:
+        """Update additive session metadata by appending a fresh meta record."""
         ...
 
     async def set_title(self, session_id: str, title: str) -> None:

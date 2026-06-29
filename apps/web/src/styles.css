@@ -184,8 +184,12 @@ button.danger { color: var(--danger); border-color: var(--danger); }
 .session-group { margin-bottom: 8px; }
 .session-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); padding: 8px 12px 2px; }
 .session-group ul { list-style: none; margin: 0; padding: 0; }
+.session-search { width: calc(100% - 24px); margin: 8px 12px 4px; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); font-size: 13px; }
+.bulk-delete { margin: 4px 12px 6px; font-size: 12px; padding: 5px 8px; border: 1px solid var(--danger); color: var(--danger); background: transparent; border-radius: var(--radius-sm); }
 .session-item { display: flex; align-items: center; gap: 4px; }
 .session-item .session-open { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-star { width: 24px; height: 24px; border: none; background: none; color: var(--text-muted); border-radius: var(--radius-sm); cursor: pointer; }
+.session-star:hover { background: var(--accent-soft); color: var(--text); }
 .session-menu { position: relative; }
 .session-menu > button { border: none; background: none; color: var(--text-muted); padding: 2px 6px; cursor: pointer; border-radius: var(--radius-sm); }
 .session-menu > button:hover { background: var(--accent-soft); color: var(--text); }

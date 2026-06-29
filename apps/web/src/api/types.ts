@@ -69,6 +69,21 @@ export interface SessionSummary {
   label: string | null;
   last_active_at: string;
   created_at: string;
+  model?: string | null;
+  starred?: boolean;
+  forked_from_session_id?: string | null;
+  forked_from_sequence?: number | null;
+  search_snippet?: string | null;
+}
+
+export interface ForkSessionRequest {
+  sequence: number;
+  title?: string | null;
+  model?: string | null;
+}
+
+export interface BulkDeleteResult {
+  deleted: string[];
 }
 
 // 027 — read-only inspection views (metadata-only).

@@ -14,6 +14,9 @@ interface Props {
   onNew: () => void;
   onRename?: (id: string, title: string) => void;
   onDelete?: (id: string) => void;
+  onToggleStar?: (id: string, next: boolean) => void;
+  onSearch?: (query: string) => void;
+  onBulkDelete?: (ids: string[]) => void;
   loading?: boolean;
 }
 
@@ -30,16 +33,51 @@ export function Sidebar({
   onNew,
   onRename,
   onDelete,
+  onToggleStar,
+  onSearch,
+  onBulkDelete,
   loading,
 }: Props) {
   const { t } = useTranslation();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const groups = groupSessions(sessions);
+
+  function toggleSelected(id: string, selected: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (selected) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function bulkDelete() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    if (window.confirm(t("sidebar.deleteConfirm"))) {
+      onBulkDelete?.(ids);
+      setSelectedIds(new Set());
+    }
+  }
   return (
     <>
       <div className="sidebar-title">LoopPlane</div>
       <button type="button" className="new-chat" onClick={onNew}>
         {t("sidebar.newChat")}
       </button>
+      {onSearch && (
+        <input
+          className="session-search"
+          aria-label="search sessions"
+          type="search"
+          onChange={(event) => onSearch(event.target.value)}
+        />
+      )}
+      {onBulkDelete && selectedIds.size > 0 && (
+        <button type="button" className="bulk-delete" onClick={bulkDelete}>
+          Delete selected
+        </button>
+      )}
       {loading && sessions.length === 0 ? (
         <Skeleton rows={4} />
       ) : sessions.length === 0 ? (
@@ -58,6 +96,10 @@ export function Sidebar({
                     onOpen={onOpen}
                     onRename={onRename}
                     onDelete={onDelete}
+                    onToggleStar={onToggleStar}
+                    selectable={Boolean(onBulkDelete)}
+                    selected={selectedIds.has(session.session_id)}
+                    onSelect={toggleSelected}
                   />
                 ))}
               </ul>
@@ -75,9 +117,23 @@ interface RowProps {
   onOpen: (id: string) => void;
   onRename?: (id: string, title: string) => void;
   onDelete?: (id: string) => void;
+  onToggleStar?: (id: string, next: boolean) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (id: string, selected: boolean) => void;
 }
 
-function SessionRow({ session, active, onOpen, onRename, onDelete }: RowProps) {
+function SessionRow({
+  session,
+  active,
+  onOpen,
+  onRename,
+  onDelete,
+  onToggleStar,
+  selectable,
+  selected,
+  onSelect,
+}: RowProps) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -112,6 +168,24 @@ function SessionRow({ session, active, onOpen, onRename, onDelete }: RowProps) {
 
   return (
     <li className="session-item">
+      {selectable && (
+        <input
+          type="checkbox"
+          aria-label={`select ${title}`}
+          checked={Boolean(selected)}
+          onChange={(event) => onSelect?.(session.session_id, event.target.checked)}
+        />
+      )}
+      {onToggleStar && (
+        <button
+          type="button"
+          className="session-star"
+          aria-label={`${session.starred ? "unstar" : "star"} session ${title}`}
+          onClick={() => onToggleStar(session.session_id, !session.starred)}
+        >
+          {session.starred ? "★" : "☆"}
+        </button>
+      )}
       <button
         type="button"
         className="session-open"

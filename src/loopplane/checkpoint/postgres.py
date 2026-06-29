@@ -149,19 +149,61 @@ class PostgresCheckpointStore:
                     created_at=meta.payload.created_at,
                     last_active_at=last_active,
                     principal_id=meta.payload.principal_id,
+                    model=meta.payload.model,
+                    starred=meta.payload.starred,
+                    forked_from_session_id=meta.payload.forked_from_session_id,
+                    forked_from_sequence=meta.payload.forked_from_sequence,
                 )
             )
         return sorted(
             summaries, key=lambda summary: summary.last_active_at, reverse=True
         )
 
-    async def set_title(self, session_id: str, title: str) -> None:
-        """Append a fresh session-meta carrying the new title (030); latest wins. A
-        no-op on an unknown session."""
+    async def create_session_metadata(
+        self,
+        session_id: str,
+        *,
+        created_at: datetime,
+        label: str | None = None,
+        principal_id: str | None = None,
+        model: str | None = None,
+        forked_from_session_id: str | None = None,
+        forked_from_sequence: int | None = None,
+    ) -> None:
         records, _ = self.load(session_id)
-        original = next((r for r in records if isinstance(r, SessionMetaRecord)), None)
+        if records:
+            return
+        await self.append(
+            SessionMetaRecord(
+                session_id=session_id,
+                sequence=1,
+                recorded_at=datetime.now(UTC),
+                payload=SessionMetaPayload(
+                    created_at=created_at,
+                    label=label,
+                    principal_id=principal_id,
+                    model=model,
+                    forked_from_session_id=forked_from_session_id,
+                    forked_from_sequence=forked_from_sequence,
+                ),
+            )
+        )
+
+    async def update_session_metadata(
+        self,
+        session_id: str,
+        *,
+        label: str | None = None,
+        model: str | None = None,
+        starred: bool | None = None,
+        forked_from_session_id: str | None = None,
+        forked_from_sequence: int | None = None,
+    ) -> None:
+        records, _ = self.load(session_id)
+        original = self._latest_meta(records)
         if original is None:
             return
+        payload = original.payload
         next_sequence = max((r.sequence for r in records), default=-1) + 1
         await self.append(
             SessionMetaRecord(
@@ -169,12 +211,29 @@ class PostgresCheckpointStore:
                 sequence=next_sequence,
                 recorded_at=datetime.now(UTC),
                 payload=SessionMetaPayload(
-                    created_at=original.payload.created_at,
-                    label=title,
-                    principal_id=original.payload.principal_id,
+                    created_at=payload.created_at,
+                    label=payload.label if label is None else label,
+                    principal_id=payload.principal_id,
+                    model=payload.model if model is None else model,
+                    starred=payload.starred if starred is None else starred,
+                    forked_from_session_id=(
+                        payload.forked_from_session_id
+                        if forked_from_session_id is None
+                        else forked_from_session_id
+                    ),
+                    forked_from_sequence=(
+                        payload.forked_from_sequence
+                        if forked_from_sequence is None
+                        else forked_from_sequence
+                    ),
                 ),
             )
         )
+
+    async def set_title(self, session_id: str, title: str) -> None:
+        """Append a fresh session-meta carrying the new title (030); latest wins. A
+        no-op on an unknown session."""
+        await self.update_session_metadata(session_id, label=title)
 
     def delete_session(self, session_id: str) -> None:
         """Remove all rows for the session; idempotent if absent (030)."""
@@ -186,3 +245,11 @@ class PostgresCheckpointStore:
             connection.commit()
         finally:
             connection.close()
+
+    @staticmethod
+    def _latest_meta(records: list[CheckpointRecord]) -> SessionMetaRecord | None:
+        found: SessionMetaRecord | None = None
+        for record in records:
+            if isinstance(record, SessionMetaRecord):
+                found = record
+        return found

@@ -82,28 +82,28 @@
 
 ### Tests for User Story 2
 
-- [ ] T027 [P] [US2] Add checkpoint metadata tests for starred and fork fields in `tests/unit/test_checkpoint_session_parity.py`
-- [ ] T028 [P] [US2] Add web API integration tests for star, unstar, fork, search, and bulk delete in `tests/integration/test_webapi_session_parity.py`
-- [ ] T029 [P] [US2] Add principal scoping regression tests for session parity actions in `tests/integration/test_webapi_session_parity.py`
-- [ ] T030 [P] [US2] Add draft and preferred model tests in `apps/web/src/__tests__/draftSession.test.ts`
-- [ ] T031 [P] [US2] Add sidebar star/search/bulk delete tests in `apps/web/src/__tests__/Sidebar.sessionParity.test.tsx`
-- [ ] T032 [P] [US2] Add fork action UI tests in `apps/web/src/__tests__/MessageList.fork.test.tsx`
+- [x] T027 [P] [US2] Add checkpoint metadata tests for starred and fork fields in `tests/unit/test_checkpoint_session_parity.py`
+- [x] T028 [P] [US2] Add web API integration tests for star, unstar, fork, search, and bulk delete in `tests/integration/test_webapi_session_parity.py`
+- [x] T029 [P] [US2] Add principal scoping regression tests for session parity actions in `tests/integration/test_webapi_session_parity.py`
+- [x] T030 [P] [US2] Add draft and preferred model tests in `apps/web/src/__tests__/draftSession.test.ts`
+- [x] T031 [P] [US2] Add sidebar star/search/bulk delete tests in `apps/web/src/__tests__/Sidebar.sessionParity.test.tsx`
+- [x] T032 [P] [US2] Add fork action UI tests in `apps/web/src/__tests__/MessageList.fork.test.tsx`
 
 ### Implementation for User Story 2
 
-- [ ] T033 [US2] Extend checkpoint session metadata contract in `src/loopplane/checkpoint/base.py`
-- [ ] T034 [US2] Persist starred and fork metadata in `src/loopplane/checkpoint/file.py`
-- [ ] T035 [US2] Persist starred and fork metadata in `src/loopplane/checkpoint/sqlite.py`
-- [ ] T036 [US2] Add session parity host methods in `src/loopplane/host/host.py`
-- [ ] T037 [US2] Add session parity request/response models in `src/loopplane/webapi/models.py`
-- [ ] T038 [US2] Implement star, unstar, fork, search, and bulk-delete handlers in `src/loopplane/webapi/sessions.py`
-- [ ] T039 [US2] Expose session parity routes in `src/loopplane/webapi/app.py`
-- [ ] T040 [US2] Add client methods for session parity actions in `apps/web/src/api/client.ts`
-- [ ] T041 [US2] Add draft chat and preferred model state in `apps/web/src/state/sessions.ts`
-- [ ] T042 [US2] Render draft/new-chat and preferred model behavior in `apps/web/src/components/Composer.tsx`
-- [ ] T043 [US2] Render star, search, and bulk delete controls in `apps/web/src/components/Sidebar.tsx`
-- [ ] T044 [US2] Add fork-from-message action in `apps/web/src/components/MessageList.tsx`
-- [ ] T045 [US2] Implement deterministic active-session fallback in `apps/web/src/App.tsx`
+- [x] T033 [US2] Extend checkpoint session metadata contract in `src/loopplane/checkpoint/base.py`
+- [x] T034 [US2] Persist starred and fork metadata in `src/loopplane/checkpoint/file.py`
+- [x] T035 [US2] Persist starred and fork metadata in `src/loopplane/checkpoint/sqlite.py`
+- [x] T036 [US2] Add session parity host methods in `src/loopplane/host/host.py`
+- [x] T037 [US2] Add session parity request/response models in `src/loopplane/webapi/models.py`
+- [x] T038 [US2] Implement star, unstar, fork, search, and bulk-delete handlers through the existing `src/loopplane/webapi/app.py` route layer
+- [x] T039 [US2] Expose session parity routes in `src/loopplane/webapi/app.py`
+- [x] T040 [US2] Add client methods for session parity actions in `apps/web/src/api/client.ts`
+- [x] T041 [US2] Add draft chat and preferred model state in `apps/web/src/state/sessions.ts`
+- [x] T042 [US2] Render draft/new-chat and preferred model behavior through the existing composer extras in `apps/web/src/App.tsx`
+- [x] T043 [US2] Render star, search, and bulk delete controls in `apps/web/src/components/Sidebar.tsx`
+- [x] T044 [US2] Add fork-from-message action in `apps/web/src/components/MessageList.tsx`
+- [x] T045 [US2] Implement deterministic active-session fallback in `apps/web/src/App.tsx`
 
 **Checkpoint**: User Story 2 is functional and independently testable. Session operations remain principal-scoped and older clients tolerate missing additive fields.
 

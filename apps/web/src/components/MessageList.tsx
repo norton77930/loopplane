@@ -22,6 +22,7 @@ interface Props {
   onRegenerate?: () => void;
   canRegenerate?: boolean;
   onExample?: (prompt: string) => void;
+  onFork?: (sequence: number) => void;
   loading?: boolean;
 }
 
@@ -30,6 +31,7 @@ export function MessageList({
   onRegenerate,
   canRegenerate,
   onExample,
+  onFork,
   loading,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -73,6 +75,7 @@ export function MessageList({
             entry={entry}
             onRegenerate={index === lastAssistant ? onRegenerate : undefined}
             canRegenerate={canRegenerate}
+            onFork={onFork ? () => onFork(index + 1) : undefined}
           />
         ))
       )}
@@ -110,16 +113,17 @@ interface EntryProps {
   entry: ConversationEntry;
   onRegenerate?: () => void;
   canRegenerate?: boolean;
+  onFork?: () => void;
 }
 
-function Entry({ entry, onRegenerate, canRegenerate }: EntryProps) {
+function Entry({ entry, onRegenerate, canRegenerate, onFork }: EntryProps) {
   switch (entry.kind) {
     case "user":
       return (
         <div className="message message-user">
           <div className="message-role">You</div>
           <div className="bubble">{entry.text}</div>
-          <MessageActions text={entry.text} />
+          <MessageActions text={entry.text} onFork={onFork} />
         </div>
       );
     case "reasoning":
@@ -133,6 +137,7 @@ function Entry({ entry, onRegenerate, canRegenerate }: EntryProps) {
             text={entry.text}
             onRegenerate={onRegenerate}
             canRegenerate={canRegenerate}
+            onFork={onFork}
           />
         </div>
       );
@@ -152,10 +157,12 @@ function MessageActions({
   text,
   onRegenerate,
   canRegenerate,
+  onFork,
 }: {
   text: string;
   onRegenerate?: () => void;
   canRegenerate?: boolean;
+  onFork?: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -163,6 +170,11 @@ function MessageActions({
       <button type="button" onClick={() => void copyText(text)}>
         {t("action.copy")}
       </button>
+      {onFork && (
+        <button type="button" onClick={onFork}>
+          Fork
+        </button>
+      )}
       {onRegenerate && (
         <button type="button" disabled={canRegenerate === false} onClick={onRegenerate}>
           {t("action.regenerate")}

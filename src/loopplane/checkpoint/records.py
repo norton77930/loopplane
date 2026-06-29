@@ -47,6 +47,10 @@ class SessionMetaPayload(_RecordModel):
     created_at: AwareDatetime
     label: str | None = None
     principal_id: str | None = None
+    model: str | None = None
+    starred: bool = False
+    forked_from_session_id: str | None = None
+    forked_from_sequence: int | None = None
 
 
 class SessionMetaRecord(_Envelope):

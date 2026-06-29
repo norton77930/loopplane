@@ -53,9 +53,12 @@ from loopplane.webapi.live import (
 )
 from loopplane.webapi.models import (
     ArtifactContent,
+    BulkDeleteRequest,
+    BulkDeleteResult,
     CommandRequest,
     CommandResultView,
     ErrorResponse,
+    ForkSessionRequest,
     HistoryEntryView,
     LiveClientMessage,
     LiveTicketView,
@@ -301,6 +304,7 @@ def create_app(
                     _discard,
                     principal_id=principal.id,
                     output_schema=body.output_schema,
+                    model=body.model,
                 )
         except PlatformFairnessRejected as exc:
             raise HTTPException(status_code=429, detail="capacity exceeded") from exc
@@ -320,7 +324,9 @@ def create_app(
         _check_output_schema(body.output_schema, supports_so)
         blocks = _build_blocks(body, principal.id, accepts_media)
         return StreamingResponse(
-            run_event_stream(chosen, blocks, principal.id, body.output_schema),
+            run_event_stream(
+                chosen, blocks, principal.id, body.output_schema, model=body.model
+            ),
             media_type="text/event-stream",
         )
 
@@ -344,6 +350,7 @@ def create_app(
             supports_so,
             sse_replay_buffer,
             event_replay_store,
+            model,
         )
         await ready.wait()
         if box.get("error"):
@@ -554,6 +561,65 @@ def create_app(
             for summary in host.list_sessions()
             if summary.principal_id == principal.id
         ]
+
+    @router.get("/sessions/search")
+    async def search_sessions(
+        q: str, principal: Principal = Depends(require)
+    ) -> list[SessionSummaryView]:
+        return [
+            SessionSummaryView.from_summary(summary)
+            for summary in host.search_sessions(q, principal.id)
+        ]
+
+    @router.post("/sessions/bulk-delete")
+    async def bulk_delete_sessions(
+        body: BulkDeleteRequest, principal: Principal = Depends(require)
+    ) -> BulkDeleteResult:
+        deleted = host.bulk_delete_sessions(body.session_ids, principal_id=principal.id)
+        for session_id in deleted:
+            entry = sessions.get(session_id)
+            if entry is not None:
+                entry.session.cancel()
+                entry.close.set()
+            if event_replay_store is not None:
+                with suppress(Exception):
+                    event_replay_store.delete_session(session_id)
+        return BulkDeleteResult(deleted=deleted)
+
+    @router.post("/sessions/{session_id}/star")
+    async def star_session(
+        session_id: str, principal: Principal = Depends(require)
+    ) -> Resolved:
+        _owned_or_404(session_id, principal)
+        await host.set_session_starred(session_id, True)
+        return Resolved(resolved=True)
+
+    @router.delete("/sessions/{session_id}/star")
+    async def unstar_session(
+        session_id: str, principal: Principal = Depends(require)
+    ) -> Resolved:
+        _owned_or_404(session_id, principal)
+        await host.set_session_starred(session_id, False)
+        return Resolved(resolved=True)
+
+    @router.post("/sessions/{session_id}/fork")
+    async def fork_session(
+        session_id: str,
+        body: ForkSessionRequest,
+        principal: Principal = Depends(require),
+    ) -> OpenedSession:
+        _owned_or_404(session_id, principal)
+        try:
+            fork_id = await host.fork_session(
+                session_id,
+                principal_id=principal.id,
+                source_sequence=body.sequence,
+                title=body.title,
+                model=body.model,
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="not found") from None
+        return OpenedSession(session_id=fork_id)
 
     @router.patch("/sessions/{session_id}")
     async def rename_session(

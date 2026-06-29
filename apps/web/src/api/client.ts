@@ -7,6 +7,8 @@ import type { SessionTransport } from "./transport";
 import type {
   McpServerView,
   MemoryEntryView,
+  BulkDeleteResult,
+  ForkSessionRequest,
   ModelInfo,
   RawEvent,
   SessionSummary,
@@ -143,6 +145,35 @@ export class ApiClient {
 
   async deleteSession(id: string): Promise<void> {
     await this.json(`/v1/sessions/${id}`, { method: "DELETE" });
+  }
+
+  async starSession(id: string): Promise<void> {
+    await this.json(`/v1/sessions/${id}/star`, { method: "POST" });
+  }
+
+  async unstarSession(id: string): Promise<void> {
+    await this.json(`/v1/sessions/${id}/star`, { method: "DELETE" });
+  }
+
+  async searchSessions(query: string): Promise<SessionSummary[]> {
+    return this.json(`/v1/sessions/search?q=${encodeURIComponent(query)}`);
+  }
+
+  async forkSession(
+    id: string,
+    request: ForkSessionRequest,
+  ): Promise<{ session_id: string }> {
+    return this.json(`/v1/sessions/${id}/fork`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async bulkDeleteSessions(ids: string[]): Promise<BulkDeleteResult> {
+    return this.json("/v1/sessions/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({ session_ids: ids, confirm: true }),
+    });
   }
 
   // 027 — read-only inspection (metadata-only).

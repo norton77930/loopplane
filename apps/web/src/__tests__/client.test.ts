@@ -32,6 +32,49 @@ describe("ApiClient", () => {
     await expect(client.listSessions()).rejects.toBeInstanceOf(ApiError);
   });
 
+  it("calls session parity endpoints", async () => {
+    const requests: Array<{ url: string; method?: string; body?: string }> = [];
+    const fetchFn: typeof fetch = async (url, init) => {
+      requests.push({
+        url: String(url),
+        method: init?.method,
+        body: init?.body as string | undefined,
+      });
+      if (String(url).includes("/fork")) return jsonResponse({ session_id: "fork" });
+      if (String(url).includes("/bulk-delete")) {
+        return jsonResponse({ deleted: ["s1"] });
+      }
+      return jsonResponse([]);
+    };
+    const client = new ApiClient({ fetch: fetchFn });
+
+    await client.starSession("s1");
+    await client.unstarSession("s1");
+    await client.searchSessions("alpha");
+    await expect(client.forkSession("s1", { sequence: 3 })).resolves.toEqual({
+      session_id: "fork",
+    });
+    await expect(client.bulkDeleteSessions(["s1"])).resolves.toEqual({
+      deleted: ["s1"],
+    });
+
+    expect(requests).toEqual([
+      { url: "/v1/sessions/s1/star", method: "POST", body: undefined },
+      { url: "/v1/sessions/s1/star", method: "DELETE", body: undefined },
+      { url: "/v1/sessions/search?q=alpha", method: undefined, body: undefined },
+      {
+        url: "/v1/sessions/s1/fork",
+        method: "POST",
+        body: JSON.stringify({ sequence: 3 }),
+      },
+      {
+        url: "/v1/sessions/bulk-delete",
+        method: "POST",
+        body: JSON.stringify({ session_ids: ["s1"], confirm: true }),
+      },
+    ]);
+  });
+
   it("streams run events", async () => {
     const sse =
       'data: {"type":"assistant-output-increment","payload":{"text":"hi","turn_index":0}}\n\n' +

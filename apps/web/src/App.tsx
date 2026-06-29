@@ -23,6 +23,11 @@ import { useToast } from "./components/Toast";
 import { useTranslation } from "./i18n/i18n";
 import { estimateCost } from "./pricing";
 import { errored, initialState, reduce, userPrompt } from "./state/chat";
+import {
+  chooseActiveAfterDelete,
+  loadPreferredModel,
+  savePreferredModel,
+} from "./state/sessions";
 
 export function App({
   client = new ApiClient(),
@@ -37,7 +42,9 @@ export function App({
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showInspect, setShowInspect] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(() =>
+    loadPreferredModel(),
+  );
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const sessionId = useRef<string | null>(null);
   const reading = useRef(false);
@@ -134,6 +141,11 @@ export function App({
     }
   }
 
+  function changeModel(model: string | null) {
+    setSelectedModel(model);
+    savePreferredModel(model);
+  }
+
   async function refreshSessions() {
     try {
       setSessions(await client.listSessions());
@@ -166,6 +178,52 @@ export function App({
     // Deleting the open session returns the app to an empty/new state (FR-006).
     if (id === activeId || id === sessionId.current) newChat();
     void refreshSessions();
+  }
+
+  async function toggleStar(id: string, next: boolean) {
+    try {
+      if (next) await client.starSession(id);
+      else await client.unstarSession(id);
+      void refreshSessions();
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  async function searchSessions(query: string) {
+    const trimmed = query.trim();
+    try {
+      setSessions(trimmed ? await client.searchSessions(trimmed) : await client.listSessions());
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  async function bulkDeleteSessions(ids: string[]) {
+    try {
+      const result = await client.bulkDeleteSessions(ids);
+      const deleted = new Set(result.deleted);
+      if (activeId && deleted.has(activeId)) {
+        const fallback = chooseActiveAfterDelete(activeId, sessions, deleted);
+        if (fallback) void selectSession(fallback);
+        else newChat();
+      }
+      notify(t("toast.deleted"));
+      void refreshSessions();
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  async function forkFrom(sequence: number) {
+    if (!sessionId.current) return;
+    try {
+      const forked = await client.forkSession(sessionId.current, { sequence });
+      void refreshSessions();
+      void selectSession(forked.session_id);
+    } catch (error) {
+      fail(error);
+    }
   }
 
   // 032 — retry: clear the error and re-establish the live stream.
@@ -233,6 +291,9 @@ export function App({
           onNew={newChat}
           onRename={(id, title) => void renameSession(id, title)}
           onDelete={(id) => void deleteSession(id)}
+          onToggleStar={(id, next) => void toggleStar(id, next)}
+          onSearch={(query) => void searchSessions(query)}
+          onBulkDelete={(ids) => void bulkDeleteSessions(ids)}
           loading={loadingSessions}
         />
       }
@@ -262,7 +323,7 @@ export function App({
               <ModelSelector
                 client={client}
                 value={selectedModel}
-                onChange={setSelectedModel}
+                onChange={changeModel}
               />
               <Attachments client={client} onChange={setAttachments} />
             </>
@@ -275,6 +336,7 @@ export function App({
         onRegenerate={regenerate}
         canRegenerate={state.status !== "running"}
         onExample={(prompt) => void send(prompt)}
+        onFork={(sequence) => void forkFrom(sequence)}
         loading={loadingHistory}
       />
       {pendingApproval && (
