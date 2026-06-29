@@ -108,3 +108,62 @@ export interface UploadResult {
   reference: string;
   name: string;
 }
+
+// 075 — capability management foundation views.
+export interface MemoryCapability {
+  id: string;
+  name: string;
+  kind: string;
+  description: string;
+  snippet: string;
+  status: string;
+  updated_at?: string | null;
+}
+
+export interface ManagedSkill {
+  id: string;
+  name: string;
+  description: string;
+  source: string;
+  status: string;
+  problem?: string | null;
+  updated_at?: string | null;
+}
+
+export interface McpConfiguration {
+  id: string;
+  name: string;
+  status: string;
+  tool_count: number;
+  tools: string[];
+  problem?: string | null;
+  updated_at?: string | null;
+}
+
+export interface WorkspaceContext {
+  id: string;
+  name: string;
+  description: string;
+  workspace_label: string;
+  status: string;
+  updated_at?: string | null;
+}
+
+export interface ManagedSchedule {
+  id: string;
+  name: string;
+  description: string;
+  trigger: string;
+  enabled: boolean;
+  status: string;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  problem?: string | null;
+}
+
+export interface ModelDefault {
+  model_id: string | null;
+  label: string | null;
+  status: string;
+  updated_at?: string | null;
+}

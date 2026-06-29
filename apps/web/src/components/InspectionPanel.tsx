@@ -7,17 +7,19 @@ import type {
   SkillsResponse,
   ToolView,
 } from "../api/types";
+import { CapabilitySettings } from "./CapabilitySettings";
 
 // A read-only, tabbed inspection panel (027): skills (+ load problems), registered tools,
 // connected MCP servers (+ their tools), and memory (browse + search). Each tab fetches on view
 // and shows a clear empty state. Metadata-only — no execute/edit affordance.
-type Tab = "skills" | "tools" | "mcp" | "memory";
+type Tab = "skills" | "tools" | "mcp" | "memory" | "capabilities";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "skills", label: "Skills" },
   { id: "tools", label: "Tools" },
   { id: "mcp", label: "MCP" },
   { id: "memory", label: "Memory" },
+  { id: "capabilities", label: "Capabilities" },
 ];
 
 export function InspectionPanel({ client }: { client: ApiClient }) {
@@ -43,6 +45,7 @@ export function InspectionPanel({ client }: { client: ApiClient }) {
         {tab === "tools" && <ToolsTab client={client} />}
         {tab === "mcp" && <McpTab client={client} />}
         {tab === "memory" && <MemoryTab client={client} />}
+        {tab === "capabilities" && <CapabilitySettings client={client} />}
       </div>
     </aside>
   );

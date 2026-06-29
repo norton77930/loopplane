@@ -22,6 +22,14 @@ from loopplane.controller.controller import RuntimeController
 from loopplane.events.emitter import EventSink
 from loopplane.events.envelope import ApprovalRequestedPayload
 from loopplane.host.assembly import AssembledRuntime, assemble
+from loopplane.host.capabilities import (
+    ManagedMcpConfiguration,
+    ManagedMemoryEntry,
+    ManagedSchedule,
+    ManagedSkill,
+    ModelDefault,
+    WorkspaceContext,
+)
 from loopplane.host.config import RuntimeConfig
 from loopplane.host.inspect import (
     McpServerInfo,
@@ -333,6 +341,52 @@ class LoopPlaneHost:
         if store is None:
             return ()
         return memory_view(store.list_entries(), query)
+
+    # --- 075: capability management foundation ------------------------------
+
+    def list_managed_memory(self) -> tuple[ManagedMemoryEntry, ...]:
+        return tuple(
+            ManagedMemoryEntry(
+                id=info.name,
+                name=info.name,
+                kind=info.type,
+                description=info.description,
+                snippet=info.snippet,
+            )
+            for info in self.inspect_memory()
+        )
+
+    def list_managed_skills(self) -> tuple[ManagedSkill, ...]:
+        return tuple(
+            ManagedSkill(
+                id=info.name,
+                name=info.name,
+                description=info.description,
+                source=info.source,
+            )
+            for info in self.inspect_skills()
+        )
+
+    def list_managed_mcp(self) -> tuple[ManagedMcpConfiguration, ...]:
+        return tuple(
+            ManagedMcpConfiguration(
+                id=info.name,
+                name=info.name,
+                status="connected" if info.tools else "unavailable",
+                tool_count=len(info.tools),
+                tools=info.tools,
+            )
+            for info in self.inspect_mcp()
+        )
+
+    def list_workspace_contexts(self) -> tuple[WorkspaceContext, ...]:
+        return ()
+
+    def list_managed_schedules(self) -> tuple[ManagedSchedule, ...]:
+        return ()
+
+    def model_default(self) -> ModelDefault:
+        return ModelDefault(model_id=None, label=None, status="fallback")
 
     def _enter_run(self) -> None:
         if self._active:

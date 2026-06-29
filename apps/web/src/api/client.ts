@@ -7,16 +7,22 @@ import type { SessionTransport } from "./transport";
 import type {
   BulkDeleteRequest,
   McpServerView,
+  McpConfiguration,
   MemoryEntryView,
+  MemoryCapability,
   BulkDeleteResult,
   ForkSessionRequest,
+  ManagedSchedule,
+  ManagedSkill,
   ModelInfo,
+  ModelDefault,
   OpenedSession,
   RawEvent,
   SessionSummary,
   SkillsResponse,
   ToolView,
   UploadResult,
+  WorkspaceContext,
 } from "./types";
 
 export class ApiError extends Error {
@@ -195,6 +201,31 @@ export class ApiClient {
   async inspectMemory(query?: string): Promise<MemoryEntryView[]> {
     const suffix = query ? `?q=${encodeURIComponent(query)}` : "";
     return this.json(`/v1/inspect/memory${suffix}`);
+  }
+
+  // 075 — capability management foundation.
+  async listMemoryEntries(): Promise<MemoryCapability[]> {
+    return this.json("/v1/capabilities/memory");
+  }
+
+  async listManagedSkills(): Promise<ManagedSkill[]> {
+    return this.json("/v1/capabilities/skills");
+  }
+
+  async listMcpConfigurations(): Promise<McpConfiguration[]> {
+    return this.json("/v1/capabilities/mcp");
+  }
+
+  async listWorkspaceContexts(): Promise<WorkspaceContext[]> {
+    return this.json("/v1/capabilities/contexts");
+  }
+
+  async listSchedules(): Promise<ManagedSchedule[]> {
+    return this.json("/v1/capabilities/schedules");
+  }
+
+  async getModelDefault(): Promise<ModelDefault> {
+    return this.json("/v1/capabilities/model-default");
   }
 
   private async json<T>(path: string, init?: RequestInit): Promise<T> {

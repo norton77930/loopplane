@@ -14,6 +14,14 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, Field, field_validator
 
 from loopplane.host import RunOutcome
+from loopplane.host.capabilities import (
+    ManagedMcpConfiguration,
+    ManagedMemoryEntry,
+    ManagedSchedule,
+    ManagedSkill,
+    ModelDefault,
+    WorkspaceContext,
+)
 from loopplane.host.inspect import (
     McpServerInfo,
     MemoryEntryInfo,
@@ -310,6 +318,115 @@ class MemoryEntryView(BaseModel):
             description=info.description,
             snippet=info.snippet,
         )
+
+
+# --- 075: capability management views ----------------------------------------
+
+
+class ManagedMemoryView(BaseModel):
+    id: str
+    name: str
+    kind: str
+    description: str
+    snippet: str
+    status: str
+    updated_at: datetime | None = None
+
+    @classmethod
+    def from_entry(cls, entry: ManagedMemoryEntry) -> ManagedMemoryView:
+        return cls(**entry.__dict__)
+
+
+class ManagedSkillView(BaseModel):
+    id: str
+    name: str
+    description: str
+    source: str
+    status: str
+    problem: str | None = None
+    updated_at: datetime | None = None
+
+    @classmethod
+    def from_skill(cls, skill: ManagedSkill) -> ManagedSkillView:
+        return cls(**skill.__dict__)
+
+
+class ManagedMcpConfigurationView(BaseModel):
+    id: str
+    name: str
+    status: str
+    tool_count: int
+    tools: list[str]
+    problem: str | None = None
+    updated_at: datetime | None = None
+
+    @classmethod
+    def from_config(
+        cls, config: ManagedMcpConfiguration
+    ) -> ManagedMcpConfigurationView:
+        return cls(
+            id=config.id,
+            name=config.name,
+            status=config.status,
+            tool_count=config.tool_count,
+            tools=list(config.tools),
+            problem=config.problem,
+            updated_at=config.updated_at,
+        )
+
+
+class WorkspaceContextView(BaseModel):
+    id: str
+    name: str
+    description: str
+    workspace_label: str
+    status: str
+    updated_at: datetime | None = None
+
+    @classmethod
+    def from_context(cls, context: WorkspaceContext) -> WorkspaceContextView:
+        return cls(**context.__dict__)
+
+
+class ManagedScheduleView(BaseModel):
+    id: str
+    name: str
+    description: str
+    trigger: str
+    enabled: bool
+    status: str
+    next_run_at: datetime | None = None
+    last_run_at: datetime | None = None
+    problem: str | None = None
+
+    @classmethod
+    def from_schedule(cls, schedule: ManagedSchedule) -> ManagedScheduleView:
+        return cls(**schedule.__dict__)
+
+
+class ModelDefaultView(BaseModel):
+    model_id: str | None
+    label: str | None
+    status: str
+    updated_at: datetime | None = None
+
+    @classmethod
+    def from_default(cls, default: ModelDefault) -> ModelDefaultView:
+        return cls(**default.__dict__)
+
+
+class MemoryWriteRequest(BaseModel):
+    name: str = Field(min_length=1)
+    kind: str = Field(min_length=1)
+    content: str
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("name must not be blank")
+        return trimmed
 
 
 # --- 028: model catalog + uploads (metadata-only) ----------------------------

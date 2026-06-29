@@ -18,11 +18,11 @@
 
 **Purpose**: Create shared capability-management seams and type scaffolds used by all stories.
 
-- [ ] T001 Create capability management host model scaffold in `src/loopplane/host/capabilities.py`
-- [ ] T002 [P] Add capability management web model scaffolds in `src/loopplane/webapi/models.py`
-- [ ] T003 [P] Add capability management API type scaffolds in `apps/web/src/api/types.ts`
-- [ ] T004 [P] Add capability management client method scaffolds in `apps/web/src/api/client.ts`
-- [ ] T005 [P] Add capability settings component scaffold in `apps/web/src/components/CapabilitySettings.tsx`
+- [x] T001 Create capability management host model scaffold in `src/loopplane/host/capabilities.py`
+- [x] T002 [P] Add capability management web model scaffolds in `src/loopplane/webapi/models.py`
+- [x] T003 [P] Add capability management API type scaffolds in `apps/web/src/api/types.ts`
+- [x] T004 [P] Add capability management client method scaffolds in `apps/web/src/api/client.ts`
+- [x] T005 [P] Add capability settings component scaffold in `apps/web/src/components/CapabilitySettings.tsx`
 
 ---
 
@@ -32,13 +32,13 @@
 
 **Critical**: No user story implementation starts until these tests exist and fail for missing behavior.
 
-- [ ] T006 [P] Add memory/skills capability contract tests in `tests/contract/test_web_capability_management_contract.py`
-- [ ] T007 [P] Add MCP/project context contract tests in `tests/contract/test_web_context_management_contract.py`
-- [ ] T008 [P] Add schedules/model-defaults contract tests in `tests/contract/test_web_schedule_model_contract.py`
-- [ ] T009 [P] Add public-safe capability error tests in `tests/contract/test_web_capability_management_contract.py`
-- [ ] T010 [P] Add web capability client tests in `apps/web/src/__tests__/capabilityClient.test.ts`
-- [ ] T011 [P] Add web capability settings smoke tests in `apps/web/src/__tests__/CapabilitySettings.test.tsx`
-- [ ] T012 [P] Add 074 compatibility regression tests for settings routing in `apps/web/src/__tests__/App.capabilities.test.tsx`
+- [x] T006 [P] Add memory/skills capability contract tests in `tests/contract/test_web_capability_management_contract.py`
+- [x] T007 [P] Add MCP/project context contract tests in `tests/contract/test_web_context_management_contract.py`
+- [x] T008 [P] Add schedules/model-defaults contract tests in `tests/contract/test_web_schedule_model_contract.py`
+- [x] T009 [P] Add public-safe capability error tests in `tests/contract/test_web_capability_management_contract.py`
+- [x] T010 [P] Add web capability client tests in `apps/web/src/__tests__/capabilityClient.test.ts`
+- [x] T011 [P] Add web capability settings smoke tests in `apps/web/src/__tests__/CapabilitySettings.test.tsx`
+- [x] T012 [P] Add 074 compatibility regression tests for settings routing in `apps/web/src/__tests__/App.capabilities.test.tsx`
 
 **Checkpoint**: Contract tests and web boundary tests are in place. User stories can now be implemented in priority order.
 

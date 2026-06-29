@@ -62,8 +62,14 @@ from loopplane.webapi.models import (
     HistoryEntryView,
     LiveClientMessage,
     LiveTicketView,
+    ManagedMcpConfigurationView,
+    ManagedMemoryView,
+    ManagedScheduleView,
+    ManagedSkillView,
     McpServerView,
     MemoryEntryView,
+    MemoryWriteRequest,
+    ModelDefaultView,
     ModelInfo,
     MonthlyCostView,
     OpenedSession,
@@ -79,6 +85,7 @@ from loopplane.webapi.models import (
     SkillView,
     ToolView,
     UploadResult,
+    WorkspaceContextView,
 )
 from loopplane.webapi.multimodal import (
     MediaNotAccepted,
@@ -754,6 +761,63 @@ def create_app(
         q: str | None = None, principal: Principal = Depends(require)
     ) -> list[MemoryEntryView]:
         return [MemoryEntryView.from_info(info) for info in host.inspect_memory(q)]
+
+    # --- 075: capability management foundation ------------------------------
+
+    @router.get("/capabilities/memory")
+    async def list_managed_memory(
+        principal: Principal = Depends(require),
+    ) -> list[ManagedMemoryView]:
+        return [
+            ManagedMemoryView.from_entry(entry) for entry in host.list_managed_memory()
+        ]
+
+    @router.post("/capabilities/memory")
+    async def write_managed_memory(
+        body: MemoryWriteRequest, principal: Principal = Depends(require)
+    ) -> None:
+        raise HTTPException(status_code=501, detail="not implemented")
+
+    @router.get("/capabilities/skills")
+    async def list_managed_skills(
+        principal: Principal = Depends(require),
+    ) -> list[ManagedSkillView]:
+        return [
+            ManagedSkillView.from_skill(skill) for skill in host.list_managed_skills()
+        ]
+
+    @router.get("/capabilities/mcp")
+    async def list_managed_mcp(
+        principal: Principal = Depends(require),
+    ) -> list[ManagedMcpConfigurationView]:
+        return [
+            ManagedMcpConfigurationView.from_config(config)
+            for config in host.list_managed_mcp()
+        ]
+
+    @router.get("/capabilities/contexts")
+    async def list_workspace_contexts(
+        principal: Principal = Depends(require),
+    ) -> list[WorkspaceContextView]:
+        return [
+            WorkspaceContextView.from_context(context)
+            for context in host.list_workspace_contexts()
+        ]
+
+    @router.get("/capabilities/schedules")
+    async def list_managed_schedules(
+        principal: Principal = Depends(require),
+    ) -> list[ManagedScheduleView]:
+        return [
+            ManagedScheduleView.from_schedule(schedule)
+            for schedule in host.list_managed_schedules()
+        ]
+
+    @router.get("/capabilities/model-default")
+    async def get_model_default(
+        principal: Principal = Depends(require),
+    ) -> ModelDefaultView:
+        return ModelDefaultView.from_default(host.model_default())
 
     # --- 028: model catalog + file uploads ----------------------------------
 
