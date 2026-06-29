@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+import { generatedSessionEventFixtures } from "@web/api/generated";
 import type { RawEvent } from "@web/api/types";
 
 import { App } from "../App";
@@ -26,5 +27,19 @@ describe("App (desktop, reusing the unit-018 UI)", () => {
     fireEvent.click(screen.getByText("Send"));
     await waitFor(() => expect(screen.getByText("hi there")).toBeInTheDocument());
     expect(screen.getByText("hello")).toBeInTheDocument();
+  });
+
+  it("accepts the generated shared web event fixture", async () => {
+    const transport = stubTransport([
+      generatedSessionEventFixtures.assistant_output_increment,
+      generatedSessionEventFixtures.run_terminated,
+    ]);
+    render(<App transport={transport} />);
+    fireEvent.change(screen.getByLabelText("prompt"), { target: { value: "hello" } });
+    fireEvent.click(screen.getByText("Send"));
+
+    await waitFor(() =>
+      expect(screen.getByText("generated hello")).toBeInTheDocument(),
+    );
   });
 });

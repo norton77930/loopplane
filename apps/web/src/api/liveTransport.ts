@@ -1,5 +1,5 @@
 import type { ApprovalDecision } from "./client";
-import type { RawEvent } from "./types";
+import type { LiveClientMessage, LiveServerMessage, RawEvent } from "./types";
 import type { SessionTransport, SubmitOptions } from "./transport";
 
 export interface LiveSessionTransportOptions {
@@ -73,14 +73,14 @@ export class LiveSessionTransport implements SessionTransport {
     return socket;
   }
 
-  private send(sessionId: string, message: object): void {
+  private send(sessionId: string, message: LiveClientMessage): void {
     this.ensureSocket(sessionId).send(JSON.stringify(message));
   }
 
   private handleMessage(raw: string): void {
-    const message = JSON.parse(raw) as { type: string; payload?: RawEvent };
+    const message = JSON.parse(raw) as LiveServerMessage;
     if (message.type === "event" && message.payload) {
-      this.enqueue(message.payload);
+      this.enqueue(message.payload as RawEvent);
       return;
     }
     this.enqueue({ type: message.type });

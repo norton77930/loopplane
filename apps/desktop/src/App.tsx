@@ -4,6 +4,7 @@ import { ApprovalDialog } from "@web/components/ApprovalDialog";
 import { MessageList } from "@web/components/MessageList";
 import { QuestionDialog } from "@web/components/QuestionDialog";
 import { errored, initialState, reduce, userPrompt } from "@web/state/chat";
+import type { RawEvent } from "@web/api/types";
 
 import type { SidecarTransport } from "./sidecar";
 
@@ -18,11 +19,15 @@ export function App({ transport }: { transport: SidecarTransport }) {
     setState((current) => userPrompt(current, prompt));
     try {
       for await (const event of transport.run(prompt)) {
-        setState((current) => reduce(current, event));
+        applyEvent(event);
       }
     } catch {
       setState(errored);
     }
+  }
+
+  function applyEvent(event: RawEvent) {
+    setState((current) => reduce(current, event));
   }
 
   return (

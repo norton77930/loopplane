@@ -5,11 +5,13 @@ import { streamEvents } from "./events";
 import { RestSessionTransport } from "./restTransport";
 import type { SessionTransport } from "./transport";
 import type {
+  BulkDeleteRequest,
   McpServerView,
   MemoryEntryView,
   BulkDeleteResult,
   ForkSessionRequest,
   ModelInfo,
+  OpenedSession,
   RawEvent,
   SessionSummary,
   SkillsResponse,
@@ -64,7 +66,7 @@ export class ApiClient {
     yield* streamEvents(res.body);
   }
 
-  async openSession(model?: string): Promise<{ session_id: string }> {
+  async openSession(model?: string): Promise<OpenedSession> {
     const suffix = model ? `?model=${encodeURIComponent(model)}` : "";
     return this.json(`/v1/sessions${suffix}`, { method: "POST" });
   }
@@ -162,7 +164,7 @@ export class ApiClient {
   async forkSession(
     id: string,
     request: ForkSessionRequest,
-  ): Promise<{ session_id: string }> {
+  ): Promise<OpenedSession> {
     return this.json(`/v1/sessions/${id}/fork`, {
       method: "POST",
       body: JSON.stringify(request),
@@ -170,9 +172,10 @@ export class ApiClient {
   }
 
   async bulkDeleteSessions(ids: string[]): Promise<BulkDeleteResult> {
+    const request: BulkDeleteRequest = { session_ids: ids, confirm: true };
     return this.json("/v1/sessions/bulk-delete", {
       method: "POST",
-      body: JSON.stringify({ session_ids: ids, confirm: true }),
+      body: JSON.stringify(request),
     });
   }
 

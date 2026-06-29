@@ -117,19 +117,19 @@
 
 ### Tests for User Story 3
 
-- [ ] T046 [P] [US3] Add API response drift failure coverage in `tests/contract/test_web_type_artifacts.py`
-- [ ] T047 [P] [US3] Add session event drift failure coverage in `tests/contract/test_web_type_artifacts.py`
-- [ ] T048 [P] [US3] Add generated type wrapper tests in `apps/web/src/__tests__/generatedTypes.test.ts`
-- [ ] T049 [P] [US3] Add desktop compatibility regression test in `apps/desktop/src/__tests__/App.test.tsx`
+- [x] T046 [P] [US3] Add API response drift failure coverage in `tests/contract/test_web_type_artifacts.py`
+- [x] T047 [P] [US3] Add session event drift failure coverage in `tests/contract/test_web_type_artifacts.py`
+- [x] T048 [P] [US3] Add generated type wrapper tests in `apps/web/src/__tests__/generatedTypes.test.ts`
+- [x] T049 [P] [US3] Add desktop compatibility regression test in `apps/desktop/src/__tests__/App.test.tsx`
 
 ### Implementation for User Story 3
 
-- [ ] T050 [US3] Export backend-owned web contract fixtures from `src/loopplane/webapi/contract_types.py`
-- [ ] T051 [US3] Add deterministic type artifact validation test support in `tests/contract/test_web_type_artifacts.py`
-- [ ] T052 [US3] Align generated web API/event types in `apps/web/src/api/generated.ts`
-- [ ] T053 [US3] Wrap generated types in existing web API types in `apps/web/src/api/types.ts`
-- [ ] T054 [US3] Update web API client usage to rely on validated types in `apps/web/src/api/client.ts`
-- [ ] T055 [US3] Keep desktop renderer compatible with shared web state in `apps/desktop/src/App.tsx`
+- [x] T050 [US3] Export backend-owned web contract fixtures from `src/loopplane/webapi/contract_types.py`
+- [x] T051 [US3] Add deterministic type artifact validation test support in `tests/contract/test_web_type_artifacts.py`
+- [x] T052 [US3] Align generated web API/event types in `apps/web/src/api/generated.ts`
+- [x] T053 [US3] Wrap generated types in existing web API types in `apps/web/src/api/types.ts`
+- [x] T054 [US3] Update web API client usage to rely on validated types in `apps/web/src/api/client.ts`
+- [x] T055 [US3] Keep desktop renderer compatible with shared web state in `apps/desktop/src/App.tsx`
 
 **Checkpoint**: User Story 3 is functional and independently testable. Type validation catches representative drift and compatibility gates remain green.
 
@@ -139,12 +139,12 @@
 
 **Purpose**: Final cleanup, documentation, and delivery validation across all stories.
 
-- [ ] T056 [P] Update 074 validation notes in `specs/074-web-parity-foundation/quickstart.md`
-- [ ] T057 [P] Update roadmap status for 074 in `docs/loopplane-agent-board.md`
-- [ ] T058 Run backend gates from `specs/074-web-parity-foundation/quickstart.md`
-- [ ] T059 Run web gates from `specs/074-web-parity-foundation/quickstart.md`
-- [ ] T060 Run desktop compatibility gates from `specs/074-web-parity-foundation/quickstart.md`
-- [ ] T061 Run final public-safety gates from `specs/074-web-parity-foundation/quickstart.md`
+- [x] T056 [P] Update 074 validation notes in `specs/074-web-parity-foundation/quickstart.md`
+- [x] T057 [P] Update roadmap status for 074 in `docs/loopplane-agent-board.md`
+- [x] T058 Run backend gates from `specs/074-web-parity-foundation/quickstart.md`
+- [x] T059 Run web gates from `specs/074-web-parity-foundation/quickstart.md`
+- [x] T060 Run desktop compatibility gates from `specs/074-web-parity-foundation/quickstart.md`
+- [x] T061 Run final public-safety gates from `specs/074-web-parity-foundation/quickstart.md`
 
 ---
 

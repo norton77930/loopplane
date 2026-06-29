@@ -17,6 +17,14 @@ uv run pytest --basetemp "$env:TEMP\loopplane-pytest-074"
 
 Expected outcome: backend unit, integration, contract, replay, principal-scoping, and compatibility tests pass.
 
+## Type Artifact Validation
+
+```powershell
+uv run pytest tests/contract/test_web_type_artifacts.py --basetemp "$env:TEMP\loopplane-pytest-074-types"
+```
+
+Expected outcome: backend-owned API response fixtures, representative session-event fixtures, and `apps/web/src/api/generated.ts` remain deterministic and public-safe. Representative API response and session-event drift cases fail clearly.
+
 ## Web Validation
 
 ```powershell
@@ -25,7 +33,7 @@ npm --prefix apps/web test
 npm --prefix apps/web run build
 ```
 
-Expected outcome: transport boundary, live reconnect, approval/question response, abort, session management, and type-artifact tests pass with a successful production build.
+Expected outcome: transport boundary, live reconnect, approval/question response, abort, session management, generated type wrapper tests, and type-artifact tests pass with a successful production build.
 
 ## Desktop Compatibility
 
