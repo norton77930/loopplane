@@ -73,7 +73,7 @@ src/loopplane/
 |-- host/
 |   `-- host.py              # additive capability management methods
 |-- skills/                  # existing skill loading/import seams
-|-- adapters/mcp.py          # existing MCP registry/config seams
+|-- adapters/mcp/            # existing MCP registry/config seams
 |-- memory/                  # existing memory/knowledge seams
 |-- scheduling/              # existing schedule seams
 `-- webapi/
