@@ -116,24 +116,24 @@
 
 ### Tests for User Story 3
 
-- [ ] T045 [P] [US3] Add schedule management unit tests in `tests/unit/test_capability_management.py`
-- [ ] T046 [P] [US3] Add model default unit tests in `tests/unit/test_capability_management.py`
-- [ ] T047 [P] [US3] Add schedules/model defaults web API integration tests in `tests/integration/test_webapi_schedule_model_management.py`
-- [ ] T048 [P] [US3] Add schedules/model defaults UI tests in `apps/web/src/__tests__/CapabilitySettings.test.tsx`
-- [ ] T049 [P] [US3] Add browser credential-boundary regression test in `apps/web/src/__tests__/CapabilitySettings.test.tsx`
+- [x] T045 [P] [US3] Add schedule management unit tests in `tests/unit/test_capability_management.py`
+- [x] T046 [P] [US3] Add model default unit tests in `tests/unit/test_capability_management.py`
+- [x] T047 [P] [US3] Add schedules/model defaults web API integration tests in `tests/integration/test_webapi_schedule_model_management.py`
+- [x] T048 [P] [US3] Add schedules/model defaults UI tests in `apps/web/src/__tests__/CapabilitySettings.test.tsx`
+- [x] T049 [P] [US3] Add browser credential-boundary regression test in `apps/web/src/__tests__/CapabilitySettings.test.tsx`
 
 ### Implementation for User Story 3
 
-- [ ] T050 [US3] Implement schedule operation models in `src/loopplane/host/capabilities.py`
-- [ ] T051 [US3] Implement model default operation models in `src/loopplane/host/capabilities.py`
-- [ ] T052 [US3] Add host schedule management methods in `src/loopplane/host/host.py`
-- [ ] T053 [US3] Add host model default methods in `src/loopplane/host/host.py`
-- [ ] T054 [US3] Add schedule/model default request and response views in `src/loopplane/webapi/models.py`
-- [ ] T055 [US3] Add schedule/model default routes in `src/loopplane/webapi/app.py`
-- [ ] T056 [US3] Add schedule/model default API client methods in `apps/web/src/api/client.ts`
-- [ ] T057 [US3] Render schedule controls in `apps/web/src/components/CapabilitySettings.tsx`
-- [ ] T058 [US3] Render model default controls in `apps/web/src/components/CapabilitySettings.tsx`
-- [ ] T059 [US3] Preserve 074 per-session model selection behavior in `apps/web/src/App.tsx`
+- [x] T050 [US3] Implement schedule operation models in `src/loopplane/host/capabilities.py`
+- [x] T051 [US3] Implement model default operation models in `src/loopplane/host/capabilities.py`
+- [x] T052 [US3] Add host schedule management methods in `src/loopplane/host/host.py`
+- [x] T053 [US3] Add host model default methods in `src/loopplane/host/host.py`
+- [x] T054 [US3] Add schedule/model default request and response views in `src/loopplane/webapi/models.py`
+- [x] T055 [US3] Add schedule/model default routes in `src/loopplane/webapi/app.py`
+- [x] T056 [US3] Add schedule/model default API client methods in `apps/web/src/api/client.ts`
+- [x] T057 [US3] Render schedule controls in `apps/web/src/components/CapabilitySettings.tsx`
+- [x] T058 [US3] Render model default controls in `apps/web/src/components/CapabilitySettings.tsx`
+- [x] T059 [US3] Preserve 074 per-session model selection behavior in `apps/web/src/App.tsx`
 
 **Checkpoint**: User Story 3 is functional and independently testable. Browser model defaults use only host-provided catalog entries.
 

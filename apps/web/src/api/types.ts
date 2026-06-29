@@ -228,9 +228,26 @@ export interface ManagedSchedule {
   problem?: string | null;
 }
 
+export interface ScheduleWriteRequest {
+  name: string;
+  description: string;
+  trigger: string;
+  enabled: boolean;
+}
+
+export interface ScheduleMutationResponse {
+  result: CapabilityOperationResult;
+  schedule?: ManagedSchedule | null;
+}
+
 export interface ModelDefault {
   model_id: string | null;
   label: string | null;
   status: string;
   updated_at?: string | null;
+}
+
+export interface ModelDefaultMutationResponse {
+  result: CapabilityOperationResult;
+  default: ModelDefault;
 }

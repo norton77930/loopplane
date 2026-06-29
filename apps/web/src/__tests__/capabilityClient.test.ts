@@ -75,6 +75,39 @@ describe("capability management client", () => {
     ]);
   });
 
+  it("calls schedule and model-default mutation endpoints", async () => {
+    const requests: Array<{ url: string; method?: string; body?: string }> = [];
+    const fetchFn: typeof fetch = async (url, init) => {
+      requests.push({
+        url: String(url),
+        method: init?.method,
+        body: init?.body as string | undefined,
+      });
+      return jsonResponse({
+        result: { ok: true, resource_id: "item" },
+        schedule: { id: "daily-notes", name: "daily-notes", status: "enabled" },
+        default: { model_id: "fast", label: "Fast model", status: "available" },
+      });
+    };
+    const client = new ApiClient({ fetch: fetchFn });
+
+    await client.upsertSchedule({
+      name: "daily-notes",
+      description: "refresh notes",
+      trigger: "manual",
+      enabled: true,
+    });
+    await client.runScheduleNow("daily-notes");
+    await client.deleteSchedule("daily-notes");
+    await client.setModelDefault("fast");
+
+    expect(requests.map((request) => [request.url, request.method])).toEqual([
+      ["/v1/capabilities/schedules", "POST"],
+      ["/v1/capabilities/schedules/daily-notes/run-now", "POST"],
+      ["/v1/capabilities/schedules/daily-notes?confirm=true", "DELETE"],
+      ["/v1/capabilities/model-default", "POST"],
+    ]);
+  });
   it("calls MCP, workspace, and session-context endpoints", async () => {
     const requests: Array<{ url: string; method?: string; body?: string }> = [];
     const fetchFn: typeof fetch = async (url, init) => {

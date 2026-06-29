@@ -37,6 +37,9 @@ export function CapabilitySettings({ client }: { client: ApiClient }) {
   const [mcpUrl, setMcpUrl] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceLabel, setWorkspaceLabel] = useState("");
+  const [scheduleName, setScheduleName] = useState("");
+  const [scheduleTrigger, setScheduleTrigger] = useState("");
+  const [defaultModelId, setDefaultModelId] = useState("");
 
   useEffect(() => {
     let live = true;
@@ -105,6 +108,21 @@ export function CapabilitySettings({ client }: { client: ApiClient }) {
     });
   }
 
+  function saveSchedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void client.upsertSchedule({
+      name: scheduleName,
+      description: "",
+      trigger: scheduleTrigger,
+      enabled: true,
+    });
+  }
+
+  function saveModelDefault(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void client.setModelDefault(defaultModelId);
+  }
+
   return (
     <div className="capability-settings">
       <Section label="Memory" count={data?.memory.length}>
@@ -167,8 +185,31 @@ export function CapabilitySettings({ client }: { client: ApiClient }) {
           <button type="submit">Save workspace</button>
         </form>
       </Section>
-      <Section label="Schedules" count={data?.schedules.length} />
-      <Section label="Model default" count={data ? 1 : undefined} />
+      <Section label="Schedules" count={data?.schedules.length}>
+        <form className="capability-form" onSubmit={saveSchedule}>
+          <input
+            aria-label="schedule name"
+            value={scheduleName}
+            onChange={(event) => setScheduleName(event.target.value)}
+          />
+          <input
+            aria-label="schedule trigger"
+            value={scheduleTrigger}
+            onChange={(event) => setScheduleTrigger(event.target.value)}
+          />
+          <button type="submit">Save schedule</button>
+        </form>
+      </Section>
+      <Section label="Model default" count={data ? 1 : undefined}>
+        <form className="capability-form" onSubmit={saveModelDefault}>
+          <input
+            aria-label="default model id"
+            value={defaultModelId}
+            onChange={(event) => setDefaultModelId(event.target.value)}
+          />
+          <button type="submit">Save default model</button>
+        </form>
+      </Section>
     </div>
   );
 }

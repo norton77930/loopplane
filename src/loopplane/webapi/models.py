@@ -55,6 +55,33 @@ class _SummaryLike(Protocol):
 # --- requests ----------------------------------------------------------------
 
 
+class ScheduleWriteRequest(BaseModel):
+    name: str = Field(min_length=1)
+    description: str = ""
+    trigger: str = Field(min_length=1)
+    enabled: bool = True
+
+    @field_validator("name", "trigger")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("value must not be blank")
+        return trimmed
+
+
+class ModelDefaultWriteRequest(BaseModel):
+    model_id: str = Field(min_length=1)
+
+    @field_validator("model_id")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("model_id must not be blank")
+        return trimmed
+
+
 class UploadRef(BaseModel):
     """A reference to an uploaded file a turn carries (036). Each is resolved
     through the per-principal ``UploadStore`` (028); an image upload is assembled
@@ -420,7 +447,17 @@ class ManagedScheduleView(BaseModel):
 
     @classmethod
     def from_schedule(cls, schedule: ManagedSchedule) -> ManagedScheduleView:
-        return cls(**schedule.__dict__)
+        return cls(
+            id=schedule.id,
+            name=schedule.name,
+            description=schedule.description,
+            trigger=schedule.trigger,
+            enabled=schedule.enabled,
+            status=schedule.status,
+            next_run_at=schedule.next_run_at,
+            last_run_at=schedule.last_run_at,
+            problem=schedule.problem,
+        )
 
 
 class ModelDefaultView(BaseModel):
@@ -472,6 +509,16 @@ class MemoryMutationResponse(BaseModel):
 class SkillMutationResponse(BaseModel):
     result: CapabilityOperationResultView
     skill: ManagedSkillView | None = None
+
+
+class ScheduleMutationResponse(BaseModel):
+    result: CapabilityOperationResultView
+    schedule: ManagedScheduleView | None = None
+
+
+class ModelDefaultMutationResponse(BaseModel):
+    result: CapabilityOperationResultView
+    default: ModelDefaultView
 
 
 class MemoryWriteRequest(BaseModel):

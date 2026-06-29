@@ -106,6 +106,7 @@ class ManagedSchedule:
     next_run_at: datetime | None = None
     last_run_at: datetime | None = None
     problem: str | None = None
+    owner_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -578,12 +578,12 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **075-web-capability-management IMPLEMENTATION IN PROGRESS** - 001-074 are verified on `main`; 075 foundation plus US1-US2 tasks T001-T044 are complete. |
+| Active unit | **075-web-capability-management IMPLEMENTATION IN PROGRESS** - 001-074 are verified on `main`; 075 foundation plus US1-US3 tasks T001-T059 are complete. |
 | Active feature directory | `.specify/feature.json` → `specs/075-web-capability-management` (spec/checklist/plan/tasks/analyze artifacts complete). |
 | Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **075 implementation in progress** — foundation plus US1-US2 T001-T044 complete; continue with US3 starting at T045 in `tasks.md`. |
+| Current Spec Kit step | **075 implementation in progress** — foundation plus US1-US3 T001-T059 complete; continue with type artifacts starting at T060 in `tasks.md`. |
 | Depends on | 074 plus existing 027/028 inspection/model-file surfaces, 059 session-state work, and 065 backend command surface. Do not add browser-side provider credential collection unless separately authorized. |
-| Next command | `/speckit.implement` for `specs/075-web-capability-management` starting at T045. |
+| Next command | `/speckit.implement` for `specs/075-web-capability-management` starting at T060. |
 | Stop condition status | **Ready** - continue to 075 implement unless a hard stop condition appears. |
 
 ---

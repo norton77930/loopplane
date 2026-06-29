@@ -75,7 +75,9 @@ from loopplane.webapi.models import (
     MemoryEntryView,
     MemoryMutationResponse,
     MemoryWriteRequest,
+    ModelDefaultMutationResponse,
     ModelDefaultView,
+    ModelDefaultWriteRequest,
     ModelInfo,
     MonthlyCostView,
     OpenedSession,
@@ -84,6 +86,8 @@ from loopplane.webapi.models import (
     Resolved,
     RunRequest,
     RunResult,
+    ScheduleMutationResponse,
+    ScheduleWriteRequest,
     SessionAnswer,
     SessionContextBindRequest,
     SessionContextView,
@@ -1015,14 +1019,88 @@ def create_app(
     ) -> list[ManagedScheduleView]:
         return [
             ManagedScheduleView.from_schedule(schedule)
-            for schedule in host.list_managed_schedules()
+            for schedule in host.list_managed_schedules(principal.id)
         ]
+
+    @router.post("/capabilities/schedules")
+    async def upsert_managed_schedule(
+        body: ScheduleWriteRequest,
+        principal: Principal = Depends(require),
+    ) -> ScheduleMutationResponse:
+        result = host.upsert_managed_schedule(
+            name=body.name,
+            description=body.description,
+            trigger=body.trigger,
+            enabled=body.enabled,
+            principal_id=principal.id,
+        )
+        schedule = None
+        if result.ok and result.resource_id is not None:
+            schedule = ManagedScheduleView.from_schedule(
+                host.get_managed_schedule(result.resource_id, principal_id=principal.id)
+            )
+        return ScheduleMutationResponse(
+            result=CapabilityOperationResultView.from_result(result),
+            schedule=schedule,
+        )
+
+    @router.get("/capabilities/schedules/{schedule_id}")
+    async def get_managed_schedule(
+        schedule_id: str,
+        principal: Principal = Depends(require),
+    ) -> ManagedScheduleView:
+        try:
+            return ManagedScheduleView.from_schedule(
+                host.get_managed_schedule(schedule_id, principal_id=principal.id)
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="not found") from None
+
+    @router.post("/capabilities/schedules/{schedule_id}/run-now")
+    async def run_managed_schedule_now(
+        schedule_id: str,
+        principal: Principal = Depends(require),
+    ) -> CapabilityOperationResultView:
+        try:
+            result = host.run_managed_schedule_now(
+                schedule_id, principal_id=principal.id
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="not found") from None
+        return CapabilityOperationResultView.from_result(result)
+
+    @router.delete("/capabilities/schedules/{schedule_id}")
+    async def delete_managed_schedule(
+        schedule_id: str,
+        confirm: bool = False,
+        principal: Principal = Depends(require),
+    ) -> CapabilityOperationResultView:
+        result = host.delete_managed_schedule(
+            schedule_id, confirm=confirm, principal_id=principal.id
+        )
+        return CapabilityOperationResultView.from_result(result)
 
     @router.get("/capabilities/model-default")
     async def get_model_default(
         principal: Principal = Depends(require),
     ) -> ModelDefaultView:
-        return ModelDefaultView.from_default(host.model_default())
+        return ModelDefaultView.from_default(host.model_default(principal.id))
+
+    @router.post("/capabilities/model-default")
+    async def set_model_default(
+        body: ModelDefaultWriteRequest,
+        principal: Principal = Depends(require),
+    ) -> ModelDefaultMutationResponse:
+        available = {model_id: entry.label for model_id, entry in catalog.items()}
+        result = host.set_model_default(
+            body.model_id,
+            available_models=available,
+            principal_id=principal.id,
+        )
+        return ModelDefaultMutationResponse(
+            result=CapabilityOperationResultView.from_result(result),
+            default=ModelDefaultView.from_default(host.model_default(principal.id)),
+        )
 
     # --- 028: model catalog + file uploads ----------------------------------
 

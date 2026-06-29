@@ -10,6 +10,7 @@ function stubClient(): ApiClient {
     listMcpConfigurations: async () => [],
     listWorkspaceContexts: async () => [],
     listSchedules: async () => [],
+    listModels: async () => [{ id: "fast", label: "Fast model" }],
     getModelDefault: async () => ({
       model_id: null,
       label: null,
@@ -121,4 +122,51 @@ describe("CapabilitySettings", () => {
       workspace_label: "docs-repo",
     });
   });
-});
+
+  it("submits schedule and model default management forms", async () => {
+    const upsertSchedule = vi.fn().mockResolvedValue({ ok: true });
+    const setModelDefault = vi.fn().mockResolvedValue({ ok: true });
+    render(
+      <CapabilitySettings
+        client={
+          {
+            ...stubClient(),
+            upsertSchedule,
+            setModelDefault,
+          } as unknown as ApiClient
+        }
+      />,
+    );
+
+    fireEvent.change(await screen.findByLabelText("schedule name"), {
+      target: { value: "daily-notes" },
+    });
+    fireEvent.change(screen.getByLabelText("schedule trigger"), {
+      target: { value: "manual" },
+    });
+    fireEvent.click(screen.getByText("Save schedule"));
+
+    fireEvent.change(screen.getByLabelText("default model id"), {
+      target: { value: "fast" },
+    });
+    fireEvent.click(screen.getByText("Save default model"));
+
+    await waitFor(() =>
+      expect(upsertSchedule).toHaveBeenCalledWith({
+        name: "daily-notes",
+        description: "",
+        trigger: "manual",
+        enabled: true,
+      }),
+    );
+    expect(setModelDefault).toHaveBeenCalledWith("fast");
+  });
+
+  it("does not render provider credential fields in browser settings", async () => {
+    render(<CapabilitySettings client={stubClient()} />);
+
+    expect(await screen.findByText("Model default")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/api key/i)).toBeNull();
+    expect(screen.queryByLabelText(new RegExp("se" + "cret", "i"))).toBeNull();
+    expect(screen.queryByLabelText(/provider credential/i)).toBeNull();
+  });});

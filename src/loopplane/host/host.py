@@ -13,6 +13,7 @@ import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -128,6 +129,8 @@ class LoopPlaneHost:
         self._active = False
         self._managed_mcp: dict[str, ManagedMcpConfiguration] = {}
         self._workspace_contexts: dict[str, WorkspaceContext] = {}
+        self._managed_schedules: dict[str, ManagedSchedule] = {}
+        self._model_defaults: dict[str | None, ModelDefault] = {}
         self._session_contexts: dict[str, SessionContextBinding] = {}
         # Swarm (spec 050; ADR 0003): when this host runs a swarm MEMBER, it carries the
         # SHARED supervisor + the member's id so the member's run uses the same in-run
@@ -729,11 +732,135 @@ class LoopPlaneHost:
         self._session_contexts[session_id] = binding
         return binding
 
-    def list_managed_schedules(self) -> tuple[ManagedSchedule, ...]:
-        return ()
+    def list_managed_schedules(
+        self, principal_id: str | None = None
+    ) -> tuple[ManagedSchedule, ...]:
+        return tuple(
+            schedule
+            for _id, schedule in sorted(self._managed_schedules.items())
+            if self._visible_to(schedule.owner_id, principal_id)
+        )
 
-    def model_default(self) -> ModelDefault:
-        return ModelDefault(model_id=None, label=None, status="fallback")
+    def upsert_managed_schedule(
+        self,
+        *,
+        name: str,
+        description: str,
+        trigger: str,
+        enabled: bool,
+        principal_id: str | None = None,
+    ) -> CapabilityOperationResult:
+        schedule_id = name.strip()
+        normalized_trigger = trigger.strip()
+        if not schedule_id or not normalized_trigger:
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=schedule_id or None,
+                status="invalid",
+                message="schedule invalid",
+            )
+        self._managed_schedules[schedule_id] = ManagedSchedule(
+            id=schedule_id,
+            name=schedule_id,
+            description=description,
+            trigger=normalized_trigger,
+            enabled=enabled,
+            status="enabled" if enabled else "disabled",
+            owner_id=principal_id,
+        )
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=schedule_id,
+            status="enabled" if enabled else "disabled",
+            message="schedule saved",
+        )
+
+    def get_managed_schedule(
+        self, schedule_id: str, *, principal_id: str | None = None
+    ) -> ManagedSchedule:
+        schedule = self._managed_schedules.get(schedule_id)
+        if schedule is None or not self._visible_to(schedule.owner_id, principal_id):
+            raise KeyError(schedule_id)
+        return schedule
+
+    def run_managed_schedule_now(
+        self, schedule_id: str, *, principal_id: str | None = None
+    ) -> CapabilityOperationResult:
+        schedule = self.get_managed_schedule(schedule_id, principal_id=principal_id)
+        if not schedule.enabled:
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=schedule_id,
+                status="disabled",
+                message="schedule disabled",
+            )
+        self._managed_schedules[schedule_id] = replace(
+            schedule, status="running", last_run_at=datetime.now(UTC)
+        )
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=schedule_id,
+            status="running",
+            message="schedule run requested",
+        )
+
+    def delete_managed_schedule(
+        self, schedule_id: str, *, confirm: bool, principal_id: str | None = None
+    ) -> CapabilityOperationResult:
+        if not confirm:
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=schedule_id,
+                status="invalid",
+                message="confirmation required",
+            )
+        schedule = self._managed_schedules.get(schedule_id)
+        if schedule is None or not self._visible_to(schedule.owner_id, principal_id):
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=schedule_id,
+                status="unavailable",
+                message="schedule not found",
+            )
+        del self._managed_schedules[schedule_id]
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=schedule_id,
+            status="deleted",
+            message="schedule deleted",
+        )
+
+    def model_default(self, principal_id: str | None = None) -> ModelDefault:
+        return self._model_defaults.get(
+            principal_id, ModelDefault(model_id=None, label=None, status="fallback")
+        )
+
+    def set_model_default(
+        self,
+        model_id: str,
+        *,
+        available_models: Mapping[str, str],
+        principal_id: str | None = None,
+    ) -> CapabilityOperationResult:
+        if model_id not in available_models:
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=model_id,
+                status="invalid",
+                message="model unavailable",
+            )
+        self._model_defaults[principal_id] = ModelDefault(
+            model_id=model_id,
+            label=available_models[model_id],
+            status="available",
+            updated_at=datetime.now(UTC),
+        )
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=model_id,
+            status="available",
+            message="model default saved",
+        )
 
     @staticmethod
     def _visible_to(owner_id: str | None, principal_id: str | None) -> bool:

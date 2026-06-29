@@ -18,6 +18,7 @@ import type {
   BulkDeleteResult,
   ForkSessionRequest,
   ManagedSchedule,
+  ModelDefaultMutationResponse,
   ManagedSkill,
   SkillMutationResponse,
   SkillWriteRequest,
@@ -25,6 +26,8 @@ import type {
   ModelDefault,
   OpenedSession,
   RawEvent,
+  ScheduleMutationResponse,
+  ScheduleWriteRequest,
   SessionSummary,
   SkillsResponse,
   ToolView,
@@ -326,8 +329,38 @@ export class ApiClient {
     return this.json("/v1/capabilities/schedules");
   }
 
+  async upsertSchedule(
+    request: ScheduleWriteRequest,
+  ): Promise<ScheduleMutationResponse> {
+    return this.json("/v1/capabilities/schedules", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async runScheduleNow(id: string): Promise<CapabilityOperationResult> {
+    return this.json(
+      `/v1/capabilities/schedules/${encodeURIComponent(id)}/run-now`,
+      { method: "POST" },
+    );
+  }
+
+  async deleteSchedule(id: string): Promise<CapabilityOperationResult> {
+    return this.json(
+      `/v1/capabilities/schedules/${encodeURIComponent(id)}?confirm=true`,
+      { method: "DELETE" },
+    );
+  }
+
   async getModelDefault(): Promise<ModelDefault> {
     return this.json("/v1/capabilities/model-default");
+  }
+
+  async setModelDefault(modelId: string): Promise<ModelDefaultMutationResponse> {
+    return this.json("/v1/capabilities/model-default", {
+      method: "POST",
+      body: JSON.stringify({ model_id: modelId }),
+    });
   }
 
   private async json<T>(path: string, init?: RequestInit): Promise<T> {
