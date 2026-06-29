@@ -52,23 +52,23 @@
 
 ### Tests for User Story 1
 
-- [ ] T013 [P] [US1] Add memory CRUD unit tests in `tests/unit/test_capability_management.py`
-- [ ] T014 [P] [US1] Add skill write/import/delete unit tests in `tests/unit/test_capability_management.py`
-- [ ] T015 [P] [US1] Add memory/skills web API integration tests in `tests/integration/test_webapi_capability_management.py`
-- [ ] T016 [P] [US1] Add memory/skills UI tests in `apps/web/src/__tests__/CapabilitySettings.test.tsx`
+- [x] T013 [P] [US1] Add memory CRUD unit tests in `tests/unit/test_capability_management.py`
+- [x] T014 [P] [US1] Add skill write/import/delete unit tests in `tests/unit/test_capability_management.py`
+- [x] T015 [P] [US1] Add memory/skills web API integration tests in `tests/integration/test_webapi_capability_management.py`
+- [x] T016 [P] [US1] Add memory/skills UI tests in `apps/web/src/__tests__/CapabilitySettings.test.tsx`
 
 ### Implementation for User Story 1
 
-- [ ] T017 [US1] Implement memory operation models in `src/loopplane/host/capabilities.py`
-- [ ] T018 [US1] Implement skill operation models in `src/loopplane/host/capabilities.py`
-- [ ] T019 [US1] Add host memory management methods in `src/loopplane/host/host.py`
-- [ ] T020 [US1] Add host skill management methods in `src/loopplane/host/host.py`
-- [ ] T021 [US1] Add memory/skills request and response views in `src/loopplane/webapi/models.py`
-- [ ] T022 [US1] Add memory/skills management routes in `src/loopplane/webapi/app.py`
-- [ ] T023 [US1] Add memory/skills API client methods in `apps/web/src/api/client.ts`
-- [ ] T024 [US1] Render memory management controls in `apps/web/src/components/CapabilitySettings.tsx`
-- [ ] T025 [US1] Render skill management controls in `apps/web/src/components/CapabilitySettings.tsx`
-- [ ] T026 [US1] Wire capability settings entry point from `apps/web/src/components/InspectionPanel.tsx`
+- [x] T017 [US1] Implement memory operation models in `src/loopplane/host/capabilities.py`
+- [x] T018 [US1] Implement skill operation models in `src/loopplane/host/capabilities.py`
+- [x] T019 [US1] Add host memory management methods in `src/loopplane/host/host.py`
+- [x] T020 [US1] Add host skill management methods in `src/loopplane/host/host.py`
+- [x] T021 [US1] Add memory/skills request and response views in `src/loopplane/webapi/models.py`
+- [x] T022 [US1] Add memory/skills management routes in `src/loopplane/webapi/app.py`
+- [x] T023 [US1] Add memory/skills API client methods in `apps/web/src/api/client.ts`
+- [x] T024 [US1] Render memory management controls in `apps/web/src/components/CapabilitySettings.tsx`
+- [x] T025 [US1] Render skill management controls in `apps/web/src/components/CapabilitySettings.tsx`
+- [x] T026 [US1] Wire capability settings entry point from `apps/web/src/components/InspectionPanel.tsx`
 
 **Checkpoint**: User Story 1 is functional and independently testable. Existing read-only inspection still works.
 

@@ -55,6 +55,7 @@ from loopplane.webapi.models import (
     ArtifactContent,
     BulkDeleteRequest,
     BulkDeleteResult,
+    CapabilityOperationResultView,
     CommandRequest,
     CommandResultView,
     ErrorResponse,
@@ -63,11 +64,14 @@ from loopplane.webapi.models import (
     LiveClientMessage,
     LiveTicketView,
     ManagedMcpConfigurationView,
+    ManagedMemoryDetailView,
     ManagedMemoryView,
     ManagedScheduleView,
+    ManagedSkillDetailView,
     ManagedSkillView,
     McpServerView,
     MemoryEntryView,
+    MemoryMutationResponse,
     MemoryWriteRequest,
     ModelDefaultView,
     ModelInfo,
@@ -81,8 +85,11 @@ from loopplane.webapi.models import (
     SessionAnswer,
     SessionCostView,
     SessionSummaryView,
+    SkillImportRequest,
+    SkillMutationResponse,
     SkillsResponse,
     SkillView,
+    SkillWriteRequest,
     ToolView,
     UploadResult,
     WorkspaceContextView,
@@ -775,8 +782,42 @@ def create_app(
     @router.post("/capabilities/memory")
     async def write_managed_memory(
         body: MemoryWriteRequest, principal: Principal = Depends(require)
-    ) -> None:
-        raise HTTPException(status_code=501, detail="not implemented")
+    ) -> MemoryMutationResponse:
+        result = host.write_managed_memory(
+            name=body.name,
+            kind=body.kind,
+            description=body.description,
+            content=body.content,
+        )
+        entry = None
+        if result.ok and result.resource_id is not None:
+            entry = ManagedMemoryView.from_entry(
+                host.get_managed_memory(result.resource_id)
+            )
+        return MemoryMutationResponse(
+            result=CapabilityOperationResultView.from_result(result),
+            entry=entry,
+        )
+
+    @router.get("/capabilities/memory/{memory_id}")
+    async def get_managed_memory(
+        memory_id: str, principal: Principal = Depends(require)
+    ) -> ManagedMemoryDetailView:
+        try:
+            return ManagedMemoryDetailView.from_detail(
+                host.get_managed_memory(memory_id)
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="not found") from None
+
+    @router.delete("/capabilities/memory/{memory_id}")
+    async def delete_managed_memory(
+        memory_id: str,
+        confirm: bool = False,
+        principal: Principal = Depends(require),
+    ) -> CapabilityOperationResultView:
+        result = host.delete_managed_memory(memory_id, confirm=confirm)
+        return CapabilityOperationResultView.from_result(result)
 
     @router.get("/capabilities/skills")
     async def list_managed_skills(
@@ -785,6 +826,58 @@ def create_app(
         return [
             ManagedSkillView.from_skill(skill) for skill in host.list_managed_skills()
         ]
+
+    @router.post("/capabilities/skills")
+    async def write_managed_skill(
+        body: SkillWriteRequest, principal: Principal = Depends(require)
+    ) -> SkillMutationResponse:
+        result = host.write_managed_skill(
+            name=body.name,
+            description=body.description,
+            instructions=body.instructions,
+        )
+        skill = None
+        if result.ok and result.resource_id is not None:
+            skill = ManagedSkillView.from_skill(
+                host.get_managed_skill(result.resource_id)
+            )
+        return SkillMutationResponse(
+            result=CapabilityOperationResultView.from_result(result),
+            skill=skill,
+        )
+
+    @router.post("/capabilities/skills/import")
+    async def import_managed_skill(
+        body: SkillImportRequest, principal: Principal = Depends(require)
+    ) -> SkillMutationResponse:
+        result = host.import_managed_skill(body.definition)
+        skill = None
+        if result.ok and result.resource_id is not None:
+            skill = ManagedSkillView.from_skill(
+                host.get_managed_skill(result.resource_id)
+            )
+        return SkillMutationResponse(
+            result=CapabilityOperationResultView.from_result(result),
+            skill=skill,
+        )
+
+    @router.get("/capabilities/skills/{skill_id}")
+    async def get_managed_skill(
+        skill_id: str, principal: Principal = Depends(require)
+    ) -> ManagedSkillDetailView:
+        try:
+            return ManagedSkillDetailView.from_detail(host.get_managed_skill(skill_id))
+        except KeyError:
+            raise HTTPException(status_code=404, detail="not found") from None
+
+    @router.delete("/capabilities/skills/{skill_id}")
+    async def delete_managed_skill(
+        skill_id: str,
+        confirm: bool = False,
+        principal: Principal = Depends(require),
+    ) -> CapabilityOperationResultView:
+        result = host.delete_managed_skill(skill_id, confirm=confirm)
+        return CapabilityOperationResultView.from_result(result)
 
     @router.get("/capabilities/mcp")
     async def list_managed_mcp(

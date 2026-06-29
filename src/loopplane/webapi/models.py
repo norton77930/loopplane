@@ -15,10 +15,13 @@ from pydantic import BaseModel, Field, field_validator
 
 from loopplane.host import RunOutcome
 from loopplane.host.capabilities import (
+    CapabilityOperationResult,
     ManagedMcpConfiguration,
+    ManagedMemoryDetail,
     ManagedMemoryEntry,
     ManagedSchedule,
     ManagedSkill,
+    ManagedSkillDetail,
     ModelDefault,
     WorkspaceContext,
 )
@@ -415,9 +418,50 @@ class ModelDefaultView(BaseModel):
         return cls(**default.__dict__)
 
 
+class CapabilityOperationResultView(BaseModel):
+    ok: bool
+    resource_id: str | None
+    status: str
+    message: str
+
+    @classmethod
+    def from_result(
+        cls, result: CapabilityOperationResult
+    ) -> CapabilityOperationResultView:
+        return cls(**result.__dict__)
+
+
+class ManagedMemoryDetailView(ManagedMemoryView):
+    content: str
+    problem: str | None = None
+
+    @classmethod
+    def from_detail(cls, entry: ManagedMemoryDetail) -> ManagedMemoryDetailView:
+        return cls(**entry.__dict__)
+
+
+class ManagedSkillDetailView(ManagedSkillView):
+    instructions: str
+
+    @classmethod
+    def from_detail(cls, skill: ManagedSkillDetail) -> ManagedSkillDetailView:
+        return cls(**skill.__dict__)
+
+
+class MemoryMutationResponse(BaseModel):
+    result: CapabilityOperationResultView
+    entry: ManagedMemoryView | None = None
+
+
+class SkillMutationResponse(BaseModel):
+    result: CapabilityOperationResultView
+    skill: ManagedSkillView | None = None
+
+
 class MemoryWriteRequest(BaseModel):
     name: str = Field(min_length=1)
     kind: str = Field(min_length=1)
+    description: str = ""
     content: str
 
     @field_validator("name")
@@ -427,6 +471,24 @@ class MemoryWriteRequest(BaseModel):
         if not trimmed:
             raise ValueError("name must not be blank")
         return trimmed
+
+
+class SkillWriteRequest(BaseModel):
+    name: str = Field(min_length=1)
+    description: str = ""
+    instructions: str = Field(min_length=1)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("name must not be blank")
+        return trimmed
+
+
+class SkillImportRequest(BaseModel):
+    definition: dict[str, object]
 
 
 # --- 028: model catalog + uploads (metadata-only) ----------------------------

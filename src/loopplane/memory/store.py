@@ -46,6 +46,12 @@ class MemoryStore:
         entries, _ = self.scan()
         return entries
 
+    def get(self, name: str) -> MemoryEntry | None:
+        for entry in self.list_entries():
+            if entry.name == name:
+                return entry
+        return None
+
     def write(self, entry: MemoryEntry) -> None:
         """Create or update an entry, idempotent by name; immediately
         visible to subsequent scans.
@@ -53,6 +59,13 @@ class MemoryStore:
         self._base.mkdir(parents=True, exist_ok=True)
         path = self._base / self._filename(entry.name)
         path.write_text(entry.model_dump_json(), encoding="utf-8")
+
+    def delete(self, name: str) -> bool:
+        path = self._base / self._filename(name)
+        if not path.exists():
+            return False
+        path.unlink()
+        return True
 
     @staticmethod
     def _filename(name: str) -> str:

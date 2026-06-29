@@ -10,10 +10,14 @@ import type {
   McpConfiguration,
   MemoryEntryView,
   MemoryCapability,
+  MemoryMutationResponse,
+  MemoryWriteRequest,
   BulkDeleteResult,
   ForkSessionRequest,
   ManagedSchedule,
   ManagedSkill,
+  SkillMutationResponse,
+  SkillWriteRequest,
   ModelInfo,
   ModelDefault,
   OpenedSession,
@@ -208,8 +212,49 @@ export class ApiClient {
     return this.json("/v1/capabilities/memory");
   }
 
+  async writeMemoryEntry(
+    request: MemoryWriteRequest,
+  ): Promise<MemoryMutationResponse> {
+    return this.json("/v1/capabilities/memory", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async deleteMemoryEntry(id: string): Promise<unknown> {
+    return this.json(
+      `/v1/capabilities/memory/${encodeURIComponent(id)}?confirm=true`,
+      { method: "DELETE" },
+    );
+  }
+
   async listManagedSkills(): Promise<ManagedSkill[]> {
     return this.json("/v1/capabilities/skills");
+  }
+
+  async writeManagedSkill(
+    request: SkillWriteRequest,
+  ): Promise<SkillMutationResponse> {
+    return this.json("/v1/capabilities/skills", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async importManagedSkill(
+    request: SkillWriteRequest,
+  ): Promise<SkillMutationResponse> {
+    return this.json("/v1/capabilities/skills/import", {
+      method: "POST",
+      body: JSON.stringify({ definition: request }),
+    });
+  }
+
+  async deleteManagedSkill(id: string): Promise<unknown> {
+    return this.json(
+      `/v1/capabilities/skills/${encodeURIComponent(id)}?confirm=true`,
+      { method: "DELETE" },
+    );
   }
 
   async listMcpConfigurations(): Promise<McpConfiguration[]> {

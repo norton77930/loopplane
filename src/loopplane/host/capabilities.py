@@ -33,6 +33,12 @@ class ManagedMemoryEntry:
 
 
 @dataclass(frozen=True)
+class ManagedMemoryDetail(ManagedMemoryEntry):
+    content: str = ""
+    problem: str | None = None
+
+
+@dataclass(frozen=True)
 class ManagedSkill:
     id: str
     name: str
@@ -41,6 +47,19 @@ class ManagedSkill:
     status: CapabilityStatus = "available"
     problem: str | None = None
     updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class ManagedSkillDetail(ManagedSkill):
+    instructions: str = ""
+
+
+@dataclass(frozen=True)
+class CapabilityOperationResult:
+    ok: bool
+    resource_id: str | None
+    status: CapabilityStatus
+    message: str
 
 
 @dataclass(frozen=True)

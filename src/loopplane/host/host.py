@@ -8,7 +8,9 @@ and re-implements no runtime internal (FR-001, FR-060).
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+import hashlib
+import re
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -23,10 +25,13 @@ from loopplane.events.emitter import EventSink
 from loopplane.events.envelope import ApprovalRequestedPayload
 from loopplane.host.assembly import AssembledRuntime, assemble
 from loopplane.host.capabilities import (
+    CapabilityOperationResult,
     ManagedMcpConfiguration,
+    ManagedMemoryDetail,
     ManagedMemoryEntry,
     ManagedSchedule,
     ManagedSkill,
+    ManagedSkillDetail,
     ModelDefault,
     WorkspaceContext,
 )
@@ -43,7 +48,10 @@ from loopplane.host.inspect import (
 )
 from loopplane.host.sink import RunSink
 from loopplane.loop.history import HistoryEntry
+from loopplane.memory import MemoryEntry
 from loopplane.model import ContentBlock, TextBlock
+from loopplane.skills.loader import LoadedSkill, load_skills
+from loopplane.skills.models import Skill
 
 if TYPE_CHECKING:
     from loopplane.context import SwarmSupervisor
@@ -356,15 +364,147 @@ class LoopPlaneHost:
             for info in self.inspect_memory()
         )
 
+    def write_managed_memory(
+        self, *, name: str, kind: str, description: str, content: str
+    ) -> CapabilityOperationResult:
+        store = self._assembled.memory_store
+        if store is None:
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=None,
+                status="unavailable",
+                message="memory management unavailable",
+            )
+        entry = MemoryEntry(
+            type=kind.strip(), name=name.strip(), description=description, body=content
+        )
+        store.write(entry)
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=entry.name,
+            status="available",
+            message="memory saved",
+        )
+
+    def get_managed_memory(self, memory_id: str) -> ManagedMemoryDetail:
+        store = self._assembled.memory_store
+        if store is None:
+            raise KeyError(memory_id)
+        entry = store.get(memory_id)
+        if entry is None:
+            raise KeyError(memory_id)
+        return ManagedMemoryDetail(
+            id=entry.name,
+            name=entry.name,
+            kind=entry.type,
+            description=entry.description,
+            snippet=entry.body[:160],
+            content=entry.body,
+        )
+
+    def delete_managed_memory(
+        self, memory_id: str, *, confirm: bool
+    ) -> CapabilityOperationResult:
+        if not confirm:
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=memory_id,
+                status="invalid",
+                message="confirmation required",
+            )
+        store = self._assembled.memory_store
+        if store is None or not store.delete(memory_id):
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=memory_id,
+                status="unavailable",
+                message="memory entry not found",
+            )
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=memory_id,
+            status="deleted",
+            message="memory deleted",
+        )
+
     def list_managed_skills(self) -> tuple[ManagedSkill, ...]:
+        loaded, _problems = self._load_managed_skills()
         return tuple(
             ManagedSkill(
-                id=info.name,
-                name=info.name,
-                description=info.description,
-                source=info.source,
+                id=name,
+                name=name,
+                description=loaded_skill.skill.description,
+                source=loaded_skill.source,
             )
-            for info in self.inspect_skills()
+            for name, loaded_skill in sorted(loaded.items())
+        )
+
+    def write_managed_skill(
+        self, *, name: str, description: str, instructions: str
+    ) -> CapabilityOperationResult:
+        skill = Skill(
+            name=name.strip(),
+            description=description,
+            instructions=instructions,
+        )
+        self._write_managed_skill(skill)
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=skill.name,
+            status="available",
+            message="skill saved",
+        )
+
+    def import_managed_skill(
+        self, definition: Mapping[str, object]
+    ) -> CapabilityOperationResult:
+        skill = Skill.model_validate(definition)
+        self._write_managed_skill(skill)
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=skill.name,
+            status="available",
+            message="skill imported",
+        )
+
+    def get_managed_skill(self, skill_id: str) -> ManagedSkillDetail:
+        loaded, _problems = self._load_managed_skills()
+        loaded_skill = loaded.get(skill_id)
+        if loaded_skill is None:
+            raise KeyError(skill_id)
+        skill = loaded_skill.skill
+        return ManagedSkillDetail(
+            id=skill.name,
+            name=skill.name,
+            description=skill.description,
+            source=loaded_skill.source,
+            instructions=skill.instructions,
+        )
+
+    def delete_managed_skill(
+        self, skill_id: str, *, confirm: bool
+    ) -> CapabilityOperationResult:
+        if not confirm:
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=skill_id,
+                status="invalid",
+                message="confirmation required",
+            )
+        path = self._managed_skill_path(skill_id)
+        if path is None or not path.exists():
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=skill_id,
+                status="unavailable",
+                message="skill not found",
+            )
+        path.unlink()
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=skill_id,
+            status="deleted",
+            message="skill deleted",
         )
 
     def list_managed_mcp(self) -> tuple[ManagedMcpConfiguration, ...]:
@@ -387,6 +527,34 @@ class LoopPlaneHost:
 
     def model_default(self) -> ModelDefault:
         return ModelDefault(model_id=None, label=None, status="fallback")
+
+    def _load_managed_skills(self) -> tuple[dict[str, LoadedSkill], list[str]]:
+        if self._config.skills is None:
+            return {}, []
+        return load_skills(self._config.skills.sources)
+
+    def _write_managed_skill(self, skill: Skill) -> None:
+        source = self._managed_skill_source()
+        if source is None:
+            raise RuntimeError("skill management unavailable")
+        source.mkdir(parents=True, exist_ok=True)
+        path = self._managed_skill_path(skill.name)
+        if path is None:
+            raise RuntimeError("skill management unavailable")
+        path.write_text(skill.model_dump_json(), encoding="utf-8")
+
+    def _managed_skill_source(self) -> Path | None:
+        if self._config.skills is None or not self._config.skills.sources:
+            return None
+        return self._config.skills.sources[-1]
+
+    def _managed_skill_path(self, name: str) -> Path | None:
+        source = self._managed_skill_source()
+        if source is None:
+            return None
+        safe = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+        suffix = hashlib.sha256(name.encode("utf-8")).hexdigest()[:8]
+        return source / f"{safe}-{suffix}.json"
 
     def _enter_run(self) -> None:
         if self._active:

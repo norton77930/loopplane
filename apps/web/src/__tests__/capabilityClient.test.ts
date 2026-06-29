@@ -34,4 +34,44 @@ describe("capability management client", () => {
       { url: "/v1/capabilities/model-default", method: undefined },
     ]);
   });
+
+  it("calls memory and skill mutation endpoints", async () => {
+    const requests: Array<{ url: string; method?: string; body?: string }> = [];
+    const fetchFn: typeof fetch = async (url, init) => {
+      requests.push({
+        url: String(url),
+        method: init?.method,
+        body: init?.body as string | undefined,
+      });
+      return jsonResponse({ result: { ok: true, resource_id: "item" } });
+    };
+    const client = new ApiClient({ fetch: fetchFn });
+
+    await client.writeMemoryEntry({
+      name: "pref",
+      kind: "user",
+      description: "editor preference",
+      content: "likes tabs",
+    });
+    await client.deleteMemoryEntry("pref");
+    await client.writeManagedSkill({
+      name: "writer",
+      description: "writes notes",
+      instructions: "write concise notes",
+    });
+    await client.importManagedSkill({
+      name: "reviewer",
+      description: "reviews notes",
+      instructions: "review concise notes",
+    });
+    await client.deleteManagedSkill("writer");
+
+    expect(requests.map((request) => [request.url, request.method])).toEqual([
+      ["/v1/capabilities/memory", "POST"],
+      ["/v1/capabilities/memory/pref?confirm=true", "DELETE"],
+      ["/v1/capabilities/skills", "POST"],
+      ["/v1/capabilities/skills/import", "POST"],
+      ["/v1/capabilities/skills/writer?confirm=true", "DELETE"],
+    ]);
+  });
 });

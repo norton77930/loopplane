@@ -120,6 +120,25 @@ export interface MemoryCapability {
   updated_at?: string | null;
 }
 
+export interface CapabilityOperationResult {
+  ok: boolean;
+  resource_id?: string | null;
+  status: string;
+  message: string;
+}
+
+export interface MemoryWriteRequest {
+  name: string;
+  kind: string;
+  description: string;
+  content: string;
+}
+
+export interface MemoryMutationResponse {
+  result: CapabilityOperationResult;
+  entry?: MemoryCapability | null;
+}
+
 export interface ManagedSkill {
   id: string;
   name: string;
@@ -128,6 +147,17 @@ export interface ManagedSkill {
   status: string;
   problem?: string | null;
   updated_at?: string | null;
+}
+
+export interface SkillWriteRequest {
+  name: string;
+  description: string;
+  instructions: string;
+}
+
+export interface SkillMutationResponse {
+  result: CapabilityOperationResult;
+  skill?: ManagedSkill | null;
 }
 
 export interface McpConfiguration {
