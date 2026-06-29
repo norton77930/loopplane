@@ -154,7 +154,7 @@ git history) — not invented.
 | **072-platform-fairness** | `specs/072-platform-fairness` | **Verified** | **P2** (gap **G20** in-process slice): per-tenant quota (beyond in-flight counts) + in-process fair model-call scheduling (anti-noisy-neighbor) above the 061 `TenantHostPool`. Distributed/cross-process DEFERRED (gated by remote exec, P3). **ADR 0013** (extends 0009; SETTLED: in-process slice only). | 061 | None - implemented & verified on `main` (`loopplane.fairness` in-process fairness gate + policy; host/controller/loop wiring; webapi 429/SSE public-safe quota rejection; shared host-pool fairness regression; default-off behavior preserved; four gates green: ruff, format, mypy, full pytest 1333 passed / 8 skipped; openspec + public-safety scans clean; no Event-Bus/content/SCHEMA/termination-reason change). |
 | **073-code-review-remediation** | `specs/073-code-review-remediation` | **Verified** | Review remediation for the 001-072 audit: restores locked dev sync and desktop gates, expands desktop CI path coverage for `apps/web/**`, normalizes public-safe MCP and `web_fetch` errors, bounds `web_fetch` return/cache content, adds a Spec Kit task-drift audit with documented historical exceptions, and cleans the lower-priority web/desktop hardening findings. No runtime schema, Event Bus, content-model, or public API change. | 001-072 | None - implemented & verified on `main` (073 artifacts + review report + docs index; MCP/web-fetch regression tests; desktop/web gates; full final gates green: `uv sync --locked`, ruff, format, mypy, full pytest 1343 passed / 8 skipped, web typecheck/test/build, desktop typecheck/test; openspec + public-safety scans clean aside from intentional fake-secret regression fixtures). |
 | **074-web-parity-foundation** | `specs/074-web-parity-foundation` | **Verified** | Web parity foundation: additive transport and session-management groundwork so the web frontend can align with modern agent chat mechanisms while preserving the existing REST/SSE API. Scope includes a Web transport abstraction, an additive WebSocket session endpoint, reconnect/history replay semantics, draft sessions, model preference, star/fork/search/bulk-delete session affordances, and generated API/WS type workflow. | 011, 018, 025-032, 058, 071 | None - implemented & verified on `main` (live channel + REST/SSE transport seam; session draft/model/star/fork/search/bulk-delete parity; backend-owned API/event type fixtures + deterministic `generated.ts` validation; final gates green: `uv sync --locked`, ruff, format, mypy, full pytest 1359 passed / 8 skipped, web typecheck/test/build with 116 Vitest, desktop typecheck/test with 9 Vitest; openspec + public-safety scans clean). |
-| **075-web-capability-management** | `specs/075-web-capability-management` | **Not started** | Web capability management: turn the read-only inspection surface into first-class capability settings for memory, skills, MCP config, projects/workspaces, schedules, and model defaults. Browser UI must not collect provider credentials unless separately authorized. | 074, 027, 028, 059, 065 | Run `/speckit.specify`. |
+| **075-web-capability-management** | `specs/075-web-capability-management` | **Spec complete** | Web capability management: turn the read-only inspection surface into first-class capability settings for memory, skills, MCP config, projects/workspaces, schedules, and model defaults. Browser UI must not collect provider credentials unless separately authorized. | 074, 027, 028, 059, 065 | Run `/speckit.plan`. |
 | **076-web-agent-controls** | `specs/076-web-agent-controls` | **Not started** | Web agent controls: first-class plan mode, permission mode/rules, server-side cost and budget controls, workspace files/artifact references, and optional follow-up suggestions with explicit cost tracking. | 074, 075, 055, 064, 066, 068 | Wait for 075 Verified, then run `/speckit.specify`. |
 | **077-desktop-cowork-parity** | `specs/077-desktop-cowork-parity` | **Not started** | Desktop cowork parity: upgrade the desktop shell into a local-first Electron app with typed preload IPC, versioned stdio JSON-RPC sidecar contract, reused web chat/settings components through a desktop adapter, desktop projects/workspaces, multi-pane collaboration, right sidebar, keyboard shortcuts, fork prompt, turn audit, and local backup/restore. | 012, 019, 074-076 | Wait for 076 Verified, then run `/speckit.specify`. |
 | **078-cli-remote-parity** | `specs/078-cli-remote-parity` | **Not started** | CLI/remote parity: expand slash commands and interactive CLI affordances, then add a remote-control bridge with remote-safe command policy, permission callbacks, interrupt, and reconnect. Vim, voice, and IDE-like UX parity are P3 follow-ups unless separately authorized. | 017, 065, 074-077 | Wait for 077 Verified, then run `/speckit.specify`. |
@@ -533,7 +533,7 @@ git history) — not invented.
 
 > **🧭 CURRENT STATUS — units `000–074` are `Verified` on `main`; the parity roadmap
 > continues with `075-web-capability-management`.**
-> The next autopilot step is `/speckit.specify` for `specs/075-web-capability-management`.
+> The next autopilot step is `/speckit.plan` for `specs/075-web-capability-management`.
 > The sequence is web parity first (074-076), then desktop cowork parity (077), then CLI/remote
 > parity (078). The parity roadmap is behavior-parity only: Claude Code and Orion remain references,
 > not code sources.
@@ -578,13 +578,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **075-web-capability-management NOT STARTED** - 001-074 are verified on `main`; continue the parity roadmap with web capability management. |
-| Active feature directory | `.specify/feature.json` currently points to `specs/074-web-parity-foundation`; the next `/speckit.specify` step should advance it to `specs/075-web-capability-management`. |
+| Active unit | **075-web-capability-management SPEC COMPLETE** - 001-074 are verified on `main`; 075 spec/checklist artifacts are complete. |
+| Active feature directory | `.specify/feature.json` → `specs/075-web-capability-management` (spec/checklist artifacts complete). |
 | Current branch | `main` — **main-only autopilot**; all units progressed on `main` (see §7 Branch Strategy) |
-| Current Spec Kit step | **075 specify not started** — 074 final review gates are complete and the unit is verified. |
+| Current Spec Kit step | **075 plan not started** — no `plan.md` exists yet. |
 | Depends on | 074 plus existing 027/028 inspection/model-file surfaces, 059 session-state work, and 065 backend command surface. Do not add browser-side provider credential collection unless separately authorized. |
-| Next command | `/speckit.specify` for `specs/075-web-capability-management`. |
-| Stop condition status | **Ready** - continue to 075 specify unless a hard stop condition appears. |
+| Next command | `/speckit.plan` for `specs/075-web-capability-management`. |
+| Stop condition status | **Ready** - continue to 075 plan unless a hard stop condition appears. |
 
 ---
 
