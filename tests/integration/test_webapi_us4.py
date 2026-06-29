@@ -38,6 +38,10 @@ def test_list_and_history_are_metadata_only(tmp_path: Path) -> None:
         "starred",
         "forked_from_session_id",
         "forked_from_sequence",
+        "context_id",
+        "context_name",
+        "context_workspace_label",
+        "context_status",
         "search_snippet",
     }
     assert all(set(item) == summary_fields for item in listing.json())

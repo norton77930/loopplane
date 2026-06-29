@@ -51,6 +51,10 @@ class SessionMetaPayload(_RecordModel):
     starred: bool = False
     forked_from_session_id: str | None = None
     forked_from_sequence: int | None = None
+    context_id: str | None = None
+    context_name: str | None = None
+    context_workspace_label: str | None = None
+    context_status: str | None = None
 
 
 class SessionMetaRecord(_Envelope):

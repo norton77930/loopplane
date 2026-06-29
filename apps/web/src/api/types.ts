@@ -51,7 +51,12 @@ export type TerminatedPayload = GeneratedTerminatedPayload;
 
 export type OpenedSession = GeneratedOpenedSession;
 
-export type SessionSummary = GeneratedSessionSummary;
+export type SessionSummary = GeneratedSessionSummary & {
+  context_id?: string | null;
+  context_name?: string | null;
+  context_workspace_label?: string | null;
+  context_status?: string | null;
+};
 
 export type ForkSessionRequest = GeneratedForkSessionRequest;
 
@@ -170,6 +175,19 @@ export interface McpConfiguration {
   updated_at?: string | null;
 }
 
+export interface McpConfigurationWriteRequest {
+  name: string;
+  transport: "http" | "sse" | "stdio" | "websocket";
+  url?: string | null;
+  command?: string | null;
+  args?: string[];
+}
+
+export interface McpMutationResponse {
+  result: CapabilityOperationResult;
+  config?: McpConfiguration | null;
+}
+
 export interface WorkspaceContext {
   id: string;
   name: string;
@@ -177,6 +195,25 @@ export interface WorkspaceContext {
   workspace_label: string;
   status: string;
   updated_at?: string | null;
+}
+
+export interface WorkspaceContextWriteRequest {
+  name: string;
+  description: string;
+  workspace_label: string;
+}
+
+export interface WorkspaceContextMutationResponse {
+  result: CapabilityOperationResult;
+  context?: WorkspaceContext | null;
+}
+
+export interface SessionContextView {
+  session_id: string;
+  context_id: string;
+  name: string;
+  workspace_label: string;
+  status: string;
 }
 
 export interface ManagedSchedule {

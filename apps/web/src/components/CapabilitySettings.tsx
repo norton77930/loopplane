@@ -33,6 +33,10 @@ export function CapabilitySettings({ client }: { client: ApiClient }) {
   const [memoryContent, setMemoryContent] = useState("");
   const [skillName, setSkillName] = useState("");
   const [skillInstructions, setSkillInstructions] = useState("");
+  const [mcpName, setMcpName] = useState("");
+  const [mcpUrl, setMcpUrl] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [workspaceLabel, setWorkspaceLabel] = useState("");
 
   useEffect(() => {
     let live = true;
@@ -83,6 +87,24 @@ export function CapabilitySettings({ client }: { client: ApiClient }) {
     });
   }
 
+  function saveMcp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void client.upsertMcpConfiguration({
+      name: mcpName,
+      transport: "http",
+      url: mcpUrl,
+    });
+  }
+
+  function saveWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void client.upsertWorkspaceContext({
+      name: workspaceName,
+      description: "",
+      workspace_label: workspaceLabel,
+    });
+  }
+
   return (
     <div className="capability-settings">
       <Section label="Memory" count={data?.memory.length}>
@@ -115,8 +137,36 @@ export function CapabilitySettings({ client }: { client: ApiClient }) {
           <button type="submit">Save skill</button>
         </form>
       </Section>
-      <Section label="MCP" count={data?.mcp.length} />
-      <Section label="Workspace" count={data?.contexts.length} />
+      <Section label="MCP" count={data?.mcp.length}>
+        <form className="capability-form" onSubmit={saveMcp}>
+          <input
+            aria-label="mcp name"
+            value={mcpName}
+            onChange={(event) => setMcpName(event.target.value)}
+          />
+          <input
+            aria-label="mcp url"
+            value={mcpUrl}
+            onChange={(event) => setMcpUrl(event.target.value)}
+          />
+          <button type="submit">Save MCP</button>
+        </form>
+      </Section>
+      <Section label="Workspace" count={data?.contexts.length}>
+        <form className="capability-form" onSubmit={saveWorkspace}>
+          <input
+            aria-label="workspace name"
+            value={workspaceName}
+            onChange={(event) => setWorkspaceName(event.target.value)}
+          />
+          <input
+            aria-label="workspace label"
+            value={workspaceLabel}
+            onChange={(event) => setWorkspaceLabel(event.target.value)}
+          />
+          <button type="submit">Save workspace</button>
+        </form>
+      </Section>
       <Section label="Schedules" count={data?.schedules.length} />
       <Section label="Model default" count={data ? 1 : undefined} />
     </div>

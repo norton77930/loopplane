@@ -82,27 +82,27 @@
 
 ### Tests for User Story 2
 
-- [ ] T027 [P] [US2] Add MCP management unit tests in `tests/unit/test_capability_management.py`
-- [ ] T028 [P] [US2] Add project/workspace context unit tests in `tests/unit/test_capability_management.py`
-- [ ] T029 [P] [US2] Add MCP/context web API integration tests in `tests/integration/test_webapi_context_management.py`
-- [ ] T030 [P] [US2] Add MCP/context UI tests in `apps/web/src/__tests__/CapabilitySettings.test.tsx`
-- [ ] T031 [P] [US2] Add session context binding regression tests in `tests/integration/test_webapi_context_management.py`
+- [x] T027 [P] [US2] Add MCP management unit tests in `tests/unit/test_capability_management.py`
+- [x] T028 [P] [US2] Add project/workspace context unit tests in `tests/unit/test_capability_management.py`
+- [x] T029 [P] [US2] Add MCP/context web API integration tests in `tests/integration/test_webapi_context_management.py`
+- [x] T030 [P] [US2] Add MCP/context UI tests in `apps/web/src/__tests__/CapabilitySettings.test.tsx`
+- [x] T031 [P] [US2] Add session context binding regression tests in `tests/integration/test_webapi_context_management.py`
 
 ### Implementation for User Story 2
 
-- [ ] T032 [US2] Implement MCP operation models in `src/loopplane/host/capabilities.py`
-- [ ] T033 [US2] Implement project/workspace context models in `src/loopplane/host/capabilities.py`
-- [ ] T034 [US2] Add host MCP management methods in `src/loopplane/host/host.py`
-- [ ] T035 [US2] Add host project/workspace context methods in `src/loopplane/host/host.py`
-- [ ] T036 [US2] Extend session metadata for context binding in `src/loopplane/checkpoint/base.py`
-- [ ] T037 [US2] Persist context binding metadata in `src/loopplane/checkpoint/file.py`
-- [ ] T038 [US2] Persist context binding metadata in `src/loopplane/checkpoint/sqlite.py`
-- [ ] T039 [US2] Add MCP/context request and response views in `src/loopplane/webapi/models.py`
-- [ ] T040 [US2] Add MCP/context management routes in `src/loopplane/webapi/app.py`
-- [ ] T041 [US2] Add MCP/context API client methods in `apps/web/src/api/client.ts`
-- [ ] T042 [US2] Render MCP management controls in `apps/web/src/components/CapabilitySettings.tsx`
-- [ ] T043 [US2] Render project/workspace context controls in `apps/web/src/components/CapabilitySettings.tsx`
-- [ ] T044 [US2] Show active session context in `apps/web/src/App.tsx`
+- [x] T032 [US2] Implement MCP operation models in `src/loopplane/host/capabilities.py`
+- [x] T033 [US2] Implement project/workspace context models in `src/loopplane/host/capabilities.py`
+- [x] T034 [US2] Add host MCP management methods in `src/loopplane/host/host.py`
+- [x] T035 [US2] Add host project/workspace context methods in `src/loopplane/host/host.py`
+- [x] T036 [US2] Extend session metadata for context binding in `src/loopplane/checkpoint/base.py`
+- [x] T037 [US2] Persist context binding metadata in `src/loopplane/checkpoint/file.py`
+- [x] T038 [US2] Persist context binding metadata in `src/loopplane/checkpoint/sqlite.py`
+- [x] T039 [US2] Add MCP/context request and response views in `src/loopplane/webapi/models.py`
+- [x] T040 [US2] Add MCP/context management routes in `src/loopplane/webapi/app.py`
+- [x] T041 [US2] Add MCP/context API client methods in `apps/web/src/api/client.ts`
+- [x] T042 [US2] Render MCP management controls in `apps/web/src/components/CapabilitySettings.tsx`
+- [x] T043 [US2] Render project/workspace context controls in `apps/web/src/components/CapabilitySettings.tsx`
+- [x] T044 [US2] Show active session context in `apps/web/src/App.tsx`
 
 **Checkpoint**: User Story 2 is functional and independently testable. Context binding remains owner-scoped and optional.
 

@@ -280,6 +280,7 @@ export function App({
 
   const pendingApproval = state.pendingApproval;
   const pendingQuestion = state.pendingQuestion;
+  const activeSession = sessions.find((session) => session.session_id === activeId);
 
   return (
     <AppShell
@@ -305,6 +306,7 @@ export function App({
           onStop={() => void stop()}
           inspectOpen={showInspect}
           onToggleInspect={() => setShowInspect((value) => !value)}
+          contextName={activeSession?.context_name ?? undefined}
         />
       }
       banner={state.status === "error" ? <ErrorBanner onRetry={retry} /> : undefined}

@@ -7,7 +7,10 @@ import type { SessionTransport } from "./transport";
 import type {
   BulkDeleteRequest,
   McpServerView,
+  CapabilityOperationResult,
   McpConfiguration,
+  McpConfigurationWriteRequest,
+  McpMutationResponse,
   MemoryEntryView,
   MemoryCapability,
   MemoryMutationResponse,
@@ -25,8 +28,11 @@ import type {
   SessionSummary,
   SkillsResponse,
   ToolView,
+  SessionContextView,
   UploadResult,
   WorkspaceContext,
+  WorkspaceContextMutationResponse,
+  WorkspaceContextWriteRequest,
 } from "./types";
 
 export class ApiError extends Error {
@@ -261,8 +267,59 @@ export class ApiClient {
     return this.json("/v1/capabilities/mcp");
   }
 
+  async upsertMcpConfiguration(
+    request: McpConfigurationWriteRequest,
+  ): Promise<McpMutationResponse> {
+    return this.json("/v1/capabilities/mcp", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async reconnectMcpConfiguration(
+    id: string,
+  ): Promise<CapabilityOperationResult> {
+    return this.json(
+      `/v1/capabilities/mcp/${encodeURIComponent(id)}/reconnect`,
+      { method: "POST" },
+    );
+  }
+
+  async deleteMcpConfiguration(id: string): Promise<CapabilityOperationResult> {
+    return this.json(
+      `/v1/capabilities/mcp/${encodeURIComponent(id)}?confirm=true`,
+      { method: "DELETE" },
+    );
+  }
+
   async listWorkspaceContexts(): Promise<WorkspaceContext[]> {
     return this.json("/v1/capabilities/contexts");
+  }
+
+  async upsertWorkspaceContext(
+    request: WorkspaceContextWriteRequest,
+  ): Promise<WorkspaceContextMutationResponse> {
+    return this.json("/v1/capabilities/contexts", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async deleteWorkspaceContext(id: string): Promise<CapabilityOperationResult> {
+    return this.json(
+      `/v1/capabilities/contexts/${encodeURIComponent(id)}?confirm=true`,
+      { method: "DELETE" },
+    );
+  }
+
+  async bindSessionContext(
+    sessionId: string,
+    contextId: string,
+  ): Promise<SessionContextView> {
+    return this.json(`/v1/sessions/${encodeURIComponent(sessionId)}/context`, {
+      method: "POST",
+      body: JSON.stringify({ context_id: contextId }),
+    });
   }
 
   async listSchedules(): Promise<ManagedSchedule[]> {

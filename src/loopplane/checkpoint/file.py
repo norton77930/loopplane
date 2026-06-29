@@ -96,6 +96,10 @@ class FileCheckpointStore:
                     starred=meta.payload.starred,
                     forked_from_session_id=meta.payload.forked_from_session_id,
                     forked_from_sequence=meta.payload.forked_from_sequence,
+                    context_id=meta.payload.context_id,
+                    context_name=meta.payload.context_name,
+                    context_workspace_label=meta.payload.context_workspace_label,
+                    context_status=meta.payload.context_status,
                 )
             )
         return sorted(
@@ -141,6 +145,10 @@ class FileCheckpointStore:
         starred: bool | None = None,
         forked_from_session_id: str | None = None,
         forked_from_sequence: int | None = None,
+        context_id: str | None = None,
+        context_name: str | None = None,
+        context_workspace_label: str | None = None,
+        context_status: str | None = None,
     ) -> None:
         records, _ = self.load(session_id)
         original = self._latest_meta(records)
@@ -168,6 +176,20 @@ class FileCheckpointStore:
                         payload.forked_from_sequence
                         if forked_from_sequence is None
                         else forked_from_sequence
+                    ),
+                    context_id=payload.context_id if context_id is None else context_id,
+                    context_name=(
+                        payload.context_name if context_name is None else context_name
+                    ),
+                    context_workspace_label=(
+                        payload.context_workspace_label
+                        if context_workspace_label is None
+                        else context_workspace_label
+                    ),
+                    context_status=(
+                        payload.context_status
+                        if context_status is None
+                        else context_status
                     ),
                 ),
             )

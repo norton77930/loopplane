@@ -21,9 +21,18 @@ interface Props {
   onStop: () => void;
   inspectOpen: boolean;
   onToggleInspect: () => void;
+  contextName?: string | null;
 }
 
-export function ChatHeader({ status, usage, cost, onStop, inspectOpen, onToggleInspect }: Props) {
+export function ChatHeader({
+  status,
+  usage,
+  cost,
+  onStop,
+  inspectOpen,
+  onToggleInspect,
+  contextName,
+}: Props) {
   const { t } = useTranslation();
   return (
     <header className="chat-header">
@@ -33,6 +42,9 @@ export function ChatHeader({ status, usage, cost, onStop, inspectOpen, onToggleI
         {t(LABEL_KEY[status])}
       </span>
       <UsageIndicator usage={usage} cost={cost} />
+      {contextName && (
+        <span className="session-context">Context: {contextName}</span>
+      )}
       <span className="spacer" />
       {status === "running" && (
         <button type="button" className="danger" onClick={onStop}>

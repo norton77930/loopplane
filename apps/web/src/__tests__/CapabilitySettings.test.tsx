@@ -76,4 +76,49 @@ describe("CapabilitySettings", () => {
       instructions: "write concise notes",
     });
   });
+
+  it("submits MCP and workspace context management forms", async () => {
+    const upsertMcpConfiguration = vi.fn().mockResolvedValue({ ok: true });
+    const upsertWorkspaceContext = vi.fn().mockResolvedValue({ ok: true });
+    render(
+      <CapabilitySettings
+        client={
+          {
+            ...stubClient(),
+            upsertMcpConfiguration,
+            upsertWorkspaceContext,
+          } as unknown as ApiClient
+        }
+      />,
+    );
+
+    fireEvent.change(await screen.findByLabelText("mcp name"), {
+      target: { value: "docs" },
+    });
+    fireEvent.change(screen.getByLabelText("mcp url"), {
+      target: { value: "https://mcp.example.invalid" },
+    });
+    fireEvent.click(screen.getByText("Save MCP"));
+
+    fireEvent.change(screen.getByLabelText("workspace name"), {
+      target: { value: "Docs" },
+    });
+    fireEvent.change(screen.getByLabelText("workspace label"), {
+      target: { value: "docs-repo" },
+    });
+    fireEvent.click(screen.getByText("Save workspace"));
+
+    await waitFor(() =>
+      expect(upsertMcpConfiguration).toHaveBeenCalledWith({
+        name: "docs",
+        transport: "http",
+        url: "https://mcp.example.invalid",
+      }),
+    );
+    expect(upsertWorkspaceContext).toHaveBeenCalledWith({
+      name: "Docs",
+      description: "",
+      workspace_label: "docs-repo",
+    });
+  });
 });

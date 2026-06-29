@@ -69,6 +69,8 @@ from loopplane.webapi.models import (
     ManagedScheduleView,
     ManagedSkillDetailView,
     ManagedSkillView,
+    McpConfigurationWriteRequest,
+    McpMutationResponse,
     McpServerView,
     MemoryEntryView,
     MemoryMutationResponse,
@@ -83,6 +85,8 @@ from loopplane.webapi.models import (
     RunRequest,
     RunResult,
     SessionAnswer,
+    SessionContextBindRequest,
+    SessionContextView,
     SessionCostView,
     SessionSummaryView,
     SkillImportRequest,
@@ -92,7 +96,9 @@ from loopplane.webapi.models import (
     SkillWriteRequest,
     ToolView,
     UploadResult,
+    WorkspaceContextMutationResponse,
     WorkspaceContextView,
+    WorkspaceContextWriteRequest,
 )
 from loopplane.webapi.multimodal import (
     MediaNotAccepted,
@@ -616,6 +622,21 @@ def create_app(
         await host.set_session_starred(session_id, False)
         return Resolved(resolved=True)
 
+    @router.post("/sessions/{session_id}/context")
+    async def bind_session_context(
+        session_id: str,
+        body: SessionContextBindRequest,
+        principal: Principal = Depends(require),
+    ) -> SessionContextView:
+        _owned_or_404(session_id, principal)
+        try:
+            binding = await host.bind_session_context(
+                session_id, body.context_id, principal_id=principal.id
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="not found") from None
+        return SessionContextView.from_binding(binding)
+
     @router.post("/sessions/{session_id}/fork")
     async def fork_session(
         session_id: str,
@@ -885,8 +906,53 @@ def create_app(
     ) -> list[ManagedMcpConfigurationView]:
         return [
             ManagedMcpConfigurationView.from_config(config)
-            for config in host.list_managed_mcp()
+            for config in host.list_managed_mcp(principal.id)
         ]
+
+    @router.post("/capabilities/mcp")
+    async def upsert_managed_mcp(
+        body: McpConfigurationWriteRequest,
+        principal: Principal = Depends(require),
+    ) -> McpMutationResponse:
+        result = host.upsert_managed_mcp(
+            name=body.name,
+            transport=body.transport,
+            url=body.url,
+            command=body.command,
+            args=body.args,
+            principal_id=principal.id,
+        )
+        config = next(
+            (
+                ManagedMcpConfigurationView.from_config(config)
+                for config in host.list_managed_mcp(principal.id)
+                if config.id == result.resource_id
+            ),
+            None,
+        )
+        return McpMutationResponse(
+            result=CapabilityOperationResultView.from_result(result),
+            config=config,
+        )
+
+    @router.post("/capabilities/mcp/{mcp_id}/reconnect")
+    async def reconnect_managed_mcp(
+        mcp_id: str,
+        principal: Principal = Depends(require),
+    ) -> CapabilityOperationResultView:
+        result = host.reconnect_managed_mcp(mcp_id, principal_id=principal.id)
+        return CapabilityOperationResultView.from_result(result)
+
+    @router.delete("/capabilities/mcp/{mcp_id}")
+    async def delete_managed_mcp(
+        mcp_id: str,
+        confirm: bool = False,
+        principal: Principal = Depends(require),
+    ) -> CapabilityOperationResultView:
+        result = host.delete_managed_mcp(
+            mcp_id, confirm=confirm, principal_id=principal.id
+        )
+        return CapabilityOperationResultView.from_result(result)
 
     @router.get("/capabilities/contexts")
     async def list_workspace_contexts(
@@ -894,8 +960,54 @@ def create_app(
     ) -> list[WorkspaceContextView]:
         return [
             WorkspaceContextView.from_context(context)
-            for context in host.list_workspace_contexts()
+            for context in host.list_workspace_contexts(principal.id)
         ]
+
+    @router.post("/capabilities/contexts")
+    async def upsert_workspace_context(
+        body: WorkspaceContextWriteRequest,
+        principal: Principal = Depends(require),
+    ) -> WorkspaceContextMutationResponse:
+        result = host.upsert_workspace_context(
+            name=body.name,
+            description=body.description,
+            workspace_label=body.workspace_label,
+            principal_id=principal.id,
+        )
+        context = None
+        if result.ok and result.resource_id is not None:
+            context = WorkspaceContextView.from_context(
+                host.get_workspace_context(
+                    result.resource_id, principal_id=principal.id
+                )
+            )
+        return WorkspaceContextMutationResponse(
+            result=CapabilityOperationResultView.from_result(result),
+            context=context,
+        )
+
+    @router.get("/capabilities/contexts/{context_id}")
+    async def get_workspace_context(
+        context_id: str,
+        principal: Principal = Depends(require),
+    ) -> WorkspaceContextView:
+        try:
+            return WorkspaceContextView.from_context(
+                host.get_workspace_context(context_id, principal_id=principal.id)
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="not found") from None
+
+    @router.delete("/capabilities/contexts/{context_id}")
+    async def delete_workspace_context(
+        context_id: str,
+        confirm: bool = False,
+        principal: Principal = Depends(require),
+    ) -> CapabilityOperationResultView:
+        result = host.delete_workspace_context(
+            context_id, confirm=confirm, principal_id=principal.id
+        )
+        return CapabilityOperationResultView.from_result(result)
 
     @router.get("/capabilities/schedules")
     async def list_managed_schedules(

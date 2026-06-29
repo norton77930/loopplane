@@ -107,6 +107,10 @@ def test_webapi_response_models_are_metadata_only() -> None:
         "starred",
         "forked_from_session_id",
         "forked_from_sequence",
+        "context_id",
+        "context_name",
+        "context_workspace_label",
+        "context_status",
         "search_snippet",
     }
     assert set(ErrorResponse.model_fields) == {"detail"}

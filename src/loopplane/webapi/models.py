@@ -23,6 +23,7 @@ from loopplane.host.capabilities import (
     ManagedSkill,
     ManagedSkillDetail,
     ModelDefault,
+    SessionContextBinding,
     WorkspaceContext,
 )
 from loopplane.host.inspect import (
@@ -215,6 +216,10 @@ class SessionSummaryView(BaseModel):
     starred: bool = False
     forked_from_session_id: str | None = None
     forked_from_sequence: int | None = None
+    context_id: str | None = None
+    context_name: str | None = None
+    context_workspace_label: str | None = None
+    context_status: str | None = None
     search_snippet: str | None = None
 
     @classmethod
@@ -228,6 +233,10 @@ class SessionSummaryView(BaseModel):
             starred=getattr(summary, "starred", False),
             forked_from_session_id=getattr(summary, "forked_from_session_id", None),
             forked_from_sequence=getattr(summary, "forked_from_sequence", None),
+            context_id=getattr(summary, "context_id", None),
+            context_name=getattr(summary, "context_name", None),
+            context_workspace_label=getattr(summary, "context_workspace_label", None),
+            context_status=getattr(summary, "context_status", None),
             search_snippet=getattr(summary, "search_snippet", None),
         )
 
@@ -388,7 +397,14 @@ class WorkspaceContextView(BaseModel):
 
     @classmethod
     def from_context(cls, context: WorkspaceContext) -> WorkspaceContextView:
-        return cls(**context.__dict__)
+        return cls(
+            id=context.id,
+            name=context.name,
+            description=context.description,
+            workspace_label=context.workspace_label,
+            status=context.status,
+            updated_at=context.updated_at,
+        )
 
 
 class ManagedScheduleView(BaseModel):
@@ -489,6 +505,68 @@ class SkillWriteRequest(BaseModel):
 
 class SkillImportRequest(BaseModel):
     definition: dict[str, object]
+
+
+class McpConfigurationWriteRequest(BaseModel):
+    name: str = Field(min_length=1)
+    transport: Literal["http", "sse", "stdio", "websocket"]
+    url: str | None = None
+    command: str | None = None
+    args: list[str] = []
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("name must not be blank")
+        return trimmed
+
+
+class McpMutationResponse(BaseModel):
+    result: CapabilityOperationResultView
+    config: ManagedMcpConfigurationView | None = None
+
+
+class WorkspaceContextWriteRequest(BaseModel):
+    name: str = Field(min_length=1)
+    description: str = ""
+    workspace_label: str = Field(min_length=1)
+
+    @field_validator("name", "workspace_label")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("value must not be blank")
+        return trimmed
+
+
+class WorkspaceContextMutationResponse(BaseModel):
+    result: CapabilityOperationResultView
+    context: WorkspaceContextView | None = None
+
+
+class SessionContextBindRequest(BaseModel):
+    context_id: str = Field(min_length=1)
+
+
+class SessionContextView(BaseModel):
+    session_id: str
+    context_id: str
+    name: str
+    workspace_label: str
+    status: str
+
+    @classmethod
+    def from_binding(cls, binding: SessionContextBinding) -> SessionContextView:
+        return cls(
+            session_id=binding.session_id,
+            context_id=binding.context_id,
+            name=binding.name,
+            workspace_label=binding.workspace_label,
+            status=binding.status,
+        )
 
 
 # --- 028: model catalog + uploads (metadata-only) ----------------------------

@@ -12,7 +12,7 @@ import hashlib
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -33,6 +33,7 @@ from loopplane.host.capabilities import (
     ManagedSkill,
     ManagedSkillDetail,
     ModelDefault,
+    SessionContextBinding,
     WorkspaceContext,
 )
 from loopplane.host.config import RuntimeConfig
@@ -125,6 +126,9 @@ class LoopPlaneHost:
         self._config = config
         self._working_scope = working_scope or Path.cwd()
         self._active = False
+        self._managed_mcp: dict[str, ManagedMcpConfiguration] = {}
+        self._workspace_contexts: dict[str, WorkspaceContext] = {}
+        self._session_contexts: dict[str, SessionContextBinding] = {}
         # Swarm (spec 050; ADR 0003): when this host runs a swarm MEMBER, it carries the
         # SHARED supervisor + the member's id so the member's run uses the same in-run
         # message registry and resolves "self". ``None`` for a top-level host.
@@ -248,7 +252,10 @@ class LoopPlaneHost:
             self._active = False
 
     def list_sessions(self) -> list[SessionSummary]:
-        return self._assembled.controller.list_sessions()
+        return [
+            self._overlay_session_context(summary)
+            for summary in self._assembled.controller.list_sessions()
+        ]
 
     async def resume(self, session_id: str) -> None:
         await self._assembled.controller.resume(session_id)
@@ -507,9 +514,11 @@ class LoopPlaneHost:
             message="skill deleted",
         )
 
-    def list_managed_mcp(self) -> tuple[ManagedMcpConfiguration, ...]:
-        return tuple(
-            ManagedMcpConfiguration(
+    def list_managed_mcp(
+        self, principal_id: str | None = None
+    ) -> tuple[ManagedMcpConfiguration, ...]:
+        inspected = {
+            info.name: ManagedMcpConfiguration(
                 id=info.name,
                 name=info.name,
                 status="connected" if info.tools else "unavailable",
@@ -517,16 +526,230 @@ class LoopPlaneHost:
                 tools=info.tools,
             )
             for info in self.inspect_mcp()
+        }
+        inspected.update(
+            (mcp_id, config)
+            for mcp_id, config in self._managed_mcp.items()
+            if self._visible_to(config.owner_id, principal_id)
+        )
+        return tuple(config for _id, config in sorted(inspected.items()))
+
+    def list_workspace_contexts(
+        self, principal_id: str | None = None
+    ) -> tuple[WorkspaceContext, ...]:
+        return tuple(
+            context
+            for _id, context in sorted(self._workspace_contexts.items())
+            if self._visible_to(context.owner_id, principal_id)
         )
 
-    def list_workspace_contexts(self) -> tuple[WorkspaceContext, ...]:
-        return ()
+    def upsert_managed_mcp(
+        self,
+        *,
+        name: str,
+        transport: str,
+        url: str | None = None,
+        command: str | None = None,
+        args: Sequence[str] = (),
+        principal_id: str | None = None,
+    ) -> CapabilityOperationResult:
+        del url, command, args
+        mcp_id = name.strip()
+        if not mcp_id or transport not in {"http", "sse", "stdio", "websocket"}:
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=mcp_id or None,
+                status="invalid",
+                message="mcp configuration invalid",
+            )
+        self._managed_mcp[mcp_id] = ManagedMcpConfiguration(
+            id=mcp_id,
+            name=mcp_id,
+            status="disconnected",
+            tool_count=0,
+            owner_id=principal_id,
+        )
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=mcp_id,
+            status="available",
+            message="mcp configuration saved",
+        )
+
+    def reconnect_managed_mcp(
+        self, mcp_id: str, *, principal_id: str | None = None
+    ) -> CapabilityOperationResult:
+        config = self._managed_mcp.get(mcp_id)
+        if config is None or not self._visible_to(config.owner_id, principal_id):
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=mcp_id,
+                status="unavailable",
+                message="mcp configuration not found",
+            )
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=mcp_id,
+            status=config.status,
+            message="mcp reconnect requested",
+        )
+
+    def delete_managed_mcp(
+        self, mcp_id: str, *, confirm: bool, principal_id: str | None = None
+    ) -> CapabilityOperationResult:
+        if not confirm:
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=mcp_id,
+                status="invalid",
+                message="confirmation required",
+            )
+        config = self._managed_mcp.get(mcp_id)
+        if config is None or not self._visible_to(config.owner_id, principal_id):
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=mcp_id,
+                status="unavailable",
+                message="mcp configuration not found",
+            )
+        del self._managed_mcp[mcp_id]
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=mcp_id,
+            status="deleted",
+            message="mcp configuration deleted",
+        )
+
+    def upsert_workspace_context(
+        self,
+        *,
+        name: str,
+        description: str,
+        workspace_label: str,
+        principal_id: str | None = None,
+    ) -> CapabilityOperationResult:
+        context_id = name.strip()
+        label = workspace_label.strip()
+        if not context_id or not label:
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=context_id or None,
+                status="invalid",
+                message="workspace context invalid",
+            )
+        self._workspace_contexts[context_id] = WorkspaceContext(
+            id=context_id,
+            name=context_id,
+            description=description,
+            workspace_label=label,
+            owner_id=principal_id,
+        )
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=context_id,
+            status="available",
+            message="workspace context saved",
+        )
+
+    def get_workspace_context(
+        self, context_id: str, *, principal_id: str | None = None
+    ) -> WorkspaceContext:
+        context = self._workspace_contexts.get(context_id)
+        if context is None or not self._visible_to(context.owner_id, principal_id):
+            raise KeyError(context_id)
+        return context
+
+    def delete_workspace_context(
+        self, context_id: str, *, confirm: bool, principal_id: str | None = None
+    ) -> CapabilityOperationResult:
+        if not confirm:
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=context_id,
+                status="invalid",
+                message="confirmation required",
+            )
+        context = self._workspace_contexts.get(context_id)
+        if context is None or not self._visible_to(context.owner_id, principal_id):
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=context_id,
+                status="unavailable",
+                message="workspace context not found",
+            )
+        del self._workspace_contexts[context_id]
+        return CapabilityOperationResult(
+            ok=True,
+            resource_id=context_id,
+            status="deleted",
+            message="workspace context deleted",
+        )
+
+    async def bind_session_context(
+        self, session_id: str, context_id: str, *, principal_id: str | None = None
+    ) -> SessionContextBinding:
+        context = self.get_workspace_context(context_id, principal_id=principal_id)
+        summary = next(
+            (
+                item
+                for item in self._assembled.controller.list_sessions()
+                if item.session_id == session_id
+            ),
+            None,
+        )
+        if summary is None:
+            live = self._assembled.controller._sessions.get(session_id)
+            if live is None or live.principal_id != principal_id:
+                raise KeyError(session_id)
+            if self._assembled.checkpoint_store is not None:
+                await self._assembled.checkpoint_store.create_session_metadata(
+                    session_id,
+                    created_at=live.created_at,
+                    label=live.label,
+                    principal_id=live.principal_id,
+                    model=live.model,
+                )
+        elif summary.principal_id != principal_id:
+            raise KeyError(session_id)
+        binding = SessionContextBinding(
+            session_id=session_id,
+            context_id=context.id,
+            name=context.name,
+            workspace_label=context.workspace_label,
+            status=context.status,
+        )
+        if self._assembled.checkpoint_store is not None:
+            await self._assembled.checkpoint_store.update_session_metadata(
+                session_id,
+                context_id=binding.context_id,
+                context_name=binding.name,
+                context_workspace_label=binding.workspace_label,
+                context_status=binding.status,
+            )
+        self._session_contexts[session_id] = binding
+        return binding
 
     def list_managed_schedules(self) -> tuple[ManagedSchedule, ...]:
         return ()
 
     def model_default(self) -> ModelDefault:
         return ModelDefault(model_id=None, label=None, status="fallback")
+
+    @staticmethod
+    def _visible_to(owner_id: str | None, principal_id: str | None) -> bool:
+        return owner_id is None or owner_id == principal_id
+
+    def _overlay_session_context(self, summary: SessionSummary) -> SessionSummary:
+        binding = self._session_contexts.get(summary.session_id)
+        if binding is None:
+            return summary
+        return replace(
+            summary,
+            context_id=binding.context_id,
+            context_name=binding.name,
+            context_workspace_label=binding.workspace_label,
+            context_status=binding.status,
+        )
 
     def _load_managed_skills(self) -> tuple[dict[str, LoadedSkill], list[str]]:
         if self._config.skills is None:

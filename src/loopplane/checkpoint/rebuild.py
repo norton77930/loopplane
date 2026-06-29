@@ -33,6 +33,10 @@ class RebuildResult:
     starred: bool = False
     forked_from_session_id: str | None = None
     forked_from_sequence: int | None = None
+    context_id: str | None = None
+    context_name: str | None = None
+    context_workspace_label: str | None = None
+    context_status: str | None = None
     repairs: list[str] = field(default_factory=list)
 
 
@@ -95,6 +99,10 @@ def rebuild_session(records: list[CheckpointRecord]) -> RebuildResult:
             result.starred = record.payload.starred
             result.forked_from_session_id = record.payload.forked_from_session_id
             result.forked_from_sequence = record.payload.forked_from_sequence
+            result.context_id = record.payload.context_id
+            result.context_name = record.payload.context_name
+            result.context_workspace_label = record.payload.context_workspace_label
+            result.context_status = record.payload.context_status
         elif isinstance(record, UserInputRecord):
             flush_results()
             entries.append(

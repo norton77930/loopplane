@@ -25,6 +25,10 @@ class SessionSummary:
     starred: bool = False
     forked_from_session_id: str | None = None
     forked_from_sequence: int | None = None
+    context_id: str | None = None
+    context_name: str | None = None
+    context_workspace_label: str | None = None
+    context_status: str | None = None
     search_snippet: str | None = None
 
 
@@ -69,6 +73,10 @@ class CheckpointStore(Protocol):
         starred: bool | None = None,
         forked_from_session_id: str | None = None,
         forked_from_sequence: int | None = None,
+        context_id: str | None = None,
+        context_name: str | None = None,
+        context_workspace_label: str | None = None,
+        context_status: str | None = None,
     ) -> None:
         """Update additive session metadata by appending a fresh meta record."""
         ...

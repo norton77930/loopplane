@@ -7,6 +7,7 @@ function makeClient(): ApiClient {
   return {
     listSessions: async () => [],
     listModels: async () => [],
+    history: async () => [],
     inspectSkills: async () => ({ skills: [], problems: [] }),
     inspectTools: async () => [],
     inspectMcp: async () => [],
@@ -33,5 +34,33 @@ describe("App capability settings routing", () => {
 
     expect(await screen.findByRole("tab", { name: "Capabilities" })).toBeInTheDocument();
     expect(screen.getByLabelText("prompt")).toBeInTheDocument();
+  });
+
+  it("shows the active session workspace context", async () => {
+    render(
+      <App
+        client={
+          {
+            ...makeClient(),
+            listSessions: async () => [
+              {
+                session_id: "s1",
+                label: "Alpha",
+                created_at: new Date().toISOString(),
+                last_active_at: new Date().toISOString(),
+                context_id: "Docs",
+                context_name: "Docs",
+                context_workspace_label: "docs-repo",
+                context_status: "available",
+              },
+            ],
+          } as unknown as ApiClient
+        }
+      />,
+    );
+
+    fireEvent.click(await screen.findByText("Alpha"));
+
+    expect(await screen.findByText("Context: Docs")).toBeInTheDocument();
   });
 });

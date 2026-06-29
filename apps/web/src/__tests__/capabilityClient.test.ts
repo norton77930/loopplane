@@ -74,4 +74,44 @@ describe("capability management client", () => {
       ["/v1/capabilities/skills/writer?confirm=true", "DELETE"],
     ]);
   });
+
+  it("calls MCP, workspace, and session-context endpoints", async () => {
+    const requests: Array<{ url: string; method?: string; body?: string }> = [];
+    const fetchFn: typeof fetch = async (url, init) => {
+      requests.push({
+        url: String(url),
+        method: init?.method,
+        body: init?.body as string | undefined,
+      });
+      return jsonResponse({
+        result: { ok: true, resource_id: "item" },
+        context: { id: "Docs", name: "Docs", workspace_label: "docs-repo" },
+      });
+    };
+    const client = new ApiClient({ fetch: fetchFn });
+
+    await client.upsertMcpConfiguration({
+      name: "docs",
+      transport: "http",
+      url: "https://mcp.example.invalid",
+    });
+    await client.reconnectMcpConfiguration("docs");
+    await client.deleteMcpConfiguration("docs");
+    await client.upsertWorkspaceContext({
+      name: "Docs",
+      description: "documentation workspace",
+      workspace_label: "docs-repo",
+    });
+    await client.deleteWorkspaceContext("Docs");
+    await client.bindSessionContext("s1", "Docs");
+
+    expect(requests.map((request) => [request.url, request.method])).toEqual([
+      ["/v1/capabilities/mcp", "POST"],
+      ["/v1/capabilities/mcp/docs/reconnect", "POST"],
+      ["/v1/capabilities/mcp/docs?confirm=true", "DELETE"],
+      ["/v1/capabilities/contexts", "POST"],
+      ["/v1/capabilities/contexts/Docs?confirm=true", "DELETE"],
+      ["/v1/sessions/s1/context", "POST"],
+    ]);
+  });
 });

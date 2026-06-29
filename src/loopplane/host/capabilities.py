@@ -9,6 +9,7 @@ from typing import Literal
 CapabilityStatus = Literal[
     "available",
     "connected",
+    "disconnected",
     "deleted",
     "disabled",
     "enabled",
@@ -71,6 +72,7 @@ class ManagedMcpConfiguration:
     tools: tuple[str, ...] = ()
     problem: str | None = None
     updated_at: datetime | None = None
+    owner_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +83,16 @@ class WorkspaceContext:
     workspace_label: str
     status: CapabilityStatus = "available"
     updated_at: datetime | None = None
+    owner_id: str | None = None
+
+
+@dataclass(frozen=True)
+class SessionContextBinding:
+    session_id: str
+    context_id: str
+    name: str
+    workspace_label: str
+    status: CapabilityStatus = "available"
 
 
 @dataclass(frozen=True)
