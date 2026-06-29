@@ -8,10 +8,12 @@ import pytest
 
 from loopplane.webapi.contract_types import (
     api_response_contract_fixtures,
+    capability_contract_fixtures,
     contract_type_artifacts,
     session_event_contract_fixtures,
     typescript_type_artifact,
     validate_api_response_fixture,
+    validate_capability_contract_fixture,
     validate_contract_artifact,
     validate_session_event_fixture,
 )
@@ -23,7 +25,7 @@ def test_contract_type_artifacts_are_deterministic_and_public_safe() -> None:
     artifacts = contract_type_artifacts()
 
     assert artifacts == contract_type_artifacts()
-    assert artifacts["version"] == "074-web-parity-foundation"
+    assert artifacts["version"] == "075-web-capability-management"
     assert "sk-" not in repr(artifacts)
     assert "ghp_" not in repr(artifacts)
 
@@ -68,6 +70,35 @@ def test_session_event_fixture_validation_catches_payload_drift() -> None:
 
     with pytest.raises(ValueError, match="run_terminated.*turns_taken"):
         validate_session_event_fixture("run_terminated", drifted)
+
+
+def test_capability_fixtures_are_backend_owned_and_validated() -> None:
+    fixtures = capability_contract_fixtures()
+
+    assert set(fixtures) == {
+        "memory",
+        "skill",
+        "mcp",
+        "context",
+        "schedule",
+        "model_default",
+        "result",
+    }
+    for name, fixture in fixtures.items():
+        validate_capability_contract_fixture(name, fixture)
+    assert fixtures["memory"]["kind"] == "user"
+    assert fixtures["mcp"]["status"] == "disconnected"
+    assert fixtures["schedule"]["enabled"] is True
+    assert fixtures["model_default"]["model_id"] == "model-a"
+
+
+def test_capability_fixture_validation_catches_missing_required_field() -> None:
+    fixtures = capability_contract_fixtures()
+    drifted = dict(fixtures["schedule"])
+    drifted.pop("enabled")
+
+    with pytest.raises(ValueError, match="schedule.*enabled"):
+        validate_capability_contract_fixture("schedule", drifted)
 
 
 def test_generated_types_match_backend_owned_artifact() -> None:

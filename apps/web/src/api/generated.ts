@@ -1,4 +1,4 @@
-export const WEB_CONTRACT_VERSION = "074-web-parity-foundation";
+export const WEB_CONTRACT_VERSION = "075-web-capability-management";
 
 export interface GeneratedContractArtifact {
   version: typeof WEB_CONTRACT_VERSION;
@@ -89,6 +89,10 @@ export interface GeneratedSessionSummary {
   forked_from_session_id?: string | null;
   forked_from_sequence?: number | null;
   search_snippet?: string | null;
+  context_id?: string | null;
+  context_name?: string | null;
+  context_workspace_label?: string | null;
+  context_status?: string | null;
 }
 
 export interface GeneratedForkSessionRequest {
@@ -137,6 +141,71 @@ export interface GeneratedLiveServerMessage {
   payload?: unknown;
 }
 
+export interface GeneratedCapabilityOperationResult {
+  ok: boolean;
+  resource_id?: string | null;
+  status: string;
+  message: string;
+}
+
+export interface GeneratedMemoryCapability {
+  id: string;
+  name: string;
+  kind: string;
+  description: string;
+  snippet: string;
+  status: string;
+  updated_at?: string | null;
+}
+
+export interface GeneratedManagedSkill {
+  id: string;
+  name: string;
+  description: string;
+  source: string;
+  status: string;
+  problem?: string | null;
+  updated_at?: string | null;
+}
+
+export interface GeneratedMcpConfiguration {
+  id: string;
+  name: string;
+  status: string;
+  tool_count: number;
+  tools: string[];
+  problem?: string | null;
+  updated_at?: string | null;
+}
+
+export interface GeneratedWorkspaceContext {
+  id: string;
+  name: string;
+  description: string;
+  workspace_label: string;
+  status: string;
+  updated_at?: string | null;
+}
+
+export interface GeneratedManagedSchedule {
+  id: string;
+  name: string;
+  description: string;
+  trigger: string;
+  enabled: boolean;
+  status: string;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  problem?: string | null;
+}
+
+export interface GeneratedModelDefault {
+  model_id: string | null;
+  label: string | null;
+  status: string;
+  updated_at?: string | null;
+}
+
 export const generatedApiResponseFixtures = {
   opened_session: { session_id: "session-1" },
   forked_session: { session_id: "session-fork" },
@@ -150,6 +219,10 @@ export const generatedApiResponseFixtures = {
     forked_from_session_id: "session-0",
     forked_from_sequence: 1,
     search_snippet: "Generated",
+    context_id: "Docs",
+    context_name: "Docs",
+    context_workspace_label: "docs-repo",
+    context_status: "available",
   },
   bulk_delete_result: { deleted: ["session-1"] },
   live_ticket: {
@@ -165,6 +238,75 @@ export const generatedApiResponseFixtures = {
   session_summary: GeneratedSessionSummary;
   bulk_delete_result: GeneratedBulkDeleteResult;
   live_ticket: GeneratedLiveTicketView;
+};
+
+export const generatedCapabilityFixtures = {
+  memory: {
+    id: "pref",
+    name: "pref",
+    kind: "user",
+    description: "editor preference",
+    snippet: "likes tabs",
+    status: "available",
+    updated_at: null,
+  },
+  skill: {
+    id: "writer",
+    name: "writer",
+    description: "writes notes",
+    source: "managed",
+    status: "available",
+    problem: null,
+    updated_at: null,
+  },
+  mcp: {
+    id: "docs",
+    name: "docs",
+    status: "disconnected",
+    tool_count: 0,
+    tools: [],
+    problem: null,
+    updated_at: null,
+  },
+  context: {
+    id: "Docs",
+    name: "Docs",
+    description: "documentation workspace",
+    workspace_label: "docs-repo",
+    status: "available",
+    updated_at: null,
+  },
+  schedule: {
+    id: "daily-notes",
+    name: "daily-notes",
+    description: "refresh notes",
+    trigger: "manual",
+    enabled: true,
+    status: "enabled",
+    next_run_at: null,
+    last_run_at: null,
+    problem: null,
+  },
+  model_default: {
+    model_id: "model-a",
+    label: "Model A",
+    status: "available",
+    updated_at: null,
+  },
+  result: {
+    ok: true,
+    resource_id: "pref",
+    status: "available",
+    message: "saved",
+  },
+} as const satisfies {
+  memory: GeneratedMemoryCapability;
+  skill: GeneratedManagedSkill;
+  mcp: GeneratedMcpConfiguration;
+  context: GeneratedWorkspaceContext;
+  schedule: GeneratedManagedSchedule;
+  model_default: GeneratedModelDefault;
+  result: GeneratedCapabilityOperationResult;
 };
 
 export const generatedSessionEventFixtures = {

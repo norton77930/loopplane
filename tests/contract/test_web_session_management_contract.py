@@ -1,4 +1,4 @@
-"""Contract tests for 074 web session-management parity artifacts."""
+"""Contract tests for web session-management parity artifacts."""
 
 from __future__ import annotations
 
@@ -14,6 +14,10 @@ def test_session_summary_additive_fields_are_declared() -> None:
         "forked_from_session_id",
         "forked_from_sequence",
         "search_snippet",
+        "context_id",
+        "context_name",
+        "context_workspace_label",
+        "context_status",
     }
     assert artifacts["owner_scoped"] is True
 

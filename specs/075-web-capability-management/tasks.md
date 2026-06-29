@@ -143,11 +143,11 @@
 
 **Purpose**: Keep web-facing types and desktop compatibility aligned after capability management routes are added.
 
-- [ ] T060 [P] Add generated type wrapper tests for capability views in `apps/web/src/__tests__/generatedTypes.test.ts`
-- [ ] T061 Add backend-owned capability type fixtures in `src/loopplane/webapi/contract_types.py`
-- [ ] T062 Align generated capability API types in `apps/web/src/api/generated.ts`
-- [ ] T063 Wrap generated capability types in `apps/web/src/api/types.ts`
-- [ ] T064 [P] Add desktop compatibility smoke for shared web types in `apps/desktop/src/__tests__/App.test.tsx`
+- [x] T060 [P] Add generated type wrapper tests for capability views in `apps/web/src/__tests__/generatedTypes.test.ts`
+- [x] T061 Add backend-owned capability type fixtures in `src/loopplane/webapi/contract_types.py`
+- [x] T062 Align generated capability API types in `apps/web/src/api/generated.ts`
+- [x] T063 Wrap generated capability types in `apps/web/src/api/types.ts`
+- [x] T064 [P] Add desktop compatibility smoke for shared web types in `apps/desktop/src/__tests__/App.test.tsx`
 
 ---
 
@@ -155,12 +155,12 @@
 
 **Purpose**: Final cleanup, documentation, and delivery validation across all stories.
 
-- [ ] T065 [P] Update 075 validation notes in `specs/075-web-capability-management/quickstart.md`
-- [ ] T066 [P] Update roadmap status for 075 in `docs/loopplane-agent-board.md`
-- [ ] T067 Run backend gates from `specs/075-web-capability-management/quickstart.md`
-- [ ] T068 Run web gates from `specs/075-web-capability-management/quickstart.md`
-- [ ] T069 Run desktop compatibility gates from `specs/075-web-capability-management/quickstart.md`
-- [ ] T070 Run final public-safety gates from `specs/075-web-capability-management/quickstart.md`
+- [x] T065 [P] Update 075 validation notes in `specs/075-web-capability-management/quickstart.md`
+- [x] T066 [P] Update roadmap status for 075 in `docs/loopplane-agent-board.md`
+- [x] T067 Run backend gates from `specs/075-web-capability-management/quickstart.md`
+- [x] T068 Run web gates from `specs/075-web-capability-management/quickstart.md`
+- [x] T069 Run desktop compatibility gates from `specs/075-web-capability-management/quickstart.md`
+- [x] T070 Run final public-safety gates from `specs/075-web-capability-management/quickstart.md`
 
 ---
 

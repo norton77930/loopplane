@@ -1,7 +1,14 @@
+declare const process: { env: { npm_package_json?: string } };
+
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
+const webRoot = process.env.npm_package_json
+  ? process.env.npm_package_json.replace(/[\\/]package\.json$/, "")
+  : ".";
+
 export default defineConfig({
+  root: webRoot,
   plugins: [react()],
   build: {
     rollupOptions: {

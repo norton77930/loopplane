@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import { generatedSessionEventFixtures } from "@web/api/generated";
-import type { RawEvent } from "@web/api/types";
+import { generatedCapabilityFixtures, generatedSessionEventFixtures } from "@web/api/generated";
+import type { ManagedSchedule, ModelDefault, RawEvent } from "@web/api/types";
 
 import { App } from "../App";
 import type { SidecarTransport } from "../sidecar";
@@ -29,6 +29,13 @@ describe("App (desktop, reusing the unit-018 UI)", () => {
     expect(screen.getByText("hello")).toBeInTheDocument();
   });
 
+  it("accepts generated shared capability fixtures", () => {
+    const schedule: ManagedSchedule = generatedCapabilityFixtures.schedule;
+    const modelDefault: ModelDefault = generatedCapabilityFixtures.model_default;
+
+    expect(schedule.name).toBe("daily-notes");
+    expect(modelDefault.model_id).toBe("model-a");
+  });
   it("accepts the generated shared web event fixture", async () => {
     const transport = stubTransport([
       generatedSessionEventFixtures.assistant_output_increment,

@@ -71,6 +71,20 @@ Also run the public-safety scans defined in `docs/loopplane-agent-board.md`.
 
 Expected outcome: no whitespace errors, no raw `openspec/` changes, and no public-safety findings.
 
+## Validation Record (2026-06-30)
+
+Final review evidence captured for 075 delivery:
+
+- `uv sync --locked` checked 68 packages.
+- `uv run ruff check` passed.
+- `uv run ruff format --check src tests` reported 442 files already formatted.
+- `uv run mypy src` reported 198 source files clean.
+- `uv run pytest --basetemp "$env:TEMP\loopplane-pytest-075"` reported 1378 passed, 8 skipped, with the existing Starlette/httpx deprecation warning.
+- `npm --prefix apps/web run typecheck` passed.
+- `npm --prefix apps/web test` reported 43 files passed, 128 tests passed.
+- `npm --prefix apps/web run build` passed; the split vendor chunk was 476.40 kB gzip 146.53 kB.
+- `npm --prefix apps/desktop run typecheck` passed.
+- `npm --prefix apps/desktop test` reported 3 files passed, 10 tests passed.
 ## Rollback Guidance
 
 - Keep existing read-only inspection as the compatibility baseline.

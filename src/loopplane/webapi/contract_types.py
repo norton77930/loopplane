@@ -1,7 +1,6 @@
-"""Backend-owned web contract artifact helpers for 074.
+"""Backend-owned web contract artifact helpers for 075.
 
-This module is intentionally small at setup time. Implementation tasks extend it
-with deterministic fixtures used by contract/type drift tests.
+This module keeps deterministic fixtures used by contract/type drift tests.
 """
 
 from __future__ import annotations
@@ -10,7 +9,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import cast
 
-WEB_CONTRACT_VERSION = "074-web-parity-foundation"
+WEB_CONTRACT_VERSION = "075-web-capability-management"
 
 _API_RESPONSE_FIXTURES: dict[str, dict[str, object]] = {
     "opened_session": {"session_id": "session-1"},
@@ -25,6 +24,10 @@ _API_RESPONSE_FIXTURES: dict[str, dict[str, object]] = {
         "forked_from_session_id": "session-0",
         "forked_from_sequence": 1,
         "search_snippet": "Generated",
+        "context_id": "Docs",
+        "context_name": "Docs",
+        "context_workspace_label": "docs-repo",
+        "context_status": "available",
     },
     "bulk_delete_result": {"deleted": ["session-1"]},
     "live_ticket": {
@@ -127,6 +130,77 @@ _SESSION_EVENT_PAYLOAD_FIELDS: dict[str, set[str]] = {
     "run_terminated": {"reason", "turns_taken"},
 }
 
+_CAPABILITY_FIXTURES: dict[str, dict[str, object]] = {
+    "memory": {
+        "id": "pref",
+        "name": "pref",
+        "kind": "user",
+        "description": "editor preference",
+        "snippet": "likes tabs",
+        "status": "available",
+        "updated_at": None,
+    },
+    "skill": {
+        "id": "writer",
+        "name": "writer",
+        "description": "writes notes",
+        "source": "managed",
+        "status": "available",
+        "problem": None,
+        "updated_at": None,
+    },
+    "mcp": {
+        "id": "docs",
+        "name": "docs",
+        "status": "disconnected",
+        "tool_count": 0,
+        "tools": [],
+        "problem": None,
+        "updated_at": None,
+    },
+    "context": {
+        "id": "Docs",
+        "name": "Docs",
+        "description": "documentation workspace",
+        "workspace_label": "docs-repo",
+        "status": "available",
+        "updated_at": None,
+    },
+    "schedule": {
+        "id": "daily-notes",
+        "name": "daily-notes",
+        "description": "refresh notes",
+        "trigger": "manual",
+        "enabled": True,
+        "status": "enabled",
+        "next_run_at": None,
+        "last_run_at": None,
+        "problem": None,
+    },
+    "model_default": {
+        "model_id": "model-a",
+        "label": "Model A",
+        "status": "available",
+        "updated_at": None,
+    },
+    "result": {
+        "ok": True,
+        "resource_id": "pref",
+        "status": "available",
+        "message": "saved",
+    },
+}
+
+_CAPABILITY_FIXTURE_REQUIRED_FIELDS: dict[str, set[str]] = {
+    "memory": {"id", "name", "kind", "description", "snippet", "status"},
+    "skill": {"id", "name", "description", "source", "status"},
+    "mcp": {"id", "name", "status", "tool_count", "tools"},
+    "context": {"id", "name", "description", "workspace_label", "status"},
+    "schedule": {"id", "name", "description", "trigger", "enabled", "status"},
+    "model_default": {"model_id", "label", "status"},
+    "result": {"ok", "status", "message"},
+}
+
 
 def _copy_fixture_map(
     fixtures: Mapping[str, Mapping[str, object]],
@@ -144,6 +218,12 @@ def session_event_contract_fixtures() -> dict[str, dict[str, object]]:
     """Return deterministic representative session events consumed by web UI."""
 
     return _copy_fixture_map(_SESSION_EVENT_FIXTURES)
+
+
+def capability_contract_fixtures() -> dict[str, dict[str, object]]:
+    """Return deterministic capability fixtures consumed by web and desktop tests."""
+
+    return _copy_fixture_map(_CAPABILITY_FIXTURES)
 
 
 def validate_api_response_fixture(name: str, fixture: Mapping[str, object]) -> None:
@@ -174,8 +254,21 @@ def validate_session_event_fixture(name: str, fixture: Mapping[str, object]) -> 
         raise ValueError(f"{name} payload missing fields: {', '.join(sorted(missing))}")
 
 
+def validate_capability_contract_fixture(
+    name: str, fixture: Mapping[str, object]
+) -> None:
+    """Fail clearly when a representative capability fixture drifts."""
+
+    required = _CAPABILITY_FIXTURE_REQUIRED_FIELDS.get(name)
+    if required is None:
+        raise ValueError(f"unknown capability fixture: {name}")
+    missing = required - set(fixture)
+    if missing:
+        raise ValueError(f"{name} missing fields: {', '.join(sorted(missing))}")
+
+
 _TYPESCRIPT_TYPE_ARTIFACT = (
-    'export const WEB_CONTRACT_VERSION = "074-web-parity-foundation";\n'
+    'export const WEB_CONTRACT_VERSION = "075-web-capability-management";\n'
     """
 export interface GeneratedContractArtifact {
   version: typeof WEB_CONTRACT_VERSION;
@@ -266,6 +359,10 @@ export interface GeneratedSessionSummary {
   forked_from_session_id?: string | null;
   forked_from_sequence?: number | null;
   search_snippet?: string | null;
+  context_id?: string | null;
+  context_name?: string | null;
+  context_workspace_label?: string | null;
+  context_status?: string | null;
 }
 
 export interface GeneratedForkSessionRequest {
@@ -314,6 +411,71 @@ export interface GeneratedLiveServerMessage {
   payload?: unknown;
 }
 
+export interface GeneratedCapabilityOperationResult {
+  ok: boolean;
+  resource_id?: string | null;
+  status: string;
+  message: string;
+}
+
+export interface GeneratedMemoryCapability {
+  id: string;
+  name: string;
+  kind: string;
+  description: string;
+  snippet: string;
+  status: string;
+  updated_at?: string | null;
+}
+
+export interface GeneratedManagedSkill {
+  id: string;
+  name: string;
+  description: string;
+  source: string;
+  status: string;
+  problem?: string | null;
+  updated_at?: string | null;
+}
+
+export interface GeneratedMcpConfiguration {
+  id: string;
+  name: string;
+  status: string;
+  tool_count: number;
+  tools: string[];
+  problem?: string | null;
+  updated_at?: string | null;
+}
+
+export interface GeneratedWorkspaceContext {
+  id: string;
+  name: string;
+  description: string;
+  workspace_label: string;
+  status: string;
+  updated_at?: string | null;
+}
+
+export interface GeneratedManagedSchedule {
+  id: string;
+  name: string;
+  description: string;
+  trigger: string;
+  enabled: boolean;
+  status: string;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  problem?: string | null;
+}
+
+export interface GeneratedModelDefault {
+  model_id: string | null;
+  label: string | null;
+  status: string;
+  updated_at?: string | null;
+}
+
 export const generatedApiResponseFixtures = {
   opened_session: { session_id: "session-1" },
   forked_session: { session_id: "session-fork" },
@@ -327,6 +489,10 @@ export const generatedApiResponseFixtures = {
     forked_from_session_id: "session-0",
     forked_from_sequence: 1,
     search_snippet: "Generated",
+    context_id: "Docs",
+    context_name: "Docs",
+    context_workspace_label: "docs-repo",
+    context_status: "available",
   },
   bulk_delete_result: { deleted: ["session-1"] },
   live_ticket: {
@@ -342,6 +508,75 @@ export const generatedApiResponseFixtures = {
   session_summary: GeneratedSessionSummary;
   bulk_delete_result: GeneratedBulkDeleteResult;
   live_ticket: GeneratedLiveTicketView;
+};
+
+export const generatedCapabilityFixtures = {
+  memory: {
+    id: "pref",
+    name: "pref",
+    kind: "user",
+    description: "editor preference",
+    snippet: "likes tabs",
+    status: "available",
+    updated_at: null,
+  },
+  skill: {
+    id: "writer",
+    name: "writer",
+    description: "writes notes",
+    source: "managed",
+    status: "available",
+    problem: null,
+    updated_at: null,
+  },
+  mcp: {
+    id: "docs",
+    name: "docs",
+    status: "disconnected",
+    tool_count: 0,
+    tools: [],
+    problem: null,
+    updated_at: null,
+  },
+  context: {
+    id: "Docs",
+    name: "Docs",
+    description: "documentation workspace",
+    workspace_label: "docs-repo",
+    status: "available",
+    updated_at: null,
+  },
+  schedule: {
+    id: "daily-notes",
+    name: "daily-notes",
+    description: "refresh notes",
+    trigger: "manual",
+    enabled: true,
+    status: "enabled",
+    next_run_at: null,
+    last_run_at: null,
+    problem: null,
+  },
+  model_default: {
+    model_id: "model-a",
+    label: "Model A",
+    status: "available",
+    updated_at: null,
+  },
+  result: {
+    ok: true,
+    resource_id: "pref",
+    status: "available",
+    message: "saved",
+  },
+} as const satisfies {
+  memory: GeneratedMemoryCapability;
+  skill: GeneratedManagedSkill;
+  mcp: GeneratedMcpConfiguration;
+  context: GeneratedWorkspaceContext;
+  schedule: GeneratedManagedSchedule;
+  model_default: GeneratedModelDefault;
+  result: GeneratedCapabilityOperationResult;
 };
 
 export const generatedSessionEventFixtures = {
@@ -449,6 +684,10 @@ def session_management_contract_artifacts() -> dict[str, object]:
             "forked_from_session_id",
             "forked_from_sequence",
             "search_snippet",
+            "context_id",
+            "context_name",
+            "context_workspace_label",
+            "context_status",
         },
         "actions": {
             "draft_commit",
@@ -476,6 +715,10 @@ def contract_type_artifacts() -> dict[str, object]:
         "forked_from_session_id",
         "forked_from_sequence",
         "search_snippet",
+        "context_id",
+        "context_name",
+        "context_workspace_label",
+        "context_status",
     }
     event_types = {
         "assistant-output-increment",
@@ -491,6 +734,7 @@ def contract_type_artifacts() -> dict[str, object]:
         "version": WEB_CONTRACT_VERSION,
         "session_summary_fields": session_fields,
         "event_types": event_types,
+        "capability_fixture_names": set(_CAPABILITY_FIXTURES),
         "live": live_contract_artifacts(),
         "session_management": session_management_contract_artifacts(),
     }

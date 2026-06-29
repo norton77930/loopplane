@@ -6,16 +6,23 @@ import type {
   GeneratedApprovalPayload,
   GeneratedBulkDeleteRequest,
   GeneratedBulkDeleteResult,
+  GeneratedCapabilityOperationResult,
   GeneratedForkSessionRequest,
   GeneratedLiveClientMessage,
   GeneratedLiveServerMessage,
   GeneratedLiveTicketView,
+  GeneratedManagedSchedule,
+  GeneratedManagedSkill,
+  GeneratedMcpConfiguration,
+  GeneratedMemoryCapability,
+  GeneratedModelDefault,
   GeneratedOpenedSession,
   GeneratedOutputPayload,
   GeneratedQuestion,
   GeneratedQuestionPayload,
   GeneratedRawEvent,
   GeneratedReasoningPayload,
+  GeneratedWorkspaceContext,
   GeneratedSessionSummary,
   GeneratedTerminatedPayload,
   GeneratedTokenUsage,
@@ -115,22 +122,9 @@ export interface UploadResult {
 }
 
 // 075 — capability management foundation views.
-export interface MemoryCapability {
-  id: string;
-  name: string;
-  kind: string;
-  description: string;
-  snippet: string;
-  status: string;
-  updated_at?: string | null;
-}
+export type MemoryCapability = GeneratedMemoryCapability;
 
-export interface CapabilityOperationResult {
-  ok: boolean;
-  resource_id?: string | null;
-  status: string;
-  message: string;
-}
+export type CapabilityOperationResult = GeneratedCapabilityOperationResult;
 
 export interface MemoryWriteRequest {
   name: string;
@@ -144,15 +138,7 @@ export interface MemoryMutationResponse {
   entry?: MemoryCapability | null;
 }
 
-export interface ManagedSkill {
-  id: string;
-  name: string;
-  description: string;
-  source: string;
-  status: string;
-  problem?: string | null;
-  updated_at?: string | null;
-}
+export type ManagedSkill = GeneratedManagedSkill;
 
 export interface SkillWriteRequest {
   name: string;
@@ -165,15 +151,7 @@ export interface SkillMutationResponse {
   skill?: ManagedSkill | null;
 }
 
-export interface McpConfiguration {
-  id: string;
-  name: string;
-  status: string;
-  tool_count: number;
-  tools: string[];
-  problem?: string | null;
-  updated_at?: string | null;
-}
+export type McpConfiguration = GeneratedMcpConfiguration;
 
 export interface McpConfigurationWriteRequest {
   name: string;
@@ -188,14 +166,7 @@ export interface McpMutationResponse {
   config?: McpConfiguration | null;
 }
 
-export interface WorkspaceContext {
-  id: string;
-  name: string;
-  description: string;
-  workspace_label: string;
-  status: string;
-  updated_at?: string | null;
-}
+export type WorkspaceContext = GeneratedWorkspaceContext;
 
 export interface WorkspaceContextWriteRequest {
   name: string;
@@ -216,17 +187,7 @@ export interface SessionContextView {
   status: string;
 }
 
-export interface ManagedSchedule {
-  id: string;
-  name: string;
-  description: string;
-  trigger: string;
-  enabled: boolean;
-  status: string;
-  next_run_at?: string | null;
-  last_run_at?: string | null;
-  problem?: string | null;
-}
+export type ManagedSchedule = GeneratedManagedSchedule;
 
 export interface ScheduleWriteRequest {
   name: string;
@@ -240,12 +201,7 @@ export interface ScheduleMutationResponse {
   schedule?: ManagedSchedule | null;
 }
 
-export interface ModelDefault {
-  model_id: string | null;
-  label: string | null;
-  status: string;
-  updated_at?: string | null;
-}
+export type ModelDefault = GeneratedModelDefault;
 
 export interface ModelDefaultMutationResponse {
   result: CapabilityOperationResult;
