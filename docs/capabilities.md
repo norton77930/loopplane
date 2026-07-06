@@ -1,7 +1,7 @@
 # LoopPlane Capabilities
 
 > A functional-scope overview of what LoopPlane provides today, derived from the unit
-> specs (001–063) and verified against the source tree. For per-unit status and the
+> specs (001–075) and verified against the source tree. For per-unit status and the
 > roadmap autopilot, see [`loopplane-agent-board.md`](loopplane-agent-board.md); for the
 > comparison against reference agent harnesses and the forward roadmap, see
 > [`gap-analysis.md`](gap-analysis.md); for release history, see
@@ -14,9 +14,10 @@ LoopPlane is a **spec-first, embeddable agent-harness runtime**. It drives a
 **Tool Gateway**, and extends outward into loop automation, governance, multi-provider
 model support, agent-capability tools, and full CLI / web / desktop host surfaces.
 
-Units 001–063 are implemented and verified; the line is released as **v0.1.0 → v0.4.0**
-(the v0.4.0 line, units 044–063, is the "capability-to-platform" release recorded in
-[`../CHANGELOG.md`](../CHANGELOG.md)).
+Units 001–075 are implemented and verified. Units 001–063 are released as
+**v0.1.0 → v0.4.0** (the v0.4.0 line, units 044–063, is the "capability-to-platform"
+release); units 064–075 are verified on `main` and recorded in the **Unreleased** section
+of [`../CHANGELOG.md`](../CHANGELOG.md).
 
 LoopPlane is built under a project constitution. The principles most visible in the
 capability surface are:
@@ -40,17 +41,17 @@ capability surface are:
 | **Loop engineering & automation** | 003–006 | Loop Definition + Controller (validate → evaluate → stop / retry / repair / human-review), an in-process scheduler (manual / interval / condition triggers on an injectable clock), reusable validator / evaluator packs, and human-review workflows. | `loopplane.{engineering,scheduling,packs,review}` |
 | **Knowledge, governance & observability** | 007–010 | Memory recall + knowledge index with an injection policy and retrieval budget; an advanced tool gateway (catalog / plugin bundles / capability manifest / versioning / diagnostics — discovery only, never execution); sandbox / policy deciders (permission / path / budget / quota / capability, deny-wins); and metadata-only observability (diagnostics / trace / timeline / replay). | `loopplane.{recall,toolkit,governance,inspect}` |
 | **Multi-agent & autonomy** | 013, 043, 048–051 | Host-driven orchestration (agent registry + coordinator + aggregated event / artifact views) and model-driven one-shot subagents (`spawn_subagent`, with a hard recursion-depth cap and failure containment); plus the Tier-2 autonomy supervisors — background / long-running tasks (048), agent-facing scheduling (049), agent-to-agent messaging / swarm over a separate registry (050), and per-task worktree isolation (051) — all cap-gated and default-off. | `loopplane.orchestration`, `loopplane.tools` |
-| **Model providers** | 020, 035, 037, 045 | Anthropic and OpenAI native adapters; OpenRouter and Ollama (reusing the OpenAI wire format); a native Google Gemini adapter; and native structured output (`response_format` / json_schema, OpenAI-family) negotiated as a model-boundary capability. Each provider is behind its own optional extra and registers with the `/v1/models` selector. | `loopplane.adapters.{anthropic,openai,openai_compat,gemini}`, `loopplane.model` |
-| **Agent-capability tools** | 033, 034, 036, 044, 046, 047, 054 | File tools (`edit_file`, `glob_files`, `grep`); web tools (`web_fetch`, `web_search`) with default-deny network-egress governance plus a bundled keyless search provider (047); multimodal image input (`ImageBlock`) with `accepts_media()` negotiation; an agent task list (`todo_write`, 044); Jupyter cell editing (`notebook_edit`, 046); and file-edit undo (`undo_file`, 054, when snapshots are enabled). | `loopplane.tools.{internal,web}`, `loopplane.model` |
-| **Autonomy & workflow governance** | 038, 039 | Plan mode (read-only investigation → human approval → execute) and a declarative permission rule DSL (host-supplied allow / deny / ask rules), both enforced at the Tool Gateway decide stage. | `loopplane.governance.{plan_mode,rule_dsl}` |
+| **Model providers** | 020, 035, 037, 045, 070 | Anthropic and OpenAI native adapters; OpenRouter and Ollama (reusing the OpenAI wire format); a native Google Gemini adapter — with per-call `thought_signature` preservation and replay for multi-turn tool use (070, ADR 0011); and native structured output (`response_format` / json_schema, OpenAI-family) negotiated as a model-boundary capability. Each provider is behind its own optional extra and registers with the `/v1/models` selector. | `loopplane.adapters.{anthropic,openai,openai_compat,gemini}`, `loopplane.model` |
+| **Agent-capability tools** | 033, 034, 036, 044, 046, 047, 054, 069 | File tools (`edit_file`, `glob_files`, `grep`); web tools (`web_fetch`, `web_search`) with default-deny network-egress governance plus a bundled keyless search provider (047); multimodal image input (`ImageBlock`) with `accepts_media()` negotiation and document / PDF input (`DocumentBlock`, 069, ADR 0011 — native Anthropic / Gemini mappings, unsupported adapters fail safely); an agent task list (`todo_write`, 044); Jupyter cell editing (`notebook_edit`, 046); and file-edit undo (`undo_file`, 054, when snapshots are enabled). | `loopplane.tools.{internal,web}`, `loopplane.model` |
+| **Autonomy & workflow governance** | 038, 039, 066 | Plan mode (read-only investigation → human approval → execute); a declarative permission rule DSL (host-supplied allow / deny / ask rules), both enforced at the Tool Gateway decide stage; and named permission modes (`acceptEdits` / `bypassPermissions` / `dontAsk` / `plan`) as a single `RuntimeConfig.permission_mode` option expanding to preset rule sets over the DSL (066, deny-wins preserved, default off). | `loopplane.governance.{plan_mode,rule_dsl,modes}` |
 | **Execution safety** | 052 | Opt-in sandboxed command execution: an injectable POSIX `LocalJailCommandExecutor` (rlimits + env-scrub + `setsid` + a wall-clock timeout). Default = the verbatim host executor (byte-identical); Windows raises; docker is deferred. | `loopplane.tools` |
-| **Cost governance** | 053, 055, 062, 063 | A pure pricing table (`TokenUsage → USD`, host-supplied rates, unwired by default); in-loop USD budget caps per-message / session (055, terminating with the `budget-exceeded` reason within schema v1); a durable `UsdLedger` keyed by `(principal, month)` with File / SQLite / Postgres backends (062); and a per-user-monthly cap that folds the ledger total into enforcement (063, fail-open on a ledger outage). | `loopplane.{pricing,budget,ledger}` |
+| **Cost governance** | 053, 055, 062–064, 068 | A pure pricing table (`TokenUsage → USD`, host-supplied rates, unwired by default); in-loop USD budget caps per-message / session (055, terminating with the `budget-exceeded` reason within schema v1); a durable `UsdLedger` keyed by `(principal, month)` with File / SQLite / Postgres backends (062); a per-user-monthly cap that folds the ledger total into enforcement (063, fail-open on a ledger outage); owner-scoped queryable spend — per-session and per-principal-monthly USD endpoints plus host accessors (064); and a pre-turn predictive cost guard that refuses a likely-overage turn before the model call (068, ADR 0014, default-off and fail-open). | `loopplane.{pricing,budget,ledger}`, `loopplane.webapi` |
 | **Cost & efficiency** | 040–042 | Anthropic prompt caching (explicit stable-prefix breakpoints), configurable proactive auto-compaction (threshold-based), and an optional fail-safe cheap-model compaction summarizer. | `loopplane.adapters.anthropic`, `loopplane.loop` |
 | **Extensibility** | 015, 016 | A lifecycle hook system (a registry + eleven lifecycle points; two gating points may gate / modify) and a manifest-based plugin system bundling skills + namespaced MCP servers + hooks behind an enable-list. | `loopplane.{hooks,plugins}` |
-| **Host surfaces** | 011, 012, 017–019, 022, 023, 056 | A web / API host (REST + SSE) with principal authentication and per-principal session scoping; an in-process studio / desktop host; a CLI host; a from-scratch web SPA with a login flow; an Electron desktop GUI over a local sidecar bridge; and an optional OAuth / JWT verifier (056, behind `loopplane[oauth]`) that drops into the auth seam. | `loopplane.{webapi,studio,cli}`, `apps/web`, `apps/desktop` |
-| **Transports & platform** | 057–061 | MCP across all four transports — `stdio` / `http` / `sse` / `websocket` (057) — plus MCP resources surfaced as gateway-routed synthetic tools (059); resumable session SSE via an in-memory ring buffer + `Last-Event-ID` replay (058); a Postgres checkpoint backend (060, behind `loopplane[postgres]`); and a per-principal `TenantHostPool` giving each principal an isolated host with in-flight caps (061, in-process single-worker). | `loopplane.adapters.mcp`, `loopplane.{webapi,checkpoint}` |
-| **Web UI product experience** | 025–032 | A modern agent UI: markdown + collapsible tool cards + theming + two-pane shell + stop control (025); reasoning / question-options / token-usage signals (026); read-only inspection panels (027); model selection + file attachments (028); i18n + syntax highlighting + command palette + cost estimate (029); session management (030); message actions (031); and interaction resilience — modals / retry / toasts / skeletons (032). | `apps/web` |
-| **Packaging & release** | 014, 024 | Release packaging and docs (wheel / sdist, `py.typed`, public API reference, CI gates) and desktop packaging (a PyInstaller-frozen sidecar + electron-builder + a spawn resolver). | packaging metadata, `apps/desktop` |
+| **Host surfaces** | 011, 012, 017–019, 022, 023, 056, 065 | A web / API host (REST + SSE) with principal authentication and per-principal session scoping; an in-process studio / desktop host; a CLI host; a from-scratch web SPA with a login flow; an Electron desktop GUI over a local sidecar bridge; an optional OAuth / JWT verifier (056, behind `loopplane[oauth]`) that drops into the auth seam; and backend-semantic slash commands (`/cost`, `/model`, `/memory`, `/compact`) answered by the CLI and web hosts without a model round-trip (065 — host UX over a fail-safe `CommandRegistry`, not a gateway tool). | `loopplane.{webapi,studio,cli,commands}`, `apps/web`, `apps/desktop` |
+| **Transports & platform** | 057–061, 067, 071, 072 | MCP across all four transports — `stdio` / `http` / `sse` / `websocket` (057) — plus MCP resources surfaced as gateway-routed synthetic tools (059); resumable session SSE via an in-memory ring buffer + `Last-Event-ID` replay (058), made durable across processes and workers by an opt-in `EventReplayStore` with File / SQLite / Postgres backends (071, ADR 0012); a Postgres checkpoint backend (060, behind `loopplane[postgres]`); a per-principal `TenantHostPool` giving each principal an isolated host with in-flight caps (061, in-process single-worker); per-tenant fairness / quota above the pool with public-safe 429 / SSE rejection (072, ADR 0013, default-off); and JWKS refresh hardening for the JWT verifier — negative-kid cache, refresh throttle, single-flight (067). | `loopplane.adapters.mcp`, `loopplane.{webapi,checkpoint,fairness}` |
+| **Web UI product experience** | 025–032, 074, 075 | A modern agent UI: markdown + collapsible tool cards + theming + two-pane shell + stop control (025); reasoning / question-options / token-usage signals (026); read-only inspection panels (027); model selection + file attachments (028); i18n + syntax highlighting + command palette + cost estimate (029); session management (030); message actions (031); interaction resilience — modals / retry / toasts / skeletons (032); a WebSocket live channel (bidirectional output / tool progress / approval / abort with reconnect replay) beside REST + SSE, backend-owned generated contract types, and richer session management — draft sessions, model preference, star / fork / search / bulk-delete (074); and first-class capability management — memory, skills (with import), MCP configuration, projects / workspaces, schedules, and model defaults over owner-scoped `/v1/capabilities/*` routes (075, the browser still never collects provider credentials). | `apps/web`, `loopplane.webapi` |
+| **Packaging & release** | 014, 024, 073 | Release packaging and docs (wheel / sdist, `py.typed`, public API reference, CI gates); desktop packaging (a PyInstaller-frozen sidecar + electron-builder + a spawn resolver); and a code-review remediation pass over units 001–072 — locked CI gates with `apps/web/**` path coverage, public-safe MCP / `web_fetch` error seams, `web_fetch` size limits, and a Spec Kit task-drift audit (073). | packaging metadata, `apps/desktop` |
 
 ## Internal tools and model providers
 
@@ -82,7 +83,9 @@ capability surface are:
 > The cap-gated Tier-2 autonomy supervisors (048–051) register **additional** tool
 > families when enabled — background tasks, scheduling, agent-to-agent messaging, and
 > worktree management — each off by default. Structured output (045) is a model-boundary
-> capability negotiated per provider, not a gateway tool.
+> capability negotiated per provider, not a gateway tool. The backend slash commands
+> (065) are host UX answered by the CLI / web hosts and likewise never pass through the
+> Tool Gateway.
 
 **Model providers:** Anthropic, OpenAI, OpenRouter, Ollama, and native Google Gemini —
 each behind its own optional install extra; OpenRouter additionally brokers 100+ models
@@ -91,31 +94,25 @@ behind the OpenAI wire format.
 ## Scope boundaries (out of scope / deferred)
 
 The following are intentionally **not** in scope today (each is recorded in the relevant
-spec / ADR or roadmap). Items shipped in the v0.4.0 line — agent-to-agent messaging /
-swarm (050), OAuth / JWT (056), Postgres backends (060), per-principal concurrent
-execution (061), POSIX sandboxed `run_command` (052), file-edit undo (054), and a pricing
-table (053) — are **no longer** in this list.
+spec / ADR or roadmap). Items shipped since v0.4.0 by the 064–075 line — document / PDF
+input (069), queryable cost surfacing and the pre-turn cost guard (064 / 068), backend
+slash commands (065), named permission modes (066), Gemini `thought_signature`
+round-trip (070), durable cross-process SSE replay (071), and per-tenant fairness /
+quota (072) — are **no longer** in this list.
 
-- **Multimodal:** PDF / `DocumentBlock` input (deferred, ADR 0001 D2) and binary artifact
-  durability.
-- **Gemini:** real per-call `thought_signature` preservation (multi-turn tool use works
-  today via Google's official validator-skip sentinel) — a content-model change.
-- **Cost surfacing:** pricing computes USD (053) and the ledger records per-principal
-  monthly spend (062), but there is no queryable spend endpoint or `/cost` command yet —
-  a host/UI sees only the `budget-exceeded` termination. Pre-turn predictive cost guards
-  (refusing a likely-overage turn) are also deferred (budget is enforced post-turn).
-- **Commands:** backend-semantic slash commands (`/compact`, `/cost`, `/model`,
-  `/memory`); the web UI command palette (029) is frontend-only.
-- **Permissions:** named convenience modes (acceptEdits / bypassPermissions / dontAsk) on
-  top of the permission DSL (039).
+- **Multimodal:** binary artifact durability (document / PDF *input* shipped in 069;
+  OCR, text extraction, and document-search workflows remain separate features).
+- **Billing:** a model proxy / billing layer on top of pricing and the USD caps (spend is
+  now queryable via 064, but there is no metering / invoicing surface).
 - **Execution isolation:** docker / container sandboxing (the POSIX jail ships in 052;
   Windows `run_command` is unsandboxed); remote / distributed agent execution (children
   run in-process).
-- **Platform tail:** durable cross-process / multi-worker SSE reconnect (058's ring is
-  in-memory per-process); the multi-tenant fairness / quota / many-writer / distributed
-  tail above the per-principal host pool (061).
-- **Editing & history:** prior-message editing / conversation branching and in-session
-  message search.
+- **Platform tail:** many-writer durability and cross-process / distributed pooling and
+  scheduling above the per-principal host pool (061) — 071 makes SSE replay durable and
+  072 adds in-process fairness / per-tenant quota, but execution remains in-process
+  single-worker.
+- **Editing & history:** prior-message editing and in-session message search (074 added
+  session-level fork / search / star, not per-message editing or search).
 - **Parity:** IDE extension (VS Code / JetBrains), STT / TTS / voice, and output styles.
 
 For where these sit relative to reference agent harnesses and a prioritized way to close
@@ -124,7 +121,8 @@ them, see [`gap-analysis.md`](gap-analysis.md).
 ## Note on spec status
 
 The per-unit `specs/*/spec.md` files are marked `Status: Draft` even though every unit
-(001–063) is implemented, verified, and released. The marker reflects the spec template
-default, not the implementation status; the authoritative per-unit status lives in
+(001–075) is implemented and verified (001–063 released, 064–075 pending release). The
+marker reflects the spec template default, not the implementation status; the
+authoritative per-unit status lives in
 [`loopplane-agent-board.md`](loopplane-agent-board.md) (all units **Verified**) and the
 release history in [`../CHANGELOG.md`](../CHANGELOG.md).

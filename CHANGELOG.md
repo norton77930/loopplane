@@ -4,6 +4,81 @@ All notable changes to LoopPlane are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 Semantic Versioning.
 
+## [Unreleased]
+
+Twelve additive units (064–075) extending the v0.4.0 platform line toward cost
+transparency, richer host UX, document-capable model content, platform hardening, and web
+parity. The cost-governance arc gains **queryable spend** (064) and a **pre-turn
+predictive cost guard** (068); host UX gains **backend-semantic slash commands** (065) and
+**named permission modes** (066); the content model gains **document / PDF input** (069)
+and Gemini **thought-signature round-trip** (070); the platform line gains **JWKS refresh
+hardening** (067), a **durable event replay store** (071), and **per-tenant platform
+fairness** (072); a **code-review remediation** pass hardened CI and public-safety seams
+(073); and the web app reaches **live-channel parity** (074) and **first-class capability
+management** (075). Every unit is additive and default-off where configurable; the runtime
+core and the event schema are unchanged (no `SCHEMA_VERSION` bump), and the only
+content-model changes are the additive extensions recorded in ADR 0011. Four ADRs recorded
+the boundary decisions: **0011** (DocumentBlock content model, units 069–070), **0012**
+(durable event replay store), **0013** (platform fairness), **0014** (pre-turn cost
+guard).
+
+### Added
+
+- **064** Cost surfacing (`loopplane.webapi`) — owner-scoped, read-only cost queries:
+  `GET /v1/sessions/{id}/cost` and `GET /v1/cost/monthly`, host passthroughs
+  (`session_cost`, `monthly_spend`), and a `BudgetChecker.session_spent` accessor, so a
+  host/UI can see accumulated USD before a `budget-exceeded` termination (the 053/062
+  tail of G21/G22).
+- **065** Backend-semantic slash commands (`loopplane.commands`) — `/cost`, `/model`,
+  `/memory`, and `/compact` answered by the host (CLI REPL interception plus
+  `POST /v1/commands`) without a model round-trip, via a fail-safe `CommandRegistry`;
+  commands are host UX and do not pass through the Tool Gateway or Event Bus (gap G14).
+- **066** Named permission modes (`loopplane.governance`) — a single
+  `RuntimeConfig.permission_mode` option (`acceptEdits` / `bypassPermissions` /
+  `dontAsk` / `plan`) expanding to preset rule sets over the 039 permission DSL
+  (`PERMISSION_MODES`, `permission_mode_ruleset`); deny-wins is preserved and the default
+  (`None`) is byte-identical (gap G10).
+- **067** JWKS refresh hardening (`loopplane.webapi`, `loopplane[oauth]`) — a bounded
+  negative-kid cache, a cross-request refresh throttle
+  (`jwt_authenticator(refresh_min_interval=…)`), and single-flight refresh so an
+  unknown-kid spray cannot amplify JWKS fetches against the upstream IdP (056 follow-up).
+- **068** Pre-turn cost guard (`loopplane.budget`) — estimate a turn's cost before the
+  model call (`estimate_request_tokens` plus a configurable
+  `RuntimeConfig.pre_turn_max_output_tokens` output bound) and refuse a likely-overage
+  turn, reusing the existing `budget-exceeded` reason; default-off and fail-open
+  (ADR 0014, extends ADR 0005).
+- **069** Document block (`loopplane.model`) — PDF / document input as a new
+  `DocumentBlock` content type with native Anthropic and Gemini mappings; adapters
+  without document support fail safely before provider submission instead of guessing a
+  conversion (gap G24; ADR 0011).
+- **070** Gemini thought-signature round-trip (`loopplane.model`,
+  `loopplane.adapters.gemini`) — an optional, absent-by-default `provider_signature` on
+  tool-call content so native Gemini multi-turn tool use preserves and replays per-call
+  `thought_signature` instead of relying on the validator-skip sentinel (037 tail;
+  ADR 0011).
+- **071** Durable event replay store (`loopplane.webapi`) — an `EventReplayStore`
+  protocol keyed by `(session_id, sequence)` with File / SQLite / Postgres backends, so
+  `Last-Event-ID` SSE reconnects survive process restarts and multi-worker deployments;
+  opt-in — the 058 in-memory ring remains the default (G23 tail; ADR 0012).
+- **072** Platform fairness (`loopplane.fairness`) — per-tenant quota and fair in-process
+  scheduling of model-call capacity above the 061 per-principal host pool; over-quota
+  requests receive a public-safe 429 / SSE rejection; default-off, in-process slice only
+  (G20 tail; ADR 0013, extends ADR 0009).
+- **073** Code-review remediation — remediation of the 001–072 code review: locked
+  `uv sync` / desktop CI gates with `apps/web/**` path coverage, normalized public-safe
+  MCP / `web_fetch` errors, `web_fetch` response and cache size limits, and a Spec Kit
+  task-drift audit; no runtime schema, event, or public-API change.
+- **074** Web parity foundation (`loopplane.webapi` + `apps/web`) — an additive WebSocket
+  live channel (bidirectional assistant output / tool progress / approval / abort, with
+  reconnect replay) beside the existing REST + SSE contract, backend-owned contract
+  fixtures generating a deterministic `generated.ts`, and modern session management
+  (draft sessions, model preference, star / fork / search / bulk-delete).
+- **075** Web capability management (`loopplane.webapi` + `apps/web`) — first-class
+  management of memory, skills (including import), MCP configuration,
+  projects / workspaces, schedules, and model defaults from the web UI over new
+  owner-scoped `/v1/capabilities/*` routes, extending the 027 read-only inspection into a
+  read-write settings surface; the browser still never collects provider credentials.
+
 ## [0.4.0] - 2026-06-21
 
 The capability-to-platform line — twenty additive units (044–063) closing the gap-analysis
@@ -508,6 +583,7 @@ quality by unit 014.
   **first-run example prompts**. With 032, the product-polish sprint (030–032) is complete; the
   backend is untouched throughout (only unit 030 was additive backend, no ADR).
 
+[0.4.0]: https://github.com/norton77930/loopplane/releases/tag/v0.4.0
 [0.3.0]: https://github.com/norton77930/loopplane/releases/tag/v0.3.0
 [0.2.0]: https://github.com/norton77930/loopplane/releases/tag/v0.2.0
 [0.1.0]: https://github.com/norton77930/loopplane/releases/tag/v0.1.0

@@ -18,9 +18,10 @@
   tools, parallel executor, swarm peer messaging, background tasks, scheduling, STT/TTS,
   model proxy + billing, 3 sandbox modes, 4 MCP transports + OAuth, multi-level budgets,
   Postgres).
-- **LoopPlane** — its own specs (001–063, released as v0.4.0) verified against
-  `src/loopplane/` and `apps/`. The v0.4.0 line (044–063) closed the large majority of the
-  gaps below; this document is the post-v0.4.0 status.
+- **LoopPlane** — its own specs (001–075; 001–063 released as v0.4.0, 064–075 verified on
+  `main` and pending release) verified against `src/loopplane/` and `apps/`. The v0.4.0
+  line (044–063) closed the large majority of the gaps below and the 064–075 line closed
+  most of what remained; this document reflects status through unit 075.
 
 Matrix legend: ✅ has an equivalent capability · ◑ partial / different shape · ❌ absent.
 Cells reflect *presence of an equivalent capability*, not feature-for-feature parity. The
@@ -37,7 +38,7 @@ snapshots above.
 | Durable memory | ✅ | ✅ | ✅ |
 | Plan mode | ✅ | ✅ | ✅ |
 | Permission rules (allow/deny/ask) | ✅ | ✅ | ✅ |
-| Named permission modes (acceptEdits/bypass/dontAsk) | ✅ | ◑ | ◑ (DSL 039 + plan mode 038; no named modes) |
+| Named permission modes (acceptEdits/bypass/dontAsk) | ✅ | ◑ | ✅ (066 presets over DSL 039) |
 | One-shot subagents | ✅ | ✅ | ✅ |
 | Agent-to-agent messaging / swarm | ✅ | ✅ | ✅ (050) |
 | Parallel tool execution | ✅ | ✅ | ✅ |
@@ -46,7 +47,7 @@ snapshots above.
 | Cheap-model compaction summary | ◑ | ✅ | ✅ |
 | Providers (Anthropic/OpenAI/Gemini/OpenRouter/Ollama) | ◑ | ✅ | ✅ |
 | Multimodal image input | ✅ | ✅ | ✅ |
-| Multimodal PDF / documents | ✅ | ◑ | ❌ |
+| Multimodal PDF / documents | ✅ | ◑ | ✅ (`DocumentBlock` 069) |
 | STT / TTS / voice | ✅ | ✅ | ❌ |
 | Hooks | ✅ | ✅ | ✅ |
 | Plugins / skills | ✅ | ✅ | ✅ |
@@ -63,22 +64,23 @@ snapshots above.
 | Sandbox isolation (local / docker) | ✅ | ✅ | ◑ (POSIX jail 052; docker/Windows no) |
 | File-edit undo / rewind | ✅ | ✅ | ✅ (undo_file 054) |
 | Output styles | ✅ | ◑ | ❌ |
-| Backend-semantic slash commands | ✅ | ◑ | ◑ (frontend palette only) |
+| Backend-semantic slash commands | ✅ | ◑ | ✅ (065 `loopplane.commands`) |
 | Loop engineering (validators / evaluators / scheduler infra) | ❌ | ◑ | ✅ |
 | Metadata-only observability contracts | ◑ | ◑ | ✅ |
 | Principal auth / session scoping | ✅ | ✅ | ✅ |
 | OAuth / JWT + external IdP | ✅ | ✅ | ✅ (056) |
 | Storage backends | ◑ | ✅ (Postgres) | ✅ (file / SQLite / Postgres 060) |
-| Concurrent multi-user execution | ✅ | ✅ | ◑ (per-principal pool 061, in-process) |
-| Multi-level budget / billing | ◑ | ✅ | ◑ (USD caps 055 + ledger 062/063; no proxy/billing) |
-| Server-side pricing surfacing (queryable spend) | ◑ | ✅ | ❌ (pricing computes 053; no endpoint) |
+| Concurrent multi-user execution | ✅ | ✅ | ◑ (pool 061 + fairness/quota 072, in-process) |
+| Multi-level budget / billing | ◑ | ✅ | ◑ (USD caps 055/063 + pre-turn guard 068 + ledger 062; no proxy/billing) |
+| Server-side pricing surfacing (queryable spend) | ◑ | ✅ | ✅ (064 cost endpoints + `/cost` 065) |
 | Host surfaces (CLI / web / desktop) | ✅ | ✅ | ✅ |
 | IDE extension (VS Code / JetBrains) | ✅ | ❌ | ❌ |
 
-## C2. Gap status (post-v0.4.0)
+## C2. Gap status (through unit 075)
 
 The original G1–G24 gaps and where they now stand. The v0.4.0 line (044–063) closed or
-partially closed the large majority; the implementing unit is cited.
+partially closed the large majority, and the 064–075 line (verified, pending release)
+closed most of the rest; the implementing unit is cited.
 
 ### Closed in v0.4.0
 
@@ -100,7 +102,21 @@ partially closed the large majority; the implementing unit is cited.
 - **G22 — Multi-level budget caps** (per-message / session / user-monthly USD) →
   **055 + 062 + 063** (in-loop USD caps + a durable per-(principal, month) ledger).
 
-### Partially closed in v0.4.0
+### Closed in 064–075 (verified, pending release)
+
+- **G10 — Named permission modes** → **066** (acceptEdits / bypassPermissions / dontAsk /
+  plan as preset rule sets over the 039 DSL, selected by `RuntimeConfig.permission_mode`).
+- **G14 — Backend-semantic slash commands** → **065** (`/cost`, `/model`, `/memory`,
+  `/compact` on the CLI and web hosts via `loopplane.commands`; host UX, not a gateway
+  tool).
+- **G23 — Server-side SSE reconnect** → **058 + 071** (`Last-Event-ID` replay over an
+  in-memory ring, ADR 0006; made durable across processes / workers by the opt-in
+  `EventReplayStore` with File / SQLite / Postgres backends, ADR 0012).
+- **G24 — PDF / `DocumentBlock` input** → **069** (a new `DocumentBlock` content type with
+  native Anthropic / Gemini mappings, ADR 0011; unsupported adapters fail safely before
+  provider submission — binary artifact durability remains a separate deferral).
+
+### Partially closed
 
 - **G11 — Sandbox execution isolation** → **052** (a POSIX `LocalJailCommandExecutor`:
   rlimits / env-scrub / `setsid`). Still open: Windows (raises) and docker / container
@@ -109,27 +125,19 @@ partially closed the large majority; the implementing unit is cited.
   gateway-routed synthetic tools + host-injected bearer token). Still open: interactive
   OAuth authorization-code flow.
 - **G20 — Concurrent multi-user execution** → **061** (a per-principal `TenantHostPool`,
-  ADR 0009). Still open: the in-process single-worker limit and the fairness / quota /
-  many-writer / distributed tail.
-- **G23 — Server-side SSE reconnect** → **058** (`Last-Event-ID` replay over an in-memory
-  ring, ADR 0006). Still open: durable cross-process / multi-worker replay.
-- **G21 — Model proxy / billing + server-side pricing** → **053** (a pure pricing table).
-  Still open: a queryable spend endpoint / `/cost` surfacing and any proxy / billing.
+  ADR 0009) + **072** (per-tenant fairness / quota above the pool, ADR 0013, in-process).
+  Still open: the in-process single-worker limit and the many-writer / distributed tail.
+- **G21 — Model proxy / billing + server-side pricing** → **053** (a pure pricing table) +
+  **064** (owner-scoped queryable spend endpoints) + **068** (a pre-turn predictive cost
+  guard, ADR 0014). Still open: any model proxy / metering / billing layer.
 
 ### Still open
 
 - **G9 — Remote / cloud agent execution.** Children run in-process via `run_loop`; no
   out-of-process or networked agent execution (deferred, ADR 0003).
-- **G10 — Named permission modes** (acceptEdits / bypassPermissions / dontAsk). The
-  permission DSL (039) + plan mode (038) exist, but not these named convenience presets.
 - **G13 — IDE extension** (VS Code / JetBrains). Desktop only; no IDE integration.
-- **G14 — Backend-semantic slash commands** (`/compact`, `/cost`, `/model`, `/memory`).
-  Only the frontend command palette (029); no backend command surface.
 - **G15 — STT / TTS / voice.** None.
 - **G17 — Output styles** / pluggable formatters. None.
-- **G24 — PDF / `DocumentBlock` input.** LoopPlane's own deferral (ADR 0001 D2); needs an
-  OpenAI chat-completions mapping decision, binary artifact durability, and a content-model
-  change.
 
 ## C3. Where LoopPlane is at parity or ahead
 
@@ -140,56 +148,49 @@ The comparison is not one-directional. LoopPlane leads on:
 - **Determinism & safety posture** — deny-wins, fail-closed deciders; metadata-only,
   deterministic observability contracts (010); additive features that default to
   byte-identical behavior — the entire v0.4.0 line (044–063) shipped without a single core
-  rewrite, `SCHEMA_VERSION` bump, or content-model change.
+  rewrite, `SCHEMA_VERSION` bump, or content-model change, and the 064–075 line kept the
+  pattern (no `SCHEMA_VERSION` bump; the only content-model changes are the additive
+  extensions recorded in ADR 0011).
 - **Loop engineering layer** — first-class validators / evaluators / retry / repair and a
   virtual-clock scheduler (003–005), which neither reference foregrounds as a reusable
   contract.
 - **Clean boundaries** — a single Tool Gateway (V) and Event Bus (VI) with enforced
   import boundaries, making the runtime auditable and embeddable.
 
-## C4. Forward roadmap (post-v0.4.0, prioritized)
+## C4. Forward roadmap (through unit 075, prioritized)
 
-The original tiered roadmap (Tier-1 capability → Tier-2 autonomy → Tier-3 cost/safety →
-Tier-4 platform) is essentially **fully executed** by the v0.4.0 line. What remains is a
-smaller, mostly tail / polish backlog, re-prioritized below. It is a **suggested priority
-list only** — no unit below is specced or implemented yet; unit numbers start at the next
-free (064).
+The previous edition of this roadmap (written post-v0.4.0) has itself been largely
+executed by the 064–075 line: every former P1 item shipped — cost surfacing (064),
+backend slash commands (065), named permission modes (066), JWKS-refresh hardening
+(067) — as did most of P2 — the durable SSE replay store (071), in-process fairness /
+per-tenant quota (072), PDF / `DocumentBlock` (069), the pre-turn cost guard (068), and
+native Gemini `thought_signature` (070) — plus a code-review remediation pass (073) and
+the web parity / capability-management pair (074 / 075). What remains is the tail below.
+It is a **suggested priority list only** — the next units already on the board are
+`076-web-agent-controls` and `077-desktop-cowork-parity` (not started); new roadmap items
+would be specced as later units.
 
-**P1 — high leverage, backing pieces already exist**
-- **Cost surfacing** (the 053/062 tail) — a queryable per-run / per-principal-monthly spend
-  endpoint and a `/cost` view; pricing already computes USD and the ledger already records
-  it, but nothing exposes it (only the `budget-exceeded` termination is observable).
-- **Backend-semantic slash commands** (G14) — `/compact`, `/cost`, `/model`, `/memory` on
-  the backend hosts (compaction, pricing, the model registry, and inspection already back
-  them); must route through the Gateway / Event Bus, not bypass them.
-- **Named permission modes** (G10) — acceptEdits / bypassPermissions / dontAsk as preset
-  `PermissionRuleSet`s composing over the existing 039 DSL (small, high-ergonomics).
-- **JWKS-refresh hardening** (056 follow-up) — a bounded negative-kid cache + cross-request
-  throttle so an unknown-kid spray cannot amplify upstream IdP fetches.
+**P1 — platform depth (the remaining distributed tail)**
+- **G20 distributed tail** — cross-process / multi-worker execution above the
+  per-principal host pool: many-writer durability and distributed pooling / scheduling
+  (071 made SSE replay durable and 072 added in-process fairness / quota; execution
+  itself is still in-process single-worker).
+- **Docker / container sandbox** for `run_command` (G11 tail; the POSIX jail shipped in
+  052; Windows still raises).
+- **MCP interactive OAuth** authorization-code flow (G12 tail; bearer token shipped in
+  059).
 
-**P2 — platform depth**
-- **Durable cross-process / multi-worker SSE reconnect** (the 058/ADR 0006 D6 tail) — a
-  shared / durable event-replay store distinct from the checkpoint's reduced projection;
-  needed before horizontal web scale-out.
-- **G20 platform tail** — resource fairness / fair model-call scheduling, per-tenant quota
-  beyond in-flight counts, many-writer durability, cross-process / distributed pooling.
-- **PDF / `DocumentBlock`** (G24) — needs an OpenAI chat-completions mapping decision,
-  binary artifact durability, and a content-model ADR.
-- **Pre-turn predictive cost guard** (the 055/ADR 0005 tail) — refuse a likely-overage turn
-  before it runs (budget is enforced post-turn today).
-- **Native Gemini per-call `thought_signature`** (037 tail) — a `ToolCallBlock`
-  content-model field, so a Constitution-VI / ADR matter.
-
-**P3 — tail & parity**
-- Docker / container sandbox for `run_command` (G11 tail; POSIX shipped in 052).
+**P2 — tail & parity**
 - Remote / distributed agent execution (G9).
+- A model proxy / metering / billing layer (G21 tail; pricing, caps, and queryable spend
+  are done).
 - File / SQLite ledger cross-process atomicity (document loudly or add a process lock;
   Postgres is the multi-process story today).
 - A subagent aggregate fan-out cap (today `max_subagent_depth` bounds depth, not total
   count / aggregate budget across the tree).
 - `resume()` working-scope persistence (resume rebuilds with the current working directory,
   not the session's original scope).
-- MCP interactive OAuth authorization-code flow (G12 tail; bearer token shipped in 059).
+- Binary artifact durability (the 069 deferral) and document OCR / extraction workflows.
 - IDE extension (G13), STT / TTS (G15), output styles (G17), and event-schema v1→v2
   migration tooling.
 
