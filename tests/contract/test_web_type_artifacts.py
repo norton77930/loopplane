@@ -25,7 +25,7 @@ def test_contract_type_artifacts_are_deterministic_and_public_safe() -> None:
     artifacts = contract_type_artifacts()
 
     assert artifacts == contract_type_artifacts()
-    assert artifacts["version"] == "075-web-capability-management"
+    assert artifacts["version"] == "077-web-agent-controls"
     assert "sk-" not in repr(artifacts)
     assert "ghp_" not in repr(artifacts)
 
@@ -83,13 +83,24 @@ def test_capability_fixtures_are_backend_owned_and_validated() -> None:
         "schedule",
         "model_default",
         "result",
+        "settings",
     }
     for name, fixture in fixtures.items():
         validate_capability_contract_fixture(name, fixture)
     assert fixtures["memory"]["kind"] == "user"
     assert fixtures["mcp"]["status"] == "disconnected"
     assert fixtures["schedule"]["enabled"] is True
+    assert fixtures["schedule"]["instruction"] == "refresh documentation notes"
     assert fixtures["model_default"]["model_id"] == "model-a"
+    assert fixtures["settings"] == {
+        "storage_available": True,
+        "mutations_enabled": True,
+        "runtime_activation_enabled": True,
+        "mcp_endpoint_policy_available": True,
+        "schedule_runner_available": True,
+    }
+    for name in ("memory", "skill", "mcp", "context", "schedule", "model_default"):
+        assert {"scope", "actions", "problem", "updated_at"} <= set(fixtures[name])
 
 
 def test_capability_fixture_validation_catches_missing_required_field() -> None:

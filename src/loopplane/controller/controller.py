@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -27,7 +27,7 @@ from loopplane.artifacts.budget import (
     ReplacementLedger,
 )
 from loopplane.artifacts.store import ArtifactStore
-from loopplane.budget import BudgetChecker, UsdBudgetCaps
+from loopplane.budget import BudgetChecker, BudgetPostureSnapshot, UsdBudgetCaps
 from loopplane.checkpoint.base import CheckpointStore, SessionSummary
 from loopplane.checkpoint.rebuild import rebuild_session
 from loopplane.checkpoint.recorder import RecordingSink, SessionRecorder
@@ -93,6 +93,8 @@ from loopplane.skills.advertiser import DEFAULT_PROMPT_BUDGET_CHARS, SkillAdvert
 from loopplane.skills.loader import LoadedSkill
 
 SessionState = Literal["created", "active", "suspended", "terminated"]
+ScopedMemoryProvider = Callable[[str | None], AugmentationProvider | None]
+ScopedSkillsProvider = Callable[[str | None], Mapping[str, LoadedSkill]]
 
 
 @dataclass
@@ -121,6 +123,15 @@ class _Session:
     starred: bool = False
     forked_from_session_id: str | None = None
     forked_from_sequence: int | None = None
+    context_id: str | None = None
+    context_name: str | None = None
+    context_workspace_label: str | None = None
+    context_status: str | None = None
+    # Ephemeral 077 display metadata. These fields are deliberately absent from
+    # checkpoint records: host rebuilds therefore cannot reconstruct them.
+    active_permission_mode: str | None = None
+    active_plan_mode: PlanModeState | None = None
+    last_accepted_permission_mode: str | None = None
 
 
 class RuntimeController:
@@ -135,6 +146,8 @@ class RuntimeController:
         replacement_budget_bytes: int = DEFAULT_REPLACEMENT_BUDGET_BYTES,
         memory_store: MemoryStore | None = None,
         skills: Mapping[str, LoadedSkill] | None = None,
+        scoped_memory_provider: ScopedMemoryProvider | None = None,
+        scoped_skills_provider: ScopedSkillsProvider | None = None,
         skill_prompt_budget_chars: int = DEFAULT_PROMPT_BUDGET_CHARS,
         enable_assembly: bool | None = None,
         assembly_keep_last: int = 4,
@@ -223,13 +236,20 @@ class RuntimeController:
         self._replacement_budget = replacement_budget_bytes
         self._memory_store = memory_store
         self._skills = dict(skills) if skills else {}
+        self._scoped_memory_provider = scoped_memory_provider
+        self._scoped_skills_provider = scoped_skills_provider
         self._skill_prompt_budget = skill_prompt_budget_chars
         # Assembly is gated (NFR-002): off unless memory or skills are
         # configured, or the host opts in explicitly.
         self._assembly_enabled = (
             enable_assembly
             if enable_assembly is not None
-            else (memory_store is not None or bool(skills))
+            else (
+                memory_store is not None
+                or bool(skills)
+                or scoped_memory_provider is not None
+                or scoped_skills_provider is not None
+            )
         )
         self._assembly_keep_last = assembly_keep_last
         # Proactive auto-compaction threshold (spec 041): None → the assembler's
@@ -305,6 +325,10 @@ class RuntimeController:
             starred=rebuilt.starred,
             forked_from_session_id=rebuilt.forked_from_session_id,
             forked_from_sequence=rebuilt.forked_from_sequence,
+            context_id=rebuilt.context_id,
+            context_name=rebuilt.context_name,
+            context_workspace_label=rebuilt.context_workspace_label,
+            context_status=rebuilt.context_status,
         )
         self._sessions[session_id] = session
         for problem in problems:
@@ -330,6 +354,10 @@ class RuntimeController:
         starred: bool = False,
         forked_from_session_id: str | None = None,
         forked_from_sequence: int | None = None,
+        context_id: str | None = None,
+        context_name: str | None = None,
+        context_workspace_label: str | None = None,
+        context_status: str | None = None,
     ) -> _Session:
         ledger: ReplacementLedger | None = None
         if self._artifacts is not None:
@@ -363,10 +391,18 @@ class RuntimeController:
             providers: list[AugmentationProvider] = []
             if self._memory_store is not None:
                 providers.append(MemoryAugmentation(self._memory_store))
-            if self._skills:
+            if self._scoped_memory_provider is not None:
+                scoped_memory = self._scoped_memory_provider(principal_id)
+                if scoped_memory is not None:
+                    providers.append(scoped_memory)
+            active_skills = dict(self._skills)
+            if self._scoped_skills_provider is not None:
+                for name, skill in self._scoped_skills_provider(principal_id).items():
+                    active_skills.setdefault(name, skill)
+            if active_skills:
                 providers.append(
                     SkillAdvertiser(
-                        self._skills, prompt_budget_chars=self._skill_prompt_budget
+                        active_skills, prompt_budget_chars=self._skill_prompt_budget
                     )
                 )
             assembler = PromptAssembler(
@@ -447,6 +483,10 @@ class RuntimeController:
             starred=starred,
             forked_from_session_id=forked_from_session_id,
             forked_from_sequence=forked_from_sequence,
+            context_id=context_id,
+            context_name=context_name,
+            context_workspace_label=context_workspace_label,
+            context_status=context_status,
         )
 
     def _make_history_hook(
@@ -534,11 +574,35 @@ class RuntimeController:
             return None
         return self._worktree_manager_factory(self._require(session_id).working_scope)
 
+    def agent_control_posture(
+        self, session_id: str
+    ) -> tuple[tuple[str, bool] | None, tuple[str, bool] | None]:
+        """Return in-memory 077 display posture, never checkpoint-derived."""
+
+        session = self._sessions.get(session_id)
+        if session is None:
+            return None, None
+        active = (
+            (
+                session.active_permission_mode,
+                bool(session.active_plan_mode and session.active_plan_mode.active),
+            )
+            if session.active_permission_mode is not None
+            else None
+        )
+        settled = (
+            (session.last_accepted_permission_mode, False)
+            if session.last_accepted_permission_mode is not None
+            else None
+        )
+        return active, settled
+
     async def drive(
         self,
         session_id: str,
         input_blocks: Sequence[ContentBlock],
         output_schema: dict[str, object] | None = None,
+        permission_mode: str | None = None,
         background_supervisor: BackgroundSupervisor | None = None,
         schedule_supervisor: ScheduleSupervisor | None = None,
         swarm_supervisor: SwarmSupervisor | None = None,
@@ -560,6 +624,12 @@ class RuntimeController:
             raise RuntimeError(f"a run is already active for session: {session_id}")
         session.driving = True
         session.state = "active"
+        # A validated browser selection is authoritative only after this point. The
+        # active/last values are live controller fields, never recorder input.
+        effective_plan_mode = self._plan_mode or permission_mode == "plan"
+        plan_mode_state = PlanModeState(active=True) if effective_plan_mode else None
+        session.active_permission_mode = permission_mode or "host-default"
+        session.active_plan_mode = plan_mode_state
         if self._hooks is not None:
             if not self._setup_fired:
                 self._setup_fired = True
@@ -583,7 +653,8 @@ class RuntimeController:
             session_approval_memory=session.approval_memory,
             subagent_depth=self._subagent_depth,
             interactions=session.broker,
-            plan_mode=PlanModeState(active=True) if self._plan_mode else None,
+            plan_mode=plan_mode_state,
+            permission_mode=permission_mode,
             output_schema=output_schema,
             background_tasks=background_supervisor,
             schedules=schedule_supervisor,
@@ -598,6 +669,10 @@ class RuntimeController:
                 async with self._platform_fairness.admit(session.principal_id):
                     await session.loop.run(input_blocks, context)
         finally:
+            if session.active_permission_mode is not None:
+                session.last_accepted_permission_mode = session.active_permission_mode
+            session.active_permission_mode = None
+            session.active_plan_mode = None
             session.driving = False
             session.last_active_at = datetime.now(UTC)
             # The signal is one-shot; arm a fresh one for the next run.
@@ -745,6 +820,10 @@ class RuntimeController:
                 starred=session.starred,
                 forked_from_session_id=session.forked_from_session_id,
                 forked_from_sequence=session.forked_from_sequence,
+                context_id=session.context_id,
+                context_name=session.context_name,
+                context_workspace_label=session.context_workspace_label,
+                context_status=session.context_status,
             )
             for session in self._sessions.values()
         ]
@@ -766,6 +845,51 @@ class RuntimeController:
         session = self._sessions.get(session_id)
         if session is not None:
             session.starred = starred
+
+    async def set_session_context(
+        self,
+        session_id: str,
+        *,
+        principal_id: str | None,
+        context_id: str,
+        context_name: str,
+        context_workspace_label: str | None,
+        context_status: str,
+    ) -> None:
+        """Persist context metadata only when the requesting principal owns
+        the session."""
+        summary = next(
+            (item for item in self.list_sessions() if item.session_id == session_id),
+            None,
+        )
+        session = self._sessions.get(session_id)
+        if summary is not None:
+            if summary.principal_id != principal_id:
+                raise KeyError(f"unknown session: {session_id}")
+        elif session is None or session.principal_id != principal_id:
+            raise KeyError(f"unknown session: {session_id}")
+        elif self._checkpoint is not None:
+            await self._checkpoint.create_session_metadata(
+                session_id,
+                created_at=session.created_at,
+                label=session.label,
+                principal_id=session.principal_id,
+                model=session.model,
+            )
+
+        if self._checkpoint is not None:
+            await self._checkpoint.update_session_metadata(
+                session_id,
+                context_id=context_id,
+                context_name=context_name,
+                context_workspace_label=context_workspace_label,
+                context_status=context_status,
+            )
+        if session is not None:
+            session.context_id = context_id
+            session.context_name = context_name
+            session.context_workspace_label = context_workspace_label
+            session.context_status = context_status
 
     async def fork_session(
         self,
@@ -907,6 +1031,13 @@ class RuntimeController:
         """The session's accumulated USD, or ``None`` when no budget checker is
         configured (064 cost surfacing; read-only). Raises for an unknown session."""
         return self._require(session_id).loop.current_session_cost()
+
+    def budget_posture(self, session_id: str) -> BudgetPostureSnapshot:
+        """Return live enum-only diagnostics, never checkpoint-derived."""
+        session = self._sessions.get(session_id)
+        if session is None:
+            return BudgetPostureSnapshot()
+        return session.loop.current_budget_posture()
 
     def monthly_spend(self, principal_id: str) -> Decimal | None:
         """A principal's current-month accumulated USD from the durable ledger, or

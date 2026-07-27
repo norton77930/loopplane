@@ -21,12 +21,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Literal
 
 from loopplane.ledger import UsdLedger
 from loopplane.model.boundary import TokenUsage
 from loopplane.pricing import PricingTable
 
-__all__ = ["UsdBudgetCaps", "BudgetChecker"]
+__all__ = ["BudgetPostureSnapshot", "UsdBudgetCaps", "BudgetChecker"]
 
 
 def _utc_month_now() -> str:
@@ -43,6 +44,30 @@ class UsdBudgetCaps:
 
     def any_set(self) -> bool:
         return self.per_message_usd is not None or self.per_session_usd is not None
+
+
+@dataclass(frozen=True)
+class BudgetPostureSnapshot:
+    """Browser-safe budget diagnostics containing enums only, never values."""
+
+    tracking: Literal["available", "unavailable", "unknown"] = "unknown"
+    pricing: Literal["priced", "partially_unpriced", "unpriced", "unknown"] = "unknown"
+    message_guard: Literal["enabled", "disabled", "unknown"] = "unknown"
+    session_guard: Literal["within", "near", "exceeded", "disabled", "unknown"] = (
+        "unknown"
+    )
+    monthly_guard: Literal["within", "near", "exceeded", "disabled", "unknown"] = (
+        "unknown"
+    )
+    pre_turn_guard: Literal["enabled", "disabled", "unknown"] = "unknown"
+
+
+def _cap_posture(spent: Decimal, cap: Decimal) -> Literal["within", "near", "exceeded"]:
+    if spent > cap:
+        return "exceeded"
+    if spent >= cap * Decimal("0.8"):
+        return "near"
+    return "within"
 
 
 @dataclass
@@ -73,6 +98,9 @@ class BudgetChecker:
     _monthly_total: Decimal = field(default=Decimal(0), init=False)
     _unpriced: bool = field(default=False, init=False)
     _ledger_unavailable: bool = field(default=False, init=False)
+    _seen_priced: bool = field(default=False, init=False)
+    _seen_unpriced: bool = field(default=False, init=False)
+    _monthly_accounting_incomplete: bool = field(default=False, init=False)
 
     def _monthly_active(self) -> bool:
         return (
@@ -130,8 +158,10 @@ class BudgetChecker:
         cost = self.pricing.cost(usage, self.model_id)
         if cost is None:
             self._unpriced = True
+            self._seen_unpriced = True
             return None
         self._unpriced = False
+        self._seen_priced = True
         self._message_spent += cost
         self._session_spent += cost
         if self._monthly_active():
@@ -144,9 +174,75 @@ class BudgetChecker:
             except Exception:
                 # FAIL-OPEN: a ledger outage must not crash or deny the run; the monthly
                 # cap is simply not enforced for this turn (a public-safe diagnostic is
-                # emitted by the loop).
+                # emitted by the loop). The projection remembers that accounting is no
+                # longer complete for this in-memory checker lifetime.
                 self._ledger_unavailable = True
+                self._monthly_accounting_incomplete = True
         return cost
+
+    def guard_posture(self) -> BudgetPostureSnapshot:
+        """Return fail-soft enum-only diagnostics without changing enforcement."""
+
+        rate_available = self.model_id in self.pricing.rates
+        has_priced = self._seen_priced or rate_available
+        has_unpriced = self._seen_unpriced or not rate_available
+        if has_priced and has_unpriced:
+            pricing: Literal["priced", "partially_unpriced", "unpriced", "unknown"] = (
+                "partially_unpriced"
+            )
+        elif has_priced:
+            pricing = "priced"
+        else:
+            pricing = "unpriced"
+
+        reliable_price = pricing == "priced"
+        message_guard: Literal["enabled", "disabled", "unknown"]
+        if self.caps.per_message_usd is None:
+            message_guard = "disabled"
+        else:
+            message_guard = "enabled" if reliable_price else "unknown"
+
+        session_guard: Literal["within", "near", "exceeded", "disabled", "unknown"]
+        if self.caps.per_session_usd is None:
+            session_guard = "disabled"
+        elif reliable_price:
+            session_guard = _cap_posture(self._session_spent, self.caps.per_session_usd)
+        else:
+            session_guard = "unknown"
+
+        pre_turn_guard: Literal["enabled", "disabled", "unknown"]
+        if not self.pre_turn_enabled():
+            pre_turn_guard = "disabled"
+        else:
+            pre_turn_guard = "enabled" if reliable_price else "unknown"
+
+        tracking: Literal["available", "unavailable", "unknown"] = "available"
+        monthly_guard: Literal["within", "near", "exceeded", "disabled", "unknown"]
+        if self.per_user_monthly_usd is None:
+            monthly_guard = "disabled"
+        elif not self._monthly_active() or not reliable_price:
+            monthly_guard = "unknown"
+        elif self._monthly_accounting_incomplete:
+            tracking = "unavailable"
+            monthly_guard = "unknown"
+        else:
+            assert self.ledger is not None and self.principal_id is not None
+            try:
+                monthly_total = self.ledger.get(self.principal_id, self.month())
+            except Exception:
+                tracking = "unavailable"
+                monthly_guard = "unknown"
+            else:
+                monthly_guard = _cap_posture(monthly_total, self.per_user_monthly_usd)
+
+        return BudgetPostureSnapshot(
+            tracking=tracking,
+            pricing=pricing,
+            message_guard=message_guard,
+            session_guard=session_guard,
+            monthly_guard=monthly_guard,
+            pre_turn_guard=pre_turn_guard,
+        )
 
     def exceeded(self) -> bool:
         """Whether a configured per-message, per-session, OR per-user-monthly USD cap is

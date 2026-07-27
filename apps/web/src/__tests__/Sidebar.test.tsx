@@ -12,13 +12,22 @@ const session = (over: Partial<SessionSummary> = {}): SessionSummary => ({
 });
 
 describe("Sidebar", () => {
+  it("exposes session navigation and a clearly named primary action", () => {
+    render(
+      <Sidebar sessions={[]} activeId={null} onOpen={() => undefined} onNew={() => undefined} />,
+    );
+
+    expect(screen.getByRole("navigation", { name: "Sessions" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
+  });
+
   it("shows an empty state and a new-chat affordance", () => {
     const onNew = vi.fn();
     render(
       <Sidebar sessions={[]} activeId={null} onOpen={() => undefined} onNew={onNew} />,
     );
     expect(screen.getByText("No sessions yet.")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("+ New chat"));
+    fireEvent.click(screen.getByText("New chat"));
     expect(onNew).toHaveBeenCalled();
   });
 

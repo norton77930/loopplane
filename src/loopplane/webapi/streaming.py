@@ -11,7 +11,7 @@ run; the run is driven on an unbounded channel so a sink send never blocks it
 from __future__ import annotations
 
 import math
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import suppress
 
 import anyio
@@ -34,6 +34,8 @@ async def run_event_stream(
     principal_id: str | None = None,
     output_schema: dict[str, object] | None = None,
     model: str | None = None,
+    permission_mode: str | None = None,
+    on_session: Callable[[str], None] | None = None,
 ) -> AsyncIterator[str]:
     """Drive one run and yield its normalized events as SSE frames in recorded
     order, then a final ``outcome`` frame (or an ``error`` frame on conflict).
@@ -57,9 +59,19 @@ async def run_event_stream(
                     principal_id=principal_id,
                     output_schema=output_schema,
                     model=model,
+                    permission_mode=permission_mode,
                 )
+                if on_session is not None:
+                    on_session(outcome.session_id)
                 final = _frame(
                     RunResult.from_outcome(outcome).model_dump_json(), event="outcome"
+                )
+            except ValueError:
+                final = _frame(
+                    ErrorResponse(
+                        detail="permission mode unavailable"
+                    ).model_dump_json(),
+                    event="error",
                 )
             except PlatformFairnessRejected:
                 final = _frame(

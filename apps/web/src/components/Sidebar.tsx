@@ -4,6 +4,7 @@ import type { SessionSummary } from "../api/types";
 import { useTranslation } from "../i18n/i18n";
 import { groupSessions, type GroupKey } from "../lib/sessionGroups";
 import { Skeleton } from "./Skeleton";
+import { MoreHorizontalIcon, PlusIcon, StarIcon } from "./icons/Icons";
 
 // The sessions sidebar (FR-008; 030): lists sessions by a human title (label, with a short-id
 // fallback), grouped Today / Yesterday / Earlier, each with a rename + delete affordance.
@@ -59,11 +60,19 @@ export function Sidebar({
       setSelectedIds(new Set());
     }
   }
+  const newChatLabel = t("sidebar.newChat").replace(/^\+\s*/, "");
+
   return (
-    <>
+    <nav className="sidebar-content" aria-label="Sessions">
       <div className="sidebar-title">LoopPlane</div>
-      <button type="button" className="new-chat" onClick={onNew}>
-        {t("sidebar.newChat")}
+      <button
+        type="button"
+        className="new-chat"
+        aria-label={newChatLabel}
+        onClick={onNew}
+      >
+        <PlusIcon />
+        <span>{newChatLabel}</span>
       </button>
       {onSearch && (
         <input
@@ -107,7 +116,7 @@ export function Sidebar({
           ))}
         </div>
       )}
-    </>
+    </nav>
   );
 }
 
@@ -183,7 +192,7 @@ function SessionRow({
           aria-label={`${session.starred ? "unstar" : "star"} session ${title}`}
           onClick={() => onToggleStar(session.session_id, !session.starred)}
         >
-          {session.starred ? "★" : "☆"}
+          <StarIcon fill={session.starred ? "currentColor" : "none"} />
         </button>
       )}
       <button
@@ -201,7 +210,7 @@ function SessionRow({
             aria-label="session menu"
             onClick={() => setMenuOpen((open) => !open)}
           >
-            ⋯
+            <MoreHorizontalIcon />
           </button>
           {menuOpen && (
             <ul className="menu-popup" role="menu">

@@ -14,8 +14,8 @@ export class RestSessionTransport implements SessionTransport {
     return this.client.streamSession(sessionId);
   }
 
-  submit(sessionId: string, prompt: string, _options?: SubmitOptions): Promise<unknown> {
-    return this.client.submit(sessionId, prompt);
+  submit(sessionId: string, prompt: string, options?: SubmitOptions): Promise<unknown> {
+    return this.client.submit(sessionId, prompt, options);
   }
 
   answerApproval(

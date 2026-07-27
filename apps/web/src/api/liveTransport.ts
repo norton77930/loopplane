@@ -32,8 +32,17 @@ export class LiveSessionTransport implements SessionTransport {
     }
   }
 
-  async submit(sessionId: string, prompt: string, _options?: SubmitOptions): Promise<void> {
-    this.send(sessionId, { type: "submit", payload: { prompt } });
+  async submit(sessionId: string, prompt: string, options?: SubmitOptions): Promise<void> {
+    this.send(sessionId, {
+      type: "submit",
+      payload: {
+        prompt,
+        ...(options?.permissionMode
+          ? { permission_mode: options.permissionMode }
+          : {}),
+        ...(options?.uploads?.length ? { uploads: options.uploads } : {}),
+      },
+    });
   }
 
   async answerApproval(

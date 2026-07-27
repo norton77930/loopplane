@@ -41,6 +41,7 @@ class SessionEntry:
     replay_buffer: deque[tuple[int, str]] | None = (
         None  # 058 — None = off (byte-identical)
     )
+    host: LoopPlaneHost | None = None  # 077 — owning routed host for safe projections
 
 
 def frame_sequence(frame: str) -> int | None:
@@ -219,6 +220,7 @@ async def run_session(
                 accepts_media,
                 supports_structured_output,
                 replay_buffer=buf,
+                host=host,
             )
             ready.set()
             await close.wait()

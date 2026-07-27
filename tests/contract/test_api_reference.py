@@ -11,8 +11,11 @@ Parse rule (kept in lock-step with ``docs/api-reference.md``):
 
 from __future__ import annotations
 
+import inspect
 import re
 
+import loopplane.host as host_api
+from loopplane.host import AllowedWorkspaceContextProvider, LoopPlaneHost
 from tests.release_helpers import DOCS, public_packages
 
 API_REFERENCE = DOCS / "api-reference.md"
@@ -38,6 +41,13 @@ def _documented() -> dict[str, set[str]]:
             if bullet:
                 documented[current].add(bullet.group(1))
     return documented
+
+
+def test_capability_host_public_surface_tracks_async_and_provider_contract() -> None:
+    assert "AllowedWorkspaceContextProvider" in host_api.__all__
+    assert AllowedWorkspaceContextProvider is not None
+    assert inspect.iscoroutinefunction(LoopPlaneHost.upsert_managed_mcp)
+    assert inspect.iscoroutinefunction(LoopPlaneHost.delete_managed_mcp)
 
 
 def test_api_reference_documents_every_public_package() -> None:

@@ -8,17 +8,18 @@ the web edge: turning an uploaded image (028, a per-principal blob) into a leadi
 ``ImageBlock`` on the user message the model receives.
 
 ``assemble_blocks`` is that pure seam. It resolves each owned upload reference,
-embeds image uploads as leading ``ImageBlock``s (in reference order, ahead of the
-trailing text prompt), and degrades gracefully — a non-owned/missing reference, an
-image sent to a text-only model, or an oversized image each raise a clear,
-public-safe error the route maps to a normalized ``ErrorResponse`` *before* any
-run starts. Non-image uploads produce no block (they remain ``read_upload``-
-readable, 028). No content-model or event-schema change (ADR D1).
+embeds image uploads as leading ``ImageBlock``s, and emits bounded opaque metadata
+for non-image uploads only when ``read_upload`` is available. A non-owned/missing
+reference, unsupported image, oversized image, or unavailable handoff raises a
+public-safe error *before* any run starts. Image and handoff blocks retain reference
+order within their groups and precede the trailing text prompt. No content-model or
+event-schema change (ADR D1).
 """
 
 from __future__ import annotations
 
 import base64
+import json
 from collections.abc import Sequence
 
 from loopplane.host import ContentBlock, ImageBlock, TextBlock
@@ -27,6 +28,8 @@ from loopplane.webapi.uploads import UploadStore, image_media_type
 # A media size cap at the conversion point (ADR D6), mirroring the upload store's
 # default; bounds the base64 payload that enters the context and the event stream.
 DEFAULT_MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_NON_IMAGE_HANDOFFS = 8
+MAX_UPLOAD_HANDOFF_BYTES = 256
 
 
 class UnknownUpload(ValueError):
@@ -42,6 +45,10 @@ class MediaTooLarge(ValueError):
     """An image upload exceeds the media size cap (ADR D6)."""
 
 
+class UploadHandoffRejected(ValueError):
+    """A non-image reference cannot be handed to ``read_upload`` safely."""
+
+
 def assemble_blocks(
     prompt: str,
     references: Sequence[str],
@@ -49,19 +56,18 @@ def assemble_blocks(
     owner: str,
     *,
     accepts_media: bool,
+    accepts_read_upload: bool = False,
     max_image_bytes: int = DEFAULT_MAX_IMAGE_BYTES,
 ) -> list[ContentBlock]:
-    """Build the user message blocks for a turn that carries upload references.
+    """Build owned image and bounded non-image handoff blocks for one turn.
 
-    Each owned upload that is an image becomes an ``ImageBlock``, in ``references``
-    order, ahead of the trailing ``TextBlock(prompt)``. Non-image uploads produce
-    no block. Raises :class:`UnknownUpload` for a missing/non-owned reference,
-    :class:`MediaNotAccepted` when an image is present but ``accepts_media`` is
-    ``False``, and :class:`MediaTooLarge` when an image exceeds ``max_image_bytes``.
-    Pure (store reads only); starts no run, emits no event.
+    All references are resolved and ownership-checked before blocks are returned.
+    Images become leading ``ImageBlock`` values. Each non-image becomes one compact
+    metadata-only ``TextBlock`` that names the existing ``read_upload`` tool; the
+    web edge never invokes that tool. The original prompt remains the trailing block.
     """
 
-    images: list[ImageBlock] = []
+    resolved: list[tuple[str, bytes, str | None]] = []
     for reference in references:
         info = store.info(reference)
         if info is None or info.owner != owner:
@@ -69,10 +75,25 @@ def assemble_blocks(
         data = store.read(reference)
         if data is None:
             raise UnknownUpload("unknown upload reference")
-        media_type = image_media_type(info.name, data)
+        resolved.append((reference, data, image_media_type(info.name, data)))
+
+    images: list[ImageBlock] = []
+    handoffs: list[TextBlock] = []
+    for reference, data, media_type in resolved:
         if media_type is None:
-            # A non-image upload stays a read_upload-readable attachment (028);
-            # it is never fabricated into an ImageBlock.
+            if not accepts_read_upload or len(handoffs) >= MAX_NON_IMAGE_HANDOFFS:
+                raise UploadHandoffRejected("upload handoff unavailable")
+            encoded = json.dumps(
+                {
+                    "type": "loopplane_upload_reference",
+                    "reference": reference,
+                    "reader": "read_upload",
+                },
+                separators=(",", ":"),
+            )
+            if len(encoded.encode("utf-8")) > MAX_UPLOAD_HANDOFF_BYTES:
+                raise UploadHandoffRejected("upload handoff unavailable")
+            handoffs.append(TextBlock(text=encoded))
             continue
         if not accepts_media:
             raise MediaNotAccepted("selected model does not accept image input")
@@ -82,6 +103,6 @@ def assemble_blocks(
             ImageBlock(media=base64.b64encode(data).decode("ascii"), format=media_type)
         )
 
-    blocks: list[ContentBlock] = list(images)
+    blocks: list[ContentBlock] = [*images, *handoffs]
     blocks.append(TextBlock(text=prompt))
     return blocks

@@ -18,19 +18,31 @@ describe("capability management client", () => {
     };
     const client = new ApiClient({ fetch: fetchFn });
 
+    await client.getCapabilitySettings();
     await client.listMemoryEntries();
+    await client.getMemoryEntry("pref one");
     await client.listManagedSkills();
+    await client.getManagedSkill("writer one");
     await client.listMcpConfigurations();
+    await client.getMcpConfiguration("docs one");
     await client.listWorkspaceContexts();
+    await client.getWorkspaceContext("Docs one");
     await client.listSchedules();
+    await client.getSchedule("daily notes");
     await client.getModelDefault();
 
     expect(requests).toEqual([
+      { url: "/v1/capabilities/settings", method: undefined },
       { url: "/v1/capabilities/memory", method: undefined },
+      { url: "/v1/capabilities/memory/pref%20one", method: undefined },
       { url: "/v1/capabilities/skills", method: undefined },
+      { url: "/v1/capabilities/skills/writer%20one", method: undefined },
       { url: "/v1/capabilities/mcp", method: undefined },
+      { url: "/v1/capabilities/mcp/docs%20one", method: undefined },
       { url: "/v1/capabilities/contexts", method: undefined },
+      { url: "/v1/capabilities/contexts/Docs%20one", method: undefined },
       { url: "/v1/capabilities/schedules", method: undefined },
+      { url: "/v1/capabilities/schedules/daily%20notes", method: undefined },
       { url: "/v1/capabilities/model-default", method: undefined },
     ]);
   });
@@ -95,17 +107,24 @@ describe("capability management client", () => {
       name: "daily-notes",
       description: "refresh notes",
       trigger: "manual",
+      instruction: "refresh documentation notes",
       enabled: true,
     });
     await client.runScheduleNow("daily-notes");
+    await client.enableSchedule("daily-notes");
+    await client.disableSchedule("daily-notes");
     await client.deleteSchedule("daily-notes");
     await client.setModelDefault("fast");
+    await client.clearModelDefault();
 
     expect(requests.map((request) => [request.url, request.method])).toEqual([
       ["/v1/capabilities/schedules", "POST"],
       ["/v1/capabilities/schedules/daily-notes/run-now", "POST"],
+      ["/v1/capabilities/schedules/daily-notes/enable", "POST"],
+      ["/v1/capabilities/schedules/daily-notes/disable", "POST"],
       ["/v1/capabilities/schedules/daily-notes?confirm=true", "DELETE"],
       ["/v1/capabilities/model-default", "POST"],
+      ["/v1/capabilities/model-default", "DELETE"],
     ]);
   });
   it("calls MCP, workspace, and session-context endpoints", async () => {

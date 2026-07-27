@@ -8,12 +8,9 @@ and re-implements no runtime internal (FR-001, FR-060).
 
 from __future__ import annotations
 
-import hashlib
-import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -24,9 +21,16 @@ from loopplane.checkpoint.base import SessionSummary
 from loopplane.controller.controller import RuntimeController
 from loopplane.events.emitter import EventSink
 from loopplane.events.envelope import ApprovalRequestedPayload
+from loopplane.host.agent_controls import (
+    AcceptedRunPosture,
+    AgentControlProjection,
+    build_agent_control_projection,
+    validate_browser_permission_mode,
+)
 from loopplane.host.assembly import AssembledRuntime, assemble
 from loopplane.host.capabilities import (
     CapabilityOperationResult,
+    CapabilitySettingsStatus,
     ManagedMcpConfiguration,
     ManagedMemoryDetail,
     ManagedMemoryEntry,
@@ -50,10 +54,7 @@ from loopplane.host.inspect import (
 )
 from loopplane.host.sink import RunSink
 from loopplane.loop.history import HistoryEntry
-from loopplane.memory import MemoryEntry
 from loopplane.model import ContentBlock, TextBlock
-from loopplane.skills.loader import LoadedSkill, load_skills
-from loopplane.skills.models import Skill
 
 if TYPE_CHECKING:
     from loopplane.context import SwarmSupervisor
@@ -127,10 +128,6 @@ class LoopPlaneHost:
         self._config = config
         self._working_scope = working_scope or Path.cwd()
         self._active = False
-        self._managed_mcp: dict[str, ManagedMcpConfiguration] = {}
-        self._workspace_contexts: dict[str, WorkspaceContext] = {}
-        self._managed_schedules: dict[str, ManagedSchedule] = {}
-        self._model_defaults: dict[str | None, ModelDefault] = {}
         self._session_contexts: dict[str, SessionContextBinding] = {}
         # Swarm (spec 050; ADR 0003): when this host runs a swarm MEMBER, it carries the
         # SHARED supervisor + the member's id so the member's run uses the same in-run
@@ -152,19 +149,28 @@ class LoopPlaneHost:
         principal_id: str | None = None,
         output_schema: dict[str, object] | None = None,
         model: str | None = None,
+        permission_mode: str | None = None,
     ) -> RunOutcome:
         """Start a run and return its outcome (FR-003). ``on_event`` receives
         every normalized event in order (FR-004). ``output_schema`` is an optional
         per-run JSON schema for structured output (spec 045; default None =
         unconstrained)."""
 
+        permission_mode = validate_browser_permission_mode(
+            self._config, permission_mode
+        )
         self._enter_run()
+        try:
+            await self._assembled.capability_manager.activate_principal(principal_id)
+        except BaseException:
+            self._active = False
+            raise
         controller = self._assembled.controller
         sink = self._assembled.sink
         session_id = controller.create_session(
             working_scope=working_scope or self._working_scope,
             principal_id=principal_id,
-            model=model,
+            model=self._effective_model(model, principal_id),
         )
         self._bind(sink, controller, session_id, on_event, on_approval)
         # Worktree isolation (spec 051): a per-session manager from the working scope
@@ -198,6 +204,7 @@ class LoopPlaneHost:
                         session_id,
                         _coerce_blocks(prompt),
                         output_schema=output_schema,
+                        permission_mode=permission_mode,
                         background_supervisor=supervisor,
                         schedule_supervisor=schedule_supervisor,
                         swarm_supervisor=swarm_supervisor,
@@ -215,6 +222,7 @@ class LoopPlaneHost:
                     session_id,
                     _coerce_blocks(prompt),
                     output_schema=output_schema,
+                    permission_mode=permission_mode,
                     worktree_manager=worktree_manager,
                 )
             outcome = _build_outcome(controller, session_id, sink)
@@ -239,17 +247,22 @@ class LoopPlaneHost:
         questions, and cancel — over the Phase-1 controller (US3)."""
 
         self._enter_run()
+        try:
+            await self._assembled.capability_manager.activate_principal(principal_id)
+        except BaseException:
+            self._active = False
+            raise
         controller = self._assembled.controller
         sink = self._assembled.sink
         session_id = controller.create_session(
             working_scope=working_scope or self._working_scope,
             principal_id=principal_id,
-            model=model,
+            model=self._effective_model(model, principal_id),
         )
         controller.attach_reviewer(session_id)
         self._bind(sink, controller, session_id, on_event, on_approval)
         try:
-            yield Session(controller, session_id, sink)
+            yield Session(controller, session_id, sink, self._config)
         finally:
             sink.unbind()
             self._active = False
@@ -261,7 +274,24 @@ class LoopPlaneHost:
         ]
 
     async def resume(self, session_id: str) -> None:
+        summary = next(
+            (
+                item
+                for item in self._assembled.controller.list_sessions()
+                if item.session_id == session_id
+            ),
+            None,
+        )
+        if summary is not None:
+            await self._assembled.capability_manager.activate_principal(
+                summary.principal_id
+            )
         await self._assembled.controller.resume(session_id)
+
+    async def aclose(self) -> None:
+        """Release owner-scoped managed adapters held by this host."""
+
+        await self._assembled.capability_manager.aclose()
 
     async def set_session_title(self, session_id: str, title: str) -> None:
         """Persist a new title for a session (030)."""
@@ -281,6 +311,7 @@ class LoopPlaneHost:
         model: str | None = None,
     ) -> str:
         """Create a new owned fork summary from an existing session point."""
+        await self._assembled.capability_manager.activate_principal(principal_id)
         return await self._assembled.controller.fork_session(
             source_session_id,
             principal_id=principal_id,
@@ -323,6 +354,37 @@ class LoopPlaneHost:
 
         return self._assembled.controller.monthly_spend(principal_id)
 
+    def agent_controls(self, session_id: str) -> AgentControlProjection:
+        """Return an ephemeral safe projection for an existing owned session.
+
+        Ownership remains a WebAPI concern. The controller only returns live memory;
+        it never rebuilds posture from a checkpoint after a host restart.
+        """
+
+        active, settled = self._assembled.controller.agent_control_posture(session_id)
+        active_view = (
+            AcceptedRunPosture(mode=active[0], state="active", plan_active=active[1])
+            if active is not None
+            else None
+        )
+        settled_view = (
+            AcceptedRunPosture(mode=settled[0], state="settled", plan_active=False)
+            if settled is not None
+            else None
+        )
+        read_upload_available = any(
+            descriptor.name == "read_upload"
+            for descriptor in self._assembled.gateway.descriptors()
+        )
+        return build_agent_control_projection(
+            self._config,
+            session_id=session_id,
+            active_run=active_view,
+            last_accepted_run=settled_view,
+            budget=self._assembled.controller.budget_posture(session_id),
+            read_upload_available=read_upload_available,
+        )
+
     def compact_session(self, session_id: str) -> bool:
         """Compact a session's history via the existing compaction seam (065
         ``/compact``); returns whether anything was compacted."""
@@ -362,191 +424,116 @@ class LoopPlaneHost:
 
     # --- 075: capability management foundation ------------------------------
 
-    def list_managed_memory(self) -> tuple[ManagedMemoryEntry, ...]:
-        return tuple(
-            ManagedMemoryEntry(
-                id=info.name,
-                name=info.name,
-                kind=info.type,
-                description=info.description,
-                snippet=info.snippet,
-            )
-            for info in self.inspect_memory()
-        )
+    def capability_settings_status(
+        self, *, principal_id: str | None = None
+    ) -> CapabilitySettingsStatus:
+        return self._assembled.capability_manager.settings_status(principal_id)
+
+    def list_managed_memory(
+        self, *, principal_id: str | None = None
+    ) -> tuple[ManagedMemoryEntry, ...]:
+        return self._assembled.capability_manager.list_memory(principal_id)
 
     def write_managed_memory(
-        self, *, name: str, kind: str, description: str, content: str
+        self,
+        *,
+        name: str,
+        kind: str,
+        description: str,
+        content: str,
+        principal_id: str | None = None,
     ) -> CapabilityOperationResult:
-        store = self._assembled.memory_store
-        if store is None:
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=None,
-                status="unavailable",
-                message="memory management unavailable",
-            )
-        entry = MemoryEntry(
-            type=kind.strip(), name=name.strip(), description=description, body=content
-        )
-        store.write(entry)
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=entry.name,
-            status="available",
-            message="memory saved",
+        return self._assembled.capability_manager.write_memory(
+            principal_id=principal_id,
+            name=name,
+            kind=kind,
+            description=description,
+            content=content,
         )
 
-    def get_managed_memory(self, memory_id: str) -> ManagedMemoryDetail:
-        store = self._assembled.memory_store
-        if store is None:
-            raise KeyError(memory_id)
-        entry = store.get(memory_id)
-        if entry is None:
-            raise KeyError(memory_id)
-        return ManagedMemoryDetail(
-            id=entry.name,
-            name=entry.name,
-            kind=entry.type,
-            description=entry.description,
-            snippet=entry.body[:160],
-            content=entry.body,
-        )
+    def get_managed_memory(
+        self, memory_id: str, *, principal_id: str | None = None
+    ) -> ManagedMemoryDetail:
+        return self._assembled.capability_manager.get_memory(memory_id, principal_id)
 
     def delete_managed_memory(
-        self, memory_id: str, *, confirm: bool
+        self,
+        memory_id: str,
+        *,
+        confirm: bool,
+        principal_id: str | None = None,
     ) -> CapabilityOperationResult:
-        if not confirm:
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=memory_id,
-                status="invalid",
-                message="confirmation required",
-            )
-        store = self._assembled.memory_store
-        if store is None or not store.delete(memory_id):
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=memory_id,
-                status="unavailable",
-                message="memory entry not found",
-            )
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=memory_id,
-            status="deleted",
-            message="memory deleted",
+        return self._assembled.capability_manager.delete_memory(
+            memory_id,
+            principal_id=principal_id,
+            confirm=confirm,
         )
 
-    def list_managed_skills(self) -> tuple[ManagedSkill, ...]:
-        loaded, _problems = self._load_managed_skills()
-        return tuple(
-            ManagedSkill(
-                id=name,
-                name=name,
-                description=loaded_skill.skill.description,
-                source=loaded_skill.source,
-            )
-            for name, loaded_skill in sorted(loaded.items())
-        )
+    def list_managed_skills(
+        self, principal_id: str | None = None
+    ) -> tuple[ManagedSkill, ...]:
+        return self._assembled.capability_manager.list_skills(principal_id)
 
     def write_managed_skill(
-        self, *, name: str, description: str, instructions: str
+        self,
+        *,
+        name: str,
+        description: str,
+        instructions: str,
+        principal_id: str | None = None,
     ) -> CapabilityOperationResult:
-        skill = Skill(
-            name=name.strip(),
+        return self._assembled.capability_manager.write_skill(
+            principal_id=principal_id,
+            name=name,
             description=description,
             instructions=instructions,
         )
-        self._write_managed_skill(skill)
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=skill.name,
-            status="available",
-            message="skill saved",
-        )
 
     def import_managed_skill(
-        self, definition: Mapping[str, object]
+        self,
+        definition: Mapping[str, object],
+        *,
+        principal_id: str | None = None,
     ) -> CapabilityOperationResult:
-        skill = Skill.model_validate(definition)
-        self._write_managed_skill(skill)
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=skill.name,
-            status="available",
-            message="skill imported",
+        return self._assembled.capability_manager.import_skill(
+            definition,
+            principal_id=principal_id,
         )
 
-    def get_managed_skill(self, skill_id: str) -> ManagedSkillDetail:
-        loaded, _problems = self._load_managed_skills()
-        loaded_skill = loaded.get(skill_id)
-        if loaded_skill is None:
-            raise KeyError(skill_id)
-        skill = loaded_skill.skill
-        return ManagedSkillDetail(
-            id=skill.name,
-            name=skill.name,
-            description=skill.description,
-            source=loaded_skill.source,
-            instructions=skill.instructions,
-        )
+    def get_managed_skill(
+        self, skill_id: str, *, principal_id: str | None = None
+    ) -> ManagedSkillDetail:
+        return self._assembled.capability_manager.get_skill(skill_id, principal_id)
 
     def delete_managed_skill(
-        self, skill_id: str, *, confirm: bool
+        self,
+        skill_id: str,
+        *,
+        confirm: bool,
+        principal_id: str | None = None,
     ) -> CapabilityOperationResult:
-        if not confirm:
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=skill_id,
-                status="invalid",
-                message="confirmation required",
-            )
-        path = self._managed_skill_path(skill_id)
-        if path is None or not path.exists():
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=skill_id,
-                status="unavailable",
-                message="skill not found",
-            )
-        path.unlink()
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=skill_id,
-            status="deleted",
-            message="skill deleted",
+        return self._assembled.capability_manager.delete_skill(
+            skill_id,
+            principal_id=principal_id,
+            confirm=confirm,
         )
 
     def list_managed_mcp(
         self, principal_id: str | None = None
     ) -> tuple[ManagedMcpConfiguration, ...]:
-        inspected = {
-            info.name: ManagedMcpConfiguration(
-                id=info.name,
-                name=info.name,
-                status="connected" if info.tools else "unavailable",
-                tool_count=len(info.tools),
-                tools=info.tools,
-            )
-            for info in self.inspect_mcp()
-        }
-        inspected.update(
-            (mcp_id, config)
-            for mcp_id, config in self._managed_mcp.items()
-            if self._visible_to(config.owner_id, principal_id)
-        )
-        return tuple(config for _id, config in sorted(inspected.items()))
+        return self._assembled.capability_manager.list_mcp(principal_id)
+
+    def get_managed_mcp(
+        self, mcp_id: str, *, principal_id: str | None = None
+    ) -> ManagedMcpConfiguration:
+        return self._assembled.capability_manager.get_mcp(mcp_id, principal_id)
 
     def list_workspace_contexts(
         self, principal_id: str | None = None
     ) -> tuple[WorkspaceContext, ...]:
-        return tuple(
-            context
-            for _id, context in sorted(self._workspace_contexts.items())
-            if self._visible_to(context.owner_id, principal_id)
-        )
+        return self._assembled.capability_manager.list_contexts(principal_id)
 
-    def upsert_managed_mcp(
+    async def upsert_managed_mcp(
         self,
         *,
         name: str,
@@ -556,71 +543,30 @@ class LoopPlaneHost:
         args: Sequence[str] = (),
         principal_id: str | None = None,
     ) -> CapabilityOperationResult:
-        del url, command, args
-        mcp_id = name.strip()
-        if not mcp_id or transport not in {"http", "sse", "stdio", "websocket"}:
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=mcp_id or None,
-                status="invalid",
-                message="mcp configuration invalid",
-            )
-        self._managed_mcp[mcp_id] = ManagedMcpConfiguration(
-            id=mcp_id,
-            name=mcp_id,
-            status="disconnected",
-            tool_count=0,
-            owner_id=principal_id,
-        )
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=mcp_id,
-            status="available",
-            message="mcp configuration saved",
+        return await self._assembled.capability_manager.upsert_mcp(
+            name=name,
+            transport=transport,
+            url=url,
+            command=command,
+            args=args,
+            principal_id=principal_id,
         )
 
-    def reconnect_managed_mcp(
+    async def reconnect_managed_mcp(
         self, mcp_id: str, *, principal_id: str | None = None
     ) -> CapabilityOperationResult:
-        config = self._managed_mcp.get(mcp_id)
-        if config is None or not self._visible_to(config.owner_id, principal_id):
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=mcp_id,
-                status="unavailable",
-                message="mcp configuration not found",
-            )
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=mcp_id,
-            status=config.status,
-            message="mcp reconnect requested",
+        return await self._assembled.capability_manager.reconnect_mcp(
+            mcp_id,
+            principal_id=principal_id,
         )
 
-    def delete_managed_mcp(
+    async def delete_managed_mcp(
         self, mcp_id: str, *, confirm: bool, principal_id: str | None = None
     ) -> CapabilityOperationResult:
-        if not confirm:
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=mcp_id,
-                status="invalid",
-                message="confirmation required",
-            )
-        config = self._managed_mcp.get(mcp_id)
-        if config is None or not self._visible_to(config.owner_id, principal_id):
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=mcp_id,
-                status="unavailable",
-                message="mcp configuration not found",
-            )
-        del self._managed_mcp[mcp_id]
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=mcp_id,
-            status="deleted",
-            message="mcp configuration deleted",
+        return await self._assembled.capability_manager.delete_mcp(
+            mcp_id,
+            principal_id=principal_id,
+            confirm=confirm,
         )
 
     def upsert_workspace_context(
@@ -631,89 +577,33 @@ class LoopPlaneHost:
         workspace_label: str,
         principal_id: str | None = None,
     ) -> CapabilityOperationResult:
-        context_id = name.strip()
-        label = workspace_label.strip()
-        if not context_id or not label:
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=context_id or None,
-                status="invalid",
-                message="workspace context invalid",
-            )
-        self._workspace_contexts[context_id] = WorkspaceContext(
-            id=context_id,
-            name=context_id,
+        return self._assembled.capability_manager.upsert_context(
+            name=name,
             description=description,
-            workspace_label=label,
-            owner_id=principal_id,
-        )
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=context_id,
-            status="available",
-            message="workspace context saved",
+            workspace_label=workspace_label,
+            principal_id=principal_id,
         )
 
     def get_workspace_context(
         self, context_id: str, *, principal_id: str | None = None
     ) -> WorkspaceContext:
-        context = self._workspace_contexts.get(context_id)
-        if context is None or not self._visible_to(context.owner_id, principal_id):
-            raise KeyError(context_id)
-        return context
+        return self._assembled.capability_manager.get_context(context_id, principal_id)
 
     def delete_workspace_context(
         self, context_id: str, *, confirm: bool, principal_id: str | None = None
     ) -> CapabilityOperationResult:
-        if not confirm:
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=context_id,
-                status="invalid",
-                message="confirmation required",
-            )
-        context = self._workspace_contexts.get(context_id)
-        if context is None or not self._visible_to(context.owner_id, principal_id):
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=context_id,
-                status="unavailable",
-                message="workspace context not found",
-            )
-        del self._workspace_contexts[context_id]
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=context_id,
-            status="deleted",
-            message="workspace context deleted",
+        return self._assembled.capability_manager.delete_context(
+            context_id,
+            principal_id=principal_id,
+            confirm=confirm,
         )
 
     async def bind_session_context(
         self, session_id: str, context_id: str, *, principal_id: str | None = None
     ) -> SessionContextBinding:
         context = self.get_workspace_context(context_id, principal_id=principal_id)
-        summary = next(
-            (
-                item
-                for item in self._assembled.controller.list_sessions()
-                if item.session_id == session_id
-            ),
-            None,
-        )
-        if summary is None:
-            live = self._assembled.controller._sessions.get(session_id)
-            if live is None or live.principal_id != principal_id:
-                raise KeyError(session_id)
-            if self._assembled.checkpoint_store is not None:
-                await self._assembled.checkpoint_store.create_session_metadata(
-                    session_id,
-                    created_at=live.created_at,
-                    label=live.label,
-                    principal_id=live.principal_id,
-                    model=live.model,
-                )
-        elif summary.principal_id != principal_id:
-            raise KeyError(session_id)
+        if "bind" not in context.actions:
+            raise KeyError(context_id)
         binding = SessionContextBinding(
             session_id=session_id,
             context_id=context.id,
@@ -721,25 +611,21 @@ class LoopPlaneHost:
             workspace_label=context.workspace_label,
             status=context.status,
         )
-        if self._assembled.checkpoint_store is not None:
-            await self._assembled.checkpoint_store.update_session_metadata(
-                session_id,
-                context_id=binding.context_id,
-                context_name=binding.name,
-                context_workspace_label=binding.workspace_label,
-                context_status=binding.status,
-            )
+        await self._assembled.controller.set_session_context(
+            session_id,
+            principal_id=principal_id,
+            context_id=binding.context_id,
+            context_name=binding.name,
+            context_workspace_label=binding.workspace_label,
+            context_status=binding.status,
+        )
         self._session_contexts[session_id] = binding
         return binding
 
     def list_managed_schedules(
         self, principal_id: str | None = None
     ) -> tuple[ManagedSchedule, ...]:
-        return tuple(
-            schedule
-            for _id, schedule in sorted(self._managed_schedules.items())
-            if self._visible_to(schedule.owner_id, principal_id)
-        )
+        return self._assembled.capability_manager.list_schedules(principal_id)
 
     def upsert_managed_schedule(
         self,
@@ -748,91 +634,64 @@ class LoopPlaneHost:
         description: str,
         trigger: str,
         enabled: bool,
+        instruction: str = "",
         principal_id: str | None = None,
     ) -> CapabilityOperationResult:
-        schedule_id = name.strip()
-        normalized_trigger = trigger.strip()
-        if not schedule_id or not normalized_trigger:
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=schedule_id or None,
-                status="invalid",
-                message="schedule invalid",
-            )
-        self._managed_schedules[schedule_id] = ManagedSchedule(
-            id=schedule_id,
-            name=schedule_id,
+        return self._assembled.capability_manager.upsert_schedule(
+            name=name,
             description=description,
-            trigger=normalized_trigger,
+            trigger=trigger,
+            instruction=instruction,
             enabled=enabled,
-            status="enabled" if enabled else "disabled",
-            owner_id=principal_id,
-        )
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=schedule_id,
-            status="enabled" if enabled else "disabled",
-            message="schedule saved",
+            principal_id=principal_id,
         )
 
     def get_managed_schedule(
         self, schedule_id: str, *, principal_id: str | None = None
     ) -> ManagedSchedule:
-        schedule = self._managed_schedules.get(schedule_id)
-        if schedule is None or not self._visible_to(schedule.owner_id, principal_id):
-            raise KeyError(schedule_id)
-        return schedule
+        return self._assembled.capability_manager.get_schedule(
+            schedule_id, principal_id
+        )
+
+    def enable_managed_schedule(
+        self, schedule_id: str, *, principal_id: str | None = None
+    ) -> CapabilityOperationResult:
+        return self._assembled.capability_manager.enable_schedule(
+            schedule_id, principal_id=principal_id
+        )
+
+    def disable_managed_schedule(
+        self, schedule_id: str, *, principal_id: str | None = None
+    ) -> CapabilityOperationResult:
+        return self._assembled.capability_manager.disable_schedule(
+            schedule_id, principal_id=principal_id
+        )
 
     def run_managed_schedule_now(
         self, schedule_id: str, *, principal_id: str | None = None
     ) -> CapabilityOperationResult:
-        schedule = self.get_managed_schedule(schedule_id, principal_id=principal_id)
-        if not schedule.enabled:
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=schedule_id,
-                status="disabled",
-                message="schedule disabled",
-            )
-        self._managed_schedules[schedule_id] = replace(
-            schedule, status="running", last_run_at=datetime.now(UTC)
-        )
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=schedule_id,
-            status="running",
-            message="schedule run requested",
+        return self._assembled.capability_manager.run_schedule_now(
+            schedule_id, principal_id=principal_id
         )
 
     def delete_managed_schedule(
         self, schedule_id: str, *, confirm: bool, principal_id: str | None = None
     ) -> CapabilityOperationResult:
-        if not confirm:
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=schedule_id,
-                status="invalid",
-                message="confirmation required",
-            )
-        schedule = self._managed_schedules.get(schedule_id)
-        if schedule is None or not self._visible_to(schedule.owner_id, principal_id):
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=schedule_id,
-                status="unavailable",
-                message="schedule not found",
-            )
-        del self._managed_schedules[schedule_id]
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=schedule_id,
-            status="deleted",
-            message="schedule deleted",
+        return self._assembled.capability_manager.delete_schedule(
+            schedule_id,
+            principal_id=principal_id,
+            confirm=confirm,
         )
 
-    def model_default(self, principal_id: str | None = None) -> ModelDefault:
-        return self._model_defaults.get(
-            principal_id, ModelDefault(model_id=None, label=None, status="fallback")
+    def model_default(
+        self,
+        principal_id: str | None = None,
+        *,
+        available_models: Mapping[str, str] | None = None,
+    ) -> ModelDefault:
+        return self._assembled.capability_manager.model_default(
+            principal_id,
+            available_models=available_models,
         )
 
     def set_model_default(
@@ -842,29 +701,26 @@ class LoopPlaneHost:
         available_models: Mapping[str, str],
         principal_id: str | None = None,
     ) -> CapabilityOperationResult:
-        if model_id not in available_models:
-            return CapabilityOperationResult(
-                ok=False,
-                resource_id=model_id,
-                status="invalid",
-                message="model unavailable",
-            )
-        self._model_defaults[principal_id] = ModelDefault(
-            model_id=model_id,
-            label=available_models[model_id],
-            status="available",
-            updated_at=datetime.now(UTC),
-        )
-        return CapabilityOperationResult(
-            ok=True,
-            resource_id=model_id,
-            status="available",
-            message="model default saved",
+        return self._assembled.capability_manager.set_model_default(
+            model_id,
+            available_models=available_models,
+            principal_id=principal_id,
         )
 
-    @staticmethod
-    def _visible_to(owner_id: str | None, principal_id: str | None) -> bool:
-        return owner_id is None or owner_id == principal_id
+    def clear_model_default(
+        self, *, principal_id: str | None = None
+    ) -> CapabilityOperationResult:
+        return self._assembled.capability_manager.clear_model_default(
+            principal_id=principal_id
+        )
+
+    def _effective_model(
+        self, model: str | None, principal_id: str | None
+    ) -> str | None:
+        if model is not None:
+            return model
+        default = self._assembled.capability_manager.model_default(principal_id)
+        return default.model_id if default.status == "available" else None
 
     def _overlay_session_context(self, summary: SessionSummary) -> SessionSummary:
         binding = self._session_contexts.get(summary.session_id)
@@ -877,34 +733,6 @@ class LoopPlaneHost:
             context_workspace_label=binding.workspace_label,
             context_status=binding.status,
         )
-
-    def _load_managed_skills(self) -> tuple[dict[str, LoadedSkill], list[str]]:
-        if self._config.skills is None:
-            return {}, []
-        return load_skills(self._config.skills.sources)
-
-    def _write_managed_skill(self, skill: Skill) -> None:
-        source = self._managed_skill_source()
-        if source is None:
-            raise RuntimeError("skill management unavailable")
-        source.mkdir(parents=True, exist_ok=True)
-        path = self._managed_skill_path(skill.name)
-        if path is None:
-            raise RuntimeError("skill management unavailable")
-        path.write_text(skill.model_dump_json(), encoding="utf-8")
-
-    def _managed_skill_source(self) -> Path | None:
-        if self._config.skills is None or not self._config.skills.sources:
-            return None
-        return self._config.skills.sources[-1]
-
-    def _managed_skill_path(self, name: str) -> Path | None:
-        source = self._managed_skill_source()
-        if source is None:
-            return None
-        safe = re.sub(r"[^A-Za-z0-9._-]", "_", name)
-        suffix = hashlib.sha256(name.encode("utf-8")).hexdigest()[:8]
-        return source / f"{safe}-{suffix}.json"
 
     def _enter_run(self) -> None:
         if self._active:
@@ -955,11 +783,16 @@ class Session:
     """A live interactive session handle (US3)."""
 
     def __init__(
-        self, controller: RuntimeController, session_id: str, sink: RunSink
+        self,
+        controller: RuntimeController,
+        session_id: str,
+        sink: RunSink,
+        config: RuntimeConfig,
     ) -> None:
         self._controller = controller
         self._session_id = session_id
         self._sink = sink
+        self._config = config
         self._outcome: RunOutcome | None = None
 
     @property
@@ -967,10 +800,19 @@ class Session:
         return self._session_id
 
     async def submit(
-        self, prompt: Prompt, output_schema: dict[str, object] | None = None
+        self,
+        prompt: Prompt,
+        output_schema: dict[str, object] | None = None,
+        permission_mode: str | None = None,
     ) -> RunOutcome:
+        permission_mode = validate_browser_permission_mode(
+            self._config, permission_mode
+        )
         await self._controller.drive(
-            self._session_id, _coerce_blocks(prompt), output_schema=output_schema
+            self._session_id,
+            _coerce_blocks(prompt),
+            output_schema=output_schema,
+            permission_mode=permission_mode,
         )
         self._outcome = _build_outcome(self._controller, self._session_id, self._sink)
         return self._outcome

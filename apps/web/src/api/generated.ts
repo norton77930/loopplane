@@ -1,4 +1,4 @@
-export const WEB_CONTRACT_VERSION = "075-web-capability-management";
+export const WEB_CONTRACT_VERSION = "077-web-agent-controls";
 
 export interface GeneratedContractArtifact {
   version: typeof WEB_CONTRACT_VERSION;
@@ -79,6 +79,70 @@ export interface GeneratedOpenedSession {
   session_id: string;
 }
 
+export interface GeneratedUploadRef {
+  reference: string;
+}
+
+export interface GeneratedRunRequest {
+  prompt: string;
+  model?: string | null;
+  uploads?: GeneratedUploadRef[];
+  output_schema?: Record<string, unknown> | null;
+  permission_mode?: string | null;
+}
+
+export interface GeneratedPermissionModeOption {
+  id: string;
+  kind: "standard" | "plan";
+  summary: string;
+}
+
+export interface GeneratedAcceptedRunPosture {
+  mode: string;
+  state: "active" | "settled";
+  plan_active: boolean;
+}
+
+export interface GeneratedPermissionPosture {
+  default_mode: string | null;
+  selectable_modes: GeneratedPermissionModeOption[];
+  selection_scope: "run";
+  rules_configured: boolean;
+  rule_default: "allow" | "ask" | "deny" | null;
+  rule_decisions: Array<"allow" | "ask" | "deny">;
+  plan_entry_available: boolean;
+  plan_exit_requires_approval: boolean;
+  active_run: GeneratedAcceptedRunPosture | null;
+  last_accepted_run: GeneratedAcceptedRunPosture | null;
+}
+
+export interface GeneratedBudgetGuardPosture {
+  tracking: "available" | "unavailable" | "unknown";
+  pricing: "priced" | "partially_unpriced" | "unpriced" | "unknown";
+  message_guard: "enabled" | "disabled" | "unknown";
+  session_guard: "disabled" | "within" | "near" | "exceeded" | "unknown";
+  monthly_guard: "disabled" | "within" | "near" | "exceeded" | "unknown";
+  pre_turn_guard: "enabled" | "disabled" | "unknown";
+}
+
+export interface GeneratedAgentControlProjection {
+  session_id: string;
+  permission: GeneratedPermissionPosture;
+  budget: GeneratedBudgetGuardPosture;
+  actions: string[];
+}
+
+export interface GeneratedSessionCostView {
+  session_id: string;
+  usd_spent: string | null;
+}
+
+export interface GeneratedMonthlyCostView {
+  principal_id: string;
+  month: string;
+  usd_spent: string | null;
+}
+
 export interface GeneratedSessionSummary {
   session_id: string;
   label: string | null;
@@ -148,62 +212,88 @@ export interface GeneratedCapabilityOperationResult {
   message: string;
 }
 
-export interface GeneratedMemoryCapability {
+export type GeneratedCapabilityScope = "owned" | "shared_read_only";
+
+export type GeneratedCapabilityAction =
+  | "open"
+  | "create"
+  | "update"
+  | "delete"
+  | "import"
+  | "reconnect"
+  | "bind"
+  | "enable"
+  | "disable"
+  | "run_now"
+  | "set"
+  | "clear";
+
+export interface GeneratedCapabilityMetadata {
+  scope: GeneratedCapabilityScope;
+  actions: GeneratedCapabilityAction[];
+  problem?: string | null;
+  updated_at?: string | null;
+}
+
+export interface GeneratedMemoryCapability extends GeneratedCapabilityMetadata {
   id: string;
   name: string;
   kind: string;
   description: string;
   snippet: string;
   status: string;
-  updated_at?: string | null;
 }
 
-export interface GeneratedManagedSkill {
+export interface GeneratedManagedSkill extends GeneratedCapabilityMetadata {
   id: string;
   name: string;
   description: string;
   source: string;
   status: string;
-  problem?: string | null;
-  updated_at?: string | null;
 }
 
-export interface GeneratedMcpConfiguration {
+export interface GeneratedMcpConfiguration extends GeneratedCapabilityMetadata {
   id: string;
   name: string;
   status: string;
   tool_count: number;
+  transport: "http" | "sse" | "websocket" | null;
+  url: string | null;
   tools: string[];
-  problem?: string | null;
-  updated_at?: string | null;
 }
 
-export interface GeneratedWorkspaceContext {
+export interface GeneratedWorkspaceContext extends GeneratedCapabilityMetadata {
   id: string;
   name: string;
   description: string;
   workspace_label: string;
   status: string;
-  updated_at?: string | null;
 }
 
-export interface GeneratedManagedSchedule {
+export interface GeneratedManagedSchedule extends GeneratedCapabilityMetadata {
   id: string;
   name: string;
   description: string;
   trigger: string;
+  instruction: string;
   enabled: boolean;
   status: string;
   next_run_at?: string | null;
   last_run_at?: string | null;
-  problem?: string | null;
 }
 
-export interface GeneratedModelDefault {
+export interface GeneratedModelDefault extends GeneratedCapabilityMetadata {
   model_id: string | null;
   label: string | null;
   status: string;
-  updated_at?: string | null;
+}
+
+export interface GeneratedCapabilitySettingsStatus {
+  storage_available: boolean;
+  mutations_enabled: boolean;
+  runtime_activation_enabled: boolean;
+  mcp_endpoint_policy_available: boolean;
+  schedule_runner_available: boolean;
 }
 
 export const generatedApiResponseFixtures = {
@@ -240,6 +330,55 @@ export const generatedApiResponseFixtures = {
   live_ticket: GeneratedLiveTicketView;
 };
 
+export const generatedAgentControlFixtures = {
+  run_request: {
+    prompt: "Plan the change",
+    uploads: [{ reference: "upload://opaque" }],
+    permission_mode: "plan",
+  },
+  projection: {
+    session_id: "session-1",
+    permission: {
+      default_mode: null,
+      selectable_modes: [
+        { id: "plan", kind: "plan", summary: "permission.mode.plan" },
+      ],
+      selection_scope: "run",
+      rules_configured: false,
+      rule_default: null,
+      rule_decisions: [],
+      plan_entry_available: true,
+      plan_exit_requires_approval: true,
+      active_run: null,
+      last_accepted_run: {
+        mode: "plan",
+        state: "settled",
+        plan_active: false,
+      },
+    },
+    budget: {
+      tracking: "unknown",
+      pricing: "unknown",
+      message_guard: "unknown",
+      session_guard: "unknown",
+      monthly_guard: "unknown",
+      pre_turn_guard: "unknown",
+    },
+    actions: ["select_permission_mode"],
+  },
+  session_cost: { session_id: "session-1", usd_spent: "0" },
+  monthly_cost: {
+    principal_id: "principal-1",
+    month: "2026-07",
+    usd_spent: null,
+  },
+} as const satisfies {
+  run_request: GeneratedRunRequest;
+  projection: GeneratedAgentControlProjection;
+  session_cost: GeneratedSessionCostView;
+  monthly_cost: GeneratedMonthlyCostView;
+};
+
 export const generatedCapabilityFixtures = {
   memory: {
     id: "pref",
@@ -248,6 +387,9 @@ export const generatedCapabilityFixtures = {
     description: "editor preference",
     snippet: "likes tabs",
     status: "available",
+    scope: "owned",
+    actions: ["open", "update", "delete"],
+    problem: null,
     updated_at: null,
   },
   skill: {
@@ -256,6 +398,8 @@ export const generatedCapabilityFixtures = {
     description: "writes notes",
     source: "managed",
     status: "available",
+    scope: "owned",
+    actions: ["open", "update", "delete"],
     problem: null,
     updated_at: null,
   },
@@ -264,7 +408,11 @@ export const generatedCapabilityFixtures = {
     name: "docs",
     status: "disconnected",
     tool_count: 0,
+    transport: "http",
+    url: "https://mcp.example.invalid",
     tools: [],
+    scope: "owned",
+    actions: ["open", "update", "reconnect", "delete"],
     problem: null,
     updated_at: null,
   },
@@ -274,6 +422,9 @@ export const generatedCapabilityFixtures = {
     description: "documentation workspace",
     workspace_label: "docs-repo",
     status: "available",
+    scope: "owned",
+    actions: ["open", "update", "bind", "delete"],
+    problem: null,
     updated_at: null,
   },
   schedule: {
@@ -281,8 +432,11 @@ export const generatedCapabilityFixtures = {
     name: "daily-notes",
     description: "refresh notes",
     trigger: "manual",
+    instruction: "refresh documentation notes",
     enabled: true,
     status: "enabled",
+    scope: "owned",
+    actions: ["open", "update", "disable", "run_now", "delete"],
     next_run_at: null,
     last_run_at: null,
     problem: null,
@@ -291,6 +445,9 @@ export const generatedCapabilityFixtures = {
     model_id: "model-a",
     label: "Model A",
     status: "available",
+    scope: "owned",
+    actions: ["set", "clear"],
+    problem: null,
     updated_at: null,
   },
   result: {
@@ -298,6 +455,13 @@ export const generatedCapabilityFixtures = {
     resource_id: "pref",
     status: "available",
     message: "saved",
+  },
+  settings: {
+    storage_available: true,
+    mutations_enabled: true,
+    runtime_activation_enabled: true,
+    mcp_endpoint_policy_available: true,
+    schedule_runner_available: true,
   },
 } as const satisfies {
   memory: GeneratedMemoryCapability;
@@ -307,6 +471,7 @@ export const generatedCapabilityFixtures = {
   schedule: GeneratedManagedSchedule;
   model_default: GeneratedModelDefault;
   result: GeneratedCapabilityOperationResult;
+  settings: GeneratedCapabilitySettingsStatus;
 };
 
 export const generatedSessionEventFixtures = {

@@ -6,21 +6,24 @@ Semantic Versioning.
 
 ## [Unreleased]
 
-Twelve additive units (064–075) extending the v0.4.0 platform line toward cost
-transparency, richer host UX, document-capable model content, platform hardening, and web
-parity. The cost-governance arc gains **queryable spend** (064) and a **pre-turn
-predictive cost guard** (068); host UX gains **backend-semantic slash commands** (065) and
-**named permission modes** (066); the content model gains **document / PDF input** (069)
-and Gemini **thought-signature round-trip** (070); the platform line gains **JWKS refresh
-hardening** (067), a **durable event replay store** (071), and **per-tenant platform
-fairness** (072); a **code-review remediation** pass hardened CI and public-safety seams
-(073); and the web app reaches **live-channel parity** (074) and **first-class capability
-management** (075). Every unit is additive and default-off where configurable; the runtime
-core and the event schema are unchanged (no `SCHEMA_VERSION` bump), and the only
-content-model changes are the additive extensions recorded in ADR 0011. Four ADRs recorded
-the boundary decisions: **0011** (DocumentBlock content model, units 069–070), **0012**
-(durable event replay store), **0013** (platform fairness), **0014** (pre-turn cost
-guard).
+Sixteen additive, presentation, and remediation units (064–077 plus 080–081) extend the
+v0.4.0 platform line toward cost transparency, richer host UX, document-capable model
+content, platform hardening, and web parity. The cost-governance arc gains **queryable
+spend** (064) and a **pre-turn predictive cost guard** (068); host UX gains
+**backend-semantic slash commands** (065) and **named permission modes** (066); the content
+model gains **document / PDF input** (069) and Gemini **thought-signature round-trip**
+(070); the platform line gains **JWKS refresh hardening** (067), a **durable event replay
+store** (071), and **per-tenant platform fairness** (072); a **code-review remediation**
+pass hardened CI and public-safety seams (073); and the web app reaches **live-channel
+parity** (074), **first-class capability management** (075), durable/principal-safe
+capability settings (076), host-owned Web Agent Controls (077), an accessible responsive
+presentation refactor (080), and a security-focused delivery remediation (081). Every
+configurable runtime addition remains
+default-off; the runtime core and the event schema are unchanged (no `SCHEMA_VERSION`
+bump), and the only content-model changes are the additive extensions recorded in ADR
+0011. Four ADRs recorded the boundary decisions: **0011** (DocumentBlock content model,
+units 069–070), **0012** (durable event replay store), **0013** (platform fairness),
+**0014** (pre-turn cost guard).
 
 ### Added
 
@@ -78,6 +81,31 @@ guard).
   projects / workspaces, schedules, and model defaults from the web UI over new
   owner-scoped `/v1/capabilities/*` routes, extending the 027 read-only inspection into a
   read-write settings surface; the browser still never collects provider credentials.
+- **076** Web capability management hardening (`loopplane.host`, `loopplane.webapi`,
+  `apps/web`) — durable hashed owner-scoped capability state, shared read-only host
+  capabilities, principal-safe runtime activation, managed MCP reconnect, independent
+  bilingual Settings, catalog-only model defaults, a host mutation gate, and public-safe
+  failures, while preserving the existing Gateway/Event Bus/checkpoint contracts.
+- **077** Web Agent Controls (`loopplane.host`, `loopplane.webapi`, `loopplane.governance`,
+  `loopplane.budget`, `apps/web`) — adds an owner-scoped safe execution-posture projection,
+  optional host-approved one-run permission selection, mutable plan-state reporting through the
+  existing approval path, authoritative exact session/monthly cost and enum-only budget posture,
+  structured bounded non-image upload handoff, metadata-only context/artifact references, and
+  deterministic localized follow-up suggestions with zero hidden work. Browser defaults remain
+  read-only/empty, `bypassPermissions` is never selectable, explicit deny remains authoritative,
+  and Event Bus/checkpoint/Gateway/persistence/default/dependency contracts are unchanged.
+- **080** Web frontend visual refactor (`apps/web`) — presentation-only responsive
+  conversation shell, full-page modular Settings, adaptive inspection, local accessible
+  icons, bilingual chrome, and keyboard/focus/live-region, high-zoom, forced-color, and
+  reduced-motion hardening without backend, dependency, public-contract, or default
+  changes.
+- **081** Web capability delivery remediation (`loopplane.host`, `loopplane.webapi`,
+  `apps/web`) — rejects structurally unsafe browser-managed MCP endpoints before
+  persistence, retires stale principal-scoped adapters through existing lease-safe Gateway
+  primitives, adds an optional default-`None` principal-aware allowed-context provider,
+  exposes action-driven safe shared details, and removes the legacy mutable Settings
+  surface. The maintainer-approved public host MCP upsert/delete methods are now async;
+  HTTP routes and JSON envelopes remain unchanged.
 
 ## [0.4.0] - 2026-06-21
 

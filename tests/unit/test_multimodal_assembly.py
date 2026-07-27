@@ -10,6 +10,7 @@ offline.
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from loopplane.webapi.multimodal import (
     MediaNotAccepted,
     MediaTooLarge,
     UnknownUpload,
+    UploadHandoffRejected,
     assemble_blocks,
 )
 from loopplane.webapi.uploads import UploadStore, image_media_type
@@ -90,7 +92,9 @@ def test_image_becomes_leading_image_block(tmp_path: Path) -> None:
     assert text.text == "what is this?"
 
 
-def test_non_image_upload_yields_no_block(tmp_path: Path) -> None:
+def test_non_image_upload_yields_bounded_exact_metadata_after_owner_check(
+    tmp_path: Path,
+) -> None:
     store = UploadStore(tmp_path)
     stored = store.save("alice", "notes.txt", b"plain text body")
 
@@ -100,11 +104,20 @@ def test_non_image_upload_yields_no_block(tmp_path: Path) -> None:
         store,
         "alice",
         accepts_media=True,
+        accepts_read_upload=True,
         max_image_bytes=1_000_000,
     )
 
-    # Only the text prompt — the non-image upload stays read_upload-readable (028).
-    assert blocks == [TextBlock(text="read it")]
+    assert len(blocks) == 2
+    handoff, prompt = blocks
+    assert isinstance(handoff, TextBlock)
+    assert json.loads(handoff.text) == {
+        "type": "loopplane_upload_reference",
+        "reference": stored.reference,
+        "reader": "read_upload",
+    }
+    assert len(handoff.text.encode("utf-8")) <= 256
+    assert prompt == TextBlock(text="read it")
 
 
 def test_multiple_images_keep_order_ahead_of_text(tmp_path: Path) -> None:
@@ -119,12 +132,20 @@ def test_multiple_images_keep_order_ahead_of_text(tmp_path: Path) -> None:
         store,
         "alice",
         accepts_media=True,
+        accepts_read_upload=True,
         max_image_bytes=1_000_000,
     )
 
-    assert [type(b_) for b_ in blocks] == [ImageBlock, ImageBlock, TextBlock]
+    assert [type(b_) for b_ in blocks] == [
+        ImageBlock,
+        ImageBlock,
+        TextBlock,
+        TextBlock,
+    ]
     assert isinstance(blocks[0], ImageBlock) and blocks[0].format == "image/png"
     assert isinstance(blocks[1], ImageBlock) and blocks[1].format == "image/jpeg"
+    assert isinstance(blocks[2], TextBlock)
+    assert json.loads(blocks[2].text)["reference"] == txt.reference
 
 
 def test_unknown_reference_raises(tmp_path: Path) -> None:
@@ -164,19 +185,39 @@ def test_image_to_text_only_model_raises(tmp_path: Path) -> None:
         )
 
 
-def test_non_image_to_text_only_model_is_fine(tmp_path: Path) -> None:
-    # A non-image upload does not trip capability negotiation.
+def test_non_image_requires_read_upload_availability(tmp_path: Path) -> None:
     store = UploadStore(tmp_path)
     stored = store.save("alice", "notes.txt", b"text")
-    blocks = assemble_blocks(
-        "x",
-        [stored.reference],
-        store,
-        "alice",
-        accepts_media=False,
-        max_image_bytes=1_000_000,
-    )
-    assert blocks == [TextBlock(text="x")]
+
+    with pytest.raises(UploadHandoffRejected, match="upload handoff unavailable"):
+        assemble_blocks(
+            "x",
+            [stored.reference],
+            store,
+            "alice",
+            accepts_media=False,
+            accepts_read_upload=False,
+            max_image_bytes=1_000_000,
+        )
+
+
+def test_non_image_handoff_is_limited_to_eight_items(tmp_path: Path) -> None:
+    store = UploadStore(tmp_path)
+    references = [
+        store.save("alice", f"notes-{index}.txt", b"text").reference
+        for index in range(9)
+    ]
+
+    with pytest.raises(UploadHandoffRejected, match="upload handoff unavailable"):
+        assemble_blocks(
+            "x",
+            references,
+            store,
+            "alice",
+            accepts_media=False,
+            accepts_read_upload=True,
+            max_image_bytes=1_000_000,
+        )
 
 
 def test_oversized_image_raises(tmp_path: Path) -> None:

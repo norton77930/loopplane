@@ -44,4 +44,23 @@ describe("i18n", () => {
     );
     expect(screen.getByTestId("locale").textContent).toBe("zh-TW"); // restored from storage
   });
+
+  it("synchronizes the document language with the selected locale", () => {
+    function Probe() {
+      const { setLocale } = useTranslation();
+      return (
+        <button type="button" onClick={() => setLocale("zh-TW")}>switch language</button>
+      );
+    }
+
+    render(
+      <I18nProvider>
+        <Probe />
+      </I18nProvider>,
+    );
+    expect(document.documentElement.lang).toBe("en");
+
+    fireEvent.click(screen.getByRole("button", { name: "switch language" }));
+    expect(document.documentElement.lang).toBe("zh-TW");
+  });
 });

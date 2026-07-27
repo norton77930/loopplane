@@ -188,6 +188,36 @@ async def test_fail_open_on_a_ledger_outage(tmp_path: Path) -> None:
     assert not any("alice" in repr(e.payload) for e in events)
 
 
+async def test_monthly_posture_stays_unknown_after_an_unrecorded_turn() -> None:
+    class _FlappingLedger:
+        def __init__(self) -> None:
+            self.fail = True
+            self.total = Decimal(0)
+
+        async def add(self, principal_id: str, month: str, usd: Decimal) -> Decimal:
+            if self.fail:
+                self.fail = False
+                raise RuntimeError("ledger down")
+            self.total += usd
+            return self.total
+
+        def get(self, principal_id: str, month: str) -> Decimal:
+            return self.total
+
+    ledger = _FlappingLedger()
+    checker = _checker(ledger, principal_id="alice", cap=Decimal("1"))
+
+    await checker.record_turn(_usage(1000, 1000))
+    assert checker.guard_posture().tracking == "unavailable"
+    assert checker.guard_posture().monthly_guard == "unknown"
+
+    await checker.record_turn(_usage(1000, 1000))
+    assert checker.guard_posture().tracking == "unavailable"
+    assert checker.guard_posture().monthly_guard == "unknown"
+    assert "alice" not in repr(checker.guard_posture())
+    assert _MONTH not in repr(checker.guard_posture())
+
+
 async def test_default_off_no_monthly_dim_is_byte_identical(tmp_path: Path) -> None:
     # A checker with no ledger / principal / monthly cap behaves like 055.
     checker = BudgetChecker(caps=UsdBudgetCaps(), pricing=_table(), model_id=_MODEL)

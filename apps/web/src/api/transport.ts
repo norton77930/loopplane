@@ -10,6 +10,8 @@ export type TransportStatus =
 
 export interface SubmitOptions {
   model?: string;
+  permissionMode?: string;
+  uploads?: Array<{ reference: string }>;
 }
 
 export interface SessionTransport {

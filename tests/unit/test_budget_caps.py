@@ -264,6 +264,51 @@ async def test_budget_checker_accumulates_and_detects_crossing() -> None:
     assert checker.spent == Decimal(0)
 
 
+async def test_budget_posture_reports_priced_guard_states_without_values() -> None:
+    checker = BudgetChecker(
+        caps=UsdBudgetCaps(
+            per_message_usd=Decimal("1"),
+            per_session_usd=Decimal("0.01"),
+        ),
+        pricing=_table(input_rate="0.001", output_rate="0"),
+        model_id=_MODEL,
+        pre_turn_max_output_tokens=10,
+    )
+
+    initial = checker.guard_posture()
+    assert initial.tracking == "available"
+    assert initial.pricing == "priced"
+    assert initial.message_guard == "enabled"
+    assert initial.session_guard == "within"
+    assert initial.monthly_guard == "disabled"
+    assert initial.pre_turn_guard == "enabled"
+
+    await checker.record_turn(_usage(8, 0))
+    assert checker.guard_posture().session_guard == "near"
+    await checker.record_turn(_usage(3, 0))
+    assert checker.guard_posture().session_guard == "exceeded"
+    assert "0.01" not in repr(checker.guard_posture())
+    assert _MODEL not in repr(checker.guard_posture())
+
+
+async def test_budget_posture_keeps_partial_pricing_history_ephemeral() -> None:
+    rates = {_MODEL: PricingRate(input_rate=Decimal("0.001"), output_rate=Decimal("0"))}
+    checker = BudgetChecker(
+        caps=UsdBudgetCaps(per_session_usd=Decimal("1")),
+        pricing=PricingTable(rates=rates),
+        model_id=_MODEL,
+    )
+
+    await checker.record_turn(_usage(1, 0))
+    rates.pop(_MODEL)
+    await checker.record_turn(_usage(1, 0))
+    rates[_MODEL] = PricingRate(input_rate=Decimal("0.001"), output_rate=Decimal("0"))
+
+    posture = checker.guard_posture()
+    assert posture.pricing == "partially_unpriced"
+    assert posture.session_guard == "unknown"
+
+
 async def test_budget_checker_unpriced_is_fail_soft() -> None:
     table = PricingTable(
         rates={

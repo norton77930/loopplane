@@ -16,7 +16,7 @@ from decimal import Decimal
 
 import anyio.lowlevel
 
-from loopplane.budget import BudgetChecker
+from loopplane.budget import BudgetChecker, BudgetPostureSnapshot
 from loopplane.context import RunContext
 from loopplane.events.emitter import EventEmitter
 from loopplane.fairness import PlatformFairnessGate
@@ -111,6 +111,12 @@ class AgentLoop:
             return None
         return self._budget_checker.session_spent
 
+    def current_budget_posture(self) -> BudgetPostureSnapshot:
+        """Enum-only diagnostics; absent accounting remains explicitly unknown."""
+        if self._budget_checker is None:
+            return BudgetPostureSnapshot()
+        return self._budget_checker.guard_posture()
+
     async def run(
         self, input_blocks: Sequence[ContentBlock], context: RunContext
     ) -> None:
@@ -165,7 +171,11 @@ class AgentLoop:
             retried_after_overflow = False
             while True:
                 before = self._history.snapshot()
-                request = self._assemble(prompt, context.output_schema)
+                request = self._assemble(
+                    prompt,
+                    context.output_schema,
+                    context.principal_id,
+                )
                 # Proactive compaction (spec 041) happens inside the synchronous
                 # `assemble`; if a summarizer is configured and a compaction just
                 # occurred, augment the fresh marker with a model summary and
@@ -176,7 +186,11 @@ class AgentLoop:
                     and self._assembler.take_compacted()
                 ):
                     await self._summarize_compaction(before)
-                    request = self._assemble(prompt, context.output_schema)
+                    request = self._assemble(
+                        prompt,
+                        context.output_schema,
+                        context.principal_id,
+                    )
                 if (
                     self._budget_checker is not None
                     and self._budget_checker.pre_turn_enabled()
@@ -273,9 +287,12 @@ class AgentLoop:
             turn_index += 1
 
     def _assemble(
-        self, prompt: str, output_schema: dict[str, object] | None = None
+        self,
+        prompt: str,
+        output_schema: dict[str, object] | None = None,
+        principal_id: str | None = None,
     ) -> ModelRequest:
-        tools = self._gateway.descriptors()
+        tools = self._gateway.descriptors(principal_id)
         if self._assembler is None:
             return ModelRequest(
                 context=[
@@ -384,7 +401,10 @@ class AgentLoop:
     async def _execute_calls(
         self, calls: Sequence[ToolCallRequest], context: RunContext
     ) -> list[ToolResultBlock]:
-        safe, sequential = partition_calls(calls, self._gateway.is_concurrency_safe)
+        safe, sequential = partition_calls(
+            calls,
+            lambda name: self._gateway.is_concurrency_safe(name, context.principal_id),
+        )
         outcomes: dict[str, ToolResultBlock] = {}
         for result in await self._gateway.execute_batch(
             safe, parallel=True, context=context, emitter=self._emitter

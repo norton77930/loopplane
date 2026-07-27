@@ -3,10 +3,17 @@
 // by serialize_event. Only the fields the UI renders are typed.
 
 import type {
+  GeneratedAcceptedRunPosture,
+  GeneratedAgentControlProjection,
   GeneratedApprovalPayload,
+  GeneratedBudgetGuardPosture,
   GeneratedBulkDeleteRequest,
   GeneratedBulkDeleteResult,
+  GeneratedCapabilityAction,
+  GeneratedCapabilityMetadata,
   GeneratedCapabilityOperationResult,
+  GeneratedCapabilityScope,
+  GeneratedCapabilitySettingsStatus,
   GeneratedForkSessionRequest,
   GeneratedLiveClientMessage,
   GeneratedLiveServerMessage,
@@ -16,13 +23,17 @@ import type {
   GeneratedMcpConfiguration,
   GeneratedMemoryCapability,
   GeneratedModelDefault,
+  GeneratedMonthlyCostView,
   GeneratedOpenedSession,
   GeneratedOutputPayload,
+  GeneratedPermissionModeOption,
+  GeneratedPermissionPosture,
   GeneratedQuestion,
   GeneratedQuestionPayload,
   GeneratedRawEvent,
   GeneratedReasoningPayload,
   GeneratedWorkspaceContext,
+  GeneratedSessionCostView,
   GeneratedSessionSummary,
   GeneratedTerminatedPayload,
   GeneratedTokenUsage,
@@ -121,8 +132,34 @@ export interface UploadResult {
   name: string;
 }
 
+export type PermissionModeOption = GeneratedPermissionModeOption;
+
+export type AcceptedRunPosture = GeneratedAcceptedRunPosture;
+
+export type PermissionPosture = GeneratedPermissionPosture;
+
+export type BudgetGuardPosture = GeneratedBudgetGuardPosture;
+
+export type AgentControlProjection = GeneratedAgentControlProjection;
+
+export type SessionCostView = GeneratedSessionCostView;
+
+export type MonthlyCostView = GeneratedMonthlyCostView;
+
 // 075 — capability management foundation views.
+export type CapabilityScope = GeneratedCapabilityScope;
+
+export type CapabilityAction = GeneratedCapabilityAction;
+
+export type CapabilityMetadata = GeneratedCapabilityMetadata;
+
+export type CapabilitySettingsStatus = GeneratedCapabilitySettingsStatus;
+
 export type MemoryCapability = GeneratedMemoryCapability;
+
+export type MemoryCapabilityDetail = MemoryCapability & {
+  content: string;
+};
 
 export type CapabilityOperationResult = GeneratedCapabilityOperationResult;
 
@@ -139,6 +176,10 @@ export interface MemoryMutationResponse {
 }
 
 export type ManagedSkill = GeneratedManagedSkill;
+
+export type ManagedSkillDetail = ManagedSkill & {
+  instructions: string;
+};
 
 export interface SkillWriteRequest {
   name: string;
@@ -194,6 +235,7 @@ export interface ScheduleWriteRequest {
   description: string;
   trigger: string;
   enabled: boolean;
+  instruction?: string;
 }
 
 export interface ScheduleMutationResponse {

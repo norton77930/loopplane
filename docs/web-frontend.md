@@ -121,10 +121,25 @@ compose existing layers; no tool is executed and no state is mutated.
 
 Unit 028 adds, additively in the composer: a **model selector** (`ModelSelector`, lists
 `GET /v1/models` and binds the session's model — one model per run, routed in the web/API layer)
-and **file attachments** (`Attachments`, upload via `POST /v1/uploads` with a per-file status; the
-references are appended to the prompt so the agent reads them on demand via the `read_upload` Tool
-Gateway tool). Files are transient input by id — never embedded into the content model. No backend
-ADR; the runtime keeps one model per run and the content model is unchanged.
+and **file attachments** (`Attachments`, upload via `POST /v1/uploads` with a per-file status).
+Unit 077 replaces the former prompt-concatenation handoff with the existing structured `uploads`
+request field. Images still enter through the multimodal content seam; non-image references become
+bounded opaque metadata only after owner validation and only when the host projects `read_upload` as
+available. The browser never reads raw upload content, and actual tool invocation remains exclusively
+Gateway-routed. Files remain transient input by id; no binary durability or cross-principal sharing is added.
+
+## Agent Controls (unit 077)
+
+Settings now includes a first-level **Agent Controls** category backed by the owner-scoped
+`GET /v1/sessions/{session_id}/agent-controls` projection. It presents host-approved one-run
+permission choices (never `bypassPermissions`), authoritative non-durable active/last posture,
+existing plan-exit approval state, exact session/monthly spend, enum-only budget/tracking posture,
+current/bindable workspace context metadata, and safe upload/artifact references. Missing,
+unpriced, partially priced, and unavailable values remain distinct; `null` is never shown as `$0`.
+Permission drafts, reference attachment, and localized follow-up suggestions only update editable
+client state until an explicit send. Suggestions are derived from visible state with zero network,
+model, tool, or automatic-send effects. Existing deny-wins, approval ordering, Tool Gateway,
+Event Bus, checkpoint, persistence, and defaults remain authoritative.
 
 ## Parity extras (unit 029)
 

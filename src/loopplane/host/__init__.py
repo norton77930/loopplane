@@ -18,8 +18,10 @@ from loopplane.fairness import (
     PlatformFairnessRejected,
 )
 from loopplane.host.assembly import AssembledRuntime, assemble
+from loopplane.host.capabilities import AllowedWorkspaceContextProvider
 from loopplane.host.config import (
     ApprovalPolicy,
+    CapabilityManagementConfig,
     ConfigError,
     MemoryConfig,
     RuntimeConfig,
@@ -39,9 +41,11 @@ from loopplane.host.host import (
 from loopplane.model import ContentBlock, DocumentBlock, ImageBlock, TextBlock
 
 __all__ = [
+    "AllowedWorkspaceContextProvider",
     "ApprovalDecision",
     "ApprovalPolicy",
     "AssembledRuntime",
+    "CapabilityManagementConfig",
     "ConfigError",
     "ContentBlock",
     "DocumentBlock",

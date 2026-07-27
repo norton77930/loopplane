@@ -22,9 +22,26 @@ gateway stage, no event/schema change. Public-safe (plain tool-name rules).
 
 from __future__ import annotations
 
-from loopplane.governance.rule_dsl import PermissionRuleSet, PermissionRuleSpec
+from typing import TYPE_CHECKING
 
-__all__ = ["PERMISSION_MODES", "permission_mode_ruleset"]
+from loopplane.governance.base import allow, deny
+from loopplane.governance.rule_dsl import (
+    PermissionRuleSet,
+    PermissionRuleSpec,
+    rule_dsl_policy,
+)
+
+if TYPE_CHECKING:
+    from loopplane.approval import PolicyDecider, PolicyVerdict
+    from loopplane.context import RunContext
+    from loopplane.events.emitter import EventEmitter
+    from loopplane.model import ToolCallRequest, ToolDescriptor
+
+__all__ = [
+    "PERMISSION_MODES",
+    "per_run_permission_mode_policy",
+    "permission_mode_ruleset",
+]
 
 PERMISSION_MODES: tuple[str, ...] = (
     "acceptEdits",
@@ -67,3 +84,43 @@ def permission_mode_ruleset(
         default = "allow" if base.default == "ask" else base.default
         return PermissionRuleSet(rules=rewritten, default=default)
     raise ValueError(f"unknown permission mode: {mode!r}")
+
+
+def per_run_permission_mode_policy(allowed_modes: tuple[str, ...]) -> PolicyDecider:
+    """Return the existing-decider overlay for a host-approved run selection.
+
+    The browser input is rechecked defensively at the Gateway decide seam.  This
+    policy does not replace any configured rule/approval/network/plan policy: assembly
+    composes it through the existing deny-wins combinator, so an explicit or safety
+    denial still wins.  ``bypassPermissions`` is deliberately invalid even if an
+    embedding host incorrectly supplies it here.
+    """
+
+    allowed = frozenset(allowed_modes) - {"bypassPermissions"}
+    policies = {
+        mode: rule_dsl_policy(rules)
+        for mode in allowed
+        if mode != "plan"
+        for rules in (permission_mode_ruleset(mode, None),)
+        if rules is not None
+    }
+
+    async def decider(
+        call: ToolCallRequest,
+        descriptor: ToolDescriptor,
+        context: RunContext,
+        emitter: EventEmitter,
+    ) -> PolicyVerdict:
+        mode = context.permission_mode
+        if mode is None:
+            return allow()
+        if mode not in allowed or mode not in PERMISSION_MODES:
+            return deny("permission mode unavailable")
+        if mode == "plan":
+            return allow()
+        policy = policies.get(mode)
+        if policy is None:
+            return deny("permission mode unavailable")
+        return await policy(call, descriptor, context, emitter)
+
+    return decider

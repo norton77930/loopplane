@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ApiClient,
@@ -7,21 +7,32 @@ import {
   type ApprovalDecision,
 } from "./api/client";
 import type { SessionTransport } from "./api/transport";
-import type { RawEvent, SessionSummary } from "./api/types";
+import type {
+  AgentControlProjection,
+  MonthlyCostView,
+  RawEvent,
+  SessionCostView,
+  SessionSummary,
+} from "./api/types";
 import { AppShell } from "./components/AppShell";
 import { ApprovalDialog } from "./components/ApprovalDialog";
 import { Attachments, type Attachment } from "./components/Attachments";
 import { ChatHeader } from "./components/ChatHeader";
+import { CapabilitySettingsView } from "./components/CapabilitySettingsView";
 import { Composer } from "./components/Composer";
 import { ErrorBanner } from "./components/ErrorBanner";
+import { FollowUpSuggestions } from "./components/FollowUpSuggestions";
 import { InspectionPanel } from "./components/InspectionPanel";
 import { MessageList } from "./components/MessageList";
 import { ModelSelector } from "./components/ModelSelector";
 import { QuestionDialog } from "./components/QuestionDialog";
 import { Sidebar } from "./components/Sidebar";
 import { useToast } from "./components/Toast";
+import {
+  deriveFollowUpSuggestions,
+  followUpSuggestionStaleKey,
+} from "./followUpSuggestions";
 import { useTranslation } from "./i18n/i18n";
-import { estimateCost } from "./pricing";
 import { errored, initialState, reduce, userPrompt } from "./state/chat";
 import {
   chooseActiveAfterDelete,
@@ -42,14 +53,35 @@ export function App({
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showInspect, setShowInspect] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | null>(() =>
     loadPreferredModel(),
   );
+  const [sessionModel, setSessionModel] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [composerDraft, setComposerDraft] = useState("");
+  const [composerFocusToken, setComposerFocusToken] = useState(0);
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<string[]>([]);
+  const [agentControls, setAgentControls] =
+    useState<AgentControlProjection | null>(null);
+  const [agentControlsLoading, setAgentControlsLoading] = useState(false);
+  const [agentControlsFailed, setAgentControlsFailed] = useState(false);
+  const [permissionModeDraft, setPermissionModeDraft] = useState<string | null>(
+    null,
+  );
+  const [sessionCost, setSessionCost] = useState<SessionCostView | null>(null);
+  const [monthlyCost, setMonthlyCost] = useState<MonthlyCostView | null>(null);
+  const [sessionCostLoading, setSessionCostLoading] = useState(false);
+  const [monthlyCostLoading, setMonthlyCostLoading] = useState(false);
+  const [sessionCostFailed, setSessionCostFailed] = useState(false);
+  const [monthlyCostFailed, setMonthlyCostFailed] = useState(false);
   const sessionId = useRef<string | null>(null);
   const reading = useRef(false);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const inspectButtonRef = useRef<HTMLButtonElement>(null);
   const { notify } = useToast();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [transport] = useState(
@@ -82,29 +114,133 @@ export function App({
 
   async function ensureSession(): Promise<string> {
     if (sessionId.current) return sessionId.current;
-    const { session_id } = await transport.openSession(selectedModel ?? undefined);
+    const model = selectedModel;
+    const { session_id } = await transport.openSession(model ?? undefined);
     sessionId.current = session_id;
+    setSessionModel(model);
     setActiveId(session_id);
     void readEvents(session_id);
     return session_id;
   }
 
+  async function refreshAgentControls(id = sessionId.current) {
+    if (!id) {
+      setAgentControls(null);
+      setAgentControlsFailed(false);
+      return;
+    }
+    setAgentControlsLoading(true);
+    try {
+      const projection = await client.getAgentControls(id);
+      if (sessionId.current === id) {
+        setAgentControls(projection);
+        setAgentControlsFailed(false);
+      }
+    } catch {
+      if (sessionId.current === id) {
+        setAgentControls(null);
+        setAgentControlsFailed(true);
+      }
+    } finally {
+      if (sessionId.current === id) setAgentControlsLoading(false);
+    }
+  }
+
+  async function refreshSessionCost(id = sessionId.current) {
+    if (!id) {
+      setSessionCost(null);
+      setSessionCostFailed(false);
+      return;
+    }
+    setSessionCostLoading(true);
+    try {
+      const cost = await client.getSessionCost(id);
+      if (sessionId.current === id) {
+        setSessionCost(cost);
+        setSessionCostFailed(false);
+      }
+    } catch {
+      if (sessionId.current === id) {
+        setSessionCost(null);
+        setSessionCostFailed(true);
+      }
+    } finally {
+      if (sessionId.current === id) setSessionCostLoading(false);
+    }
+  }
+
+  async function refreshMonthlyCost() {
+    setMonthlyCostLoading(true);
+    try {
+      setMonthlyCost(await client.getMonthlyCost());
+      setMonthlyCostFailed(false);
+    } catch {
+      setMonthlyCost(null);
+      setMonthlyCostFailed(true);
+    } finally {
+      setMonthlyCostLoading(false);
+    }
+  }
+
+  function refreshCosts(id = sessionId.current) {
+    void refreshSessionCost(id);
+    void refreshMonthlyCost();
+  }
+
   async function send(prompt: string) {
     if (!prompt.trim()) return;
-    const refs = attachments
-      .filter((item) => item.status === "done" && item.reference)
-      .map((item) => item.reference as string);
-    const full = refs.length
-      ? `${prompt}\n\n${refs.map((reference) => `[attachment: ${reference}]`).join("\n")}`
-      : prompt;
+    const completedAttachments = attachments.filter(
+      (item) => item.status === "done" && item.reference,
+    );
+    const uploads = completedAttachments.map((item) => ({
+      reference: item.reference as string,
+    }));
+    const includesNonImage = completedAttachments.some(
+      (item) => !item.mediaType?.startsWith("image/"),
+    );
+
     setState((current) => userPrompt(current, prompt));
-    setAttachments([]);
     try {
-      await transport.submit(await ensureSession(), full);
+      const id = await ensureSession();
+      if (includesNonImage) {
+        const projection = await client.getAgentControls(id);
+        if (sessionId.current === id) {
+          setAgentControls(projection);
+          setAgentControlsFailed(false);
+        }
+        if (!projection.actions.includes("attach_non_image_upload")) {
+          throw new Error("upload reference unavailable");
+        }
+      }
+
+      if (permissionModeDraft || uploads.length > 0) {
+        await transport.submit(id, prompt, {
+          ...(permissionModeDraft
+            ? { permissionMode: permissionModeDraft }
+            : {}),
+          ...(uploads.length > 0 ? { uploads } : {}),
+        });
+      } else {
+        await transport.submit(id, prompt);
+      }
+      setAttachments([]);
+      setPermissionModeDraft(null);
+      void refreshAgentControls(id);
+      refreshCosts(id);
       void refreshSessions();
     } catch (error) {
+      setComposerDraft(prompt);
       fail(error);
     }
+  }
+
+  function attachArtifactReference(reference: string) {
+    setComposerDraft((current) =>
+      current
+        ? `${current}\n\n[artifact: ${reference}]`
+        : `[artifact: ${reference}]`,
+    );
+    setComposerFocusToken((current) => current + 1);
   }
 
   // 031 — regenerate: re-run the last user turn through the existing send path.
@@ -236,12 +372,26 @@ export function App({
     sessionId.current = null;
     reading.current = false;
     setActiveId(null);
+    setSessionModel(null);
+    setAgentControls(null);
+    setAgentControlsFailed(false);
+    setPermissionModeDraft(null);
+    setSessionCost(null);
+    setMonthlyCost(null);
+    setSessionCostFailed(false);
+    setMonthlyCostFailed(false);
     setState(initialState);
   }
 
   async function selectSession(id: string) {
     if (id === activeId) return;
     sessionId.current = id;
+    setAgentControls(null);
+    setAgentControlsFailed(false);
+    setPermissionModeDraft(null);
+    setSessionCost(null);
+    setSessionCostFailed(false);
+    setSessionModel(sessions.find((session) => session.session_id === id)?.model ?? null);
     reading.current = false;
     setActiveId(id);
     // Replay history through the same reducer, then stream live (R6).
@@ -256,6 +406,8 @@ export function App({
       setLoadingHistory(false);
     }
     setState(next);
+    void refreshAgentControls(id);
+    refreshCosts(id);
     void readEvents(id);
   }
 
@@ -281,15 +433,68 @@ export function App({
   const pendingApproval = state.pendingApproval;
   const pendingQuestion = state.pendingQuestion;
   const activeSession = sessions.find((session) => session.session_id === activeId);
+  const activeModel = sessionModel ?? activeSession?.model ?? null;
+  const attachmentUploading = attachments.some((item) => item.status === "uploading");
+  const suggestionInput = useMemo(() => {
+    const terminated = [...state.entries]
+      .reverse()
+      .find((entry) => entry.kind === "terminated");
+    return {
+      locale,
+      sessionKey: activeId,
+      permissionMode: permissionModeDraft,
+      composerAvailable: state.status !== "running" && !showSettings,
+      empty: state.entries.length === 0,
+      settled: state.status === "terminated",
+      terminalReason:
+        terminated?.kind === "terminated" ? terminated.reason : null,
+      contextLabel: activeSession?.context_name ?? null,
+      attachments: attachments.map(({ name, status }) => ({ name, status })),
+      tools: state.entries.flatMap((entry) =>
+        entry.kind === "tool"
+          ? [
+              {
+                outcome: entry.outcome,
+                artifactReference: entry.artifactReference,
+              },
+            ]
+          : [],
+      ),
+    };
+  }, [
+    activeId,
+    activeSession?.context_name,
+    attachments,
+    locale,
+    permissionModeDraft,
+    showSettings,
+    state.entries,
+    state.status,
+  ]);
+  const suggestionsStaleKey = followUpSuggestionStaleKey(suggestionInput);
+  useEffect(() => {
+    setDismissedSuggestions([]);
+  }, [suggestionsStaleKey]);
+  const followUpSuggestions = deriveFollowUpSuggestions(suggestionInput)
+    .filter((suggestion) => !dismissedSuggestions.includes(suggestion.id))
+    .map((suggestion) => ({ ...suggestion, text: t(suggestion.textKey) }));
 
   return (
     <AppShell
+      mobileSidebarOpen={mobileSidebarOpen}
+      onDismissSidebar={() => setMobileSidebarOpen(false)}
       sidebar={
         <Sidebar
           sessions={sessions}
           activeId={activeId}
-          onOpen={(id) => void selectSession(id)}
-          onNew={newChat}
+          onOpen={(id) => {
+            setMobileSidebarOpen(false);
+            void selectSession(id);
+          }}
+          onNew={() => {
+            setMobileSidebarOpen(false);
+            newChat();
+          }}
           onRename={(id, title) => void renameSession(id, title)}
           onDelete={(id) => void deleteSession(id)}
           onToggleStar={(id, next) => void toggleStar(id, next)}
@@ -302,45 +507,115 @@ export function App({
         <ChatHeader
           status={state.status}
           usage={state.usage}
-          cost={estimateCost(state.usage.total, selectedModel)}
+          cost={sessionCostFailed ? null : sessionCost?.usd_spent ?? null}
           onStop={() => void stop()}
           inspectOpen={showInspect}
           onToggleInspect={() => setShowInspect((value) => !value)}
+          settingsOpen={showSettings}
+          onToggleSettings={() => {
+            const next = !showSettings;
+            setShowSettings(next);
+            if (next) {
+              void refreshAgentControls();
+              refreshCosts();
+            }
+          }}
+          settingsButtonRef={settingsButtonRef}
+          inspectButtonRef={inspectButtonRef}
           contextName={activeSession?.context_name ?? undefined}
+          modelName={activeModel}
+          onToggleNavigation={() => setMobileSidebarOpen((open) => !open)}
+          navigationOpen={mobileSidebarOpen}
         />
       }
       banner={state.status === "error" ? <ErrorBanner onRetry={retry} /> : undefined}
       panel={showInspect ? <InspectionPanel client={client} /> : undefined}
+      onDismissPanel={() => setShowInspect(false)}
+      panelReturnFocusRef={inspectButtonRef}
+      composerHidden={showSettings}
       composer={
-        <Composer
-          disabled={state.status === "running"}
-          onSend={(text) => void send(text)}
-          commands={[{ id: "toggle-inspect", label: "Toggle inspection panel" }]}
-          onCommand={(id) => {
-            if (id === "toggle-inspect") setShowInspect((value) => !value);
-          }}
-          loadMentions={loadMentions}
-          extras={
-            <>
-              <ModelSelector
-                client={client}
-                value={selectedModel}
-                onChange={changeModel}
-              />
-              <Attachments client={client} onChange={setAttachments} />
-            </>
-          }
-        />
+        <>
+          <FollowUpSuggestions
+            suggestions={followUpSuggestions}
+            onSelect={(suggestion) => {
+              setComposerDraft(suggestion.text);
+              setDismissedSuggestions((current) => [...current, suggestion.id]);
+              setComposerFocusToken((current) => current + 1);
+            }}
+            onDismiss={(id) =>
+              setDismissedSuggestions((current) => [...current, id])
+            }
+          />
+          <Composer
+            disabled={state.status === "running"}
+            sendDisabled={attachmentUploading}
+            onSend={(text) => void send(text)}
+            value={composerDraft}
+            onValueChange={setComposerDraft}
+            focusToken={composerFocusToken}
+            commands={[{ id: "toggle-inspect", label: "Toggle inspection panel" }]}
+            onCommand={(id) => {
+              if (id === "toggle-inspect") setShowInspect((value) => !value);
+            }}
+            loadMentions={loadMentions}
+            extras={
+              <>
+                <ModelSelector
+                  client={client}
+                  value={selectedModel}
+                  onChange={changeModel}
+                  scope={activeId ? "next" : "current"}
+                />
+                <Attachments client={client} value={attachments} onChange={setAttachments} />
+              </>
+            }
+          />
+        </>
       }
     >
-      <MessageList
-        entries={state.entries}
-        onRegenerate={regenerate}
-        canRegenerate={state.status !== "running"}
-        onExample={(prompt) => void send(prompt)}
-        onFork={(sequence) => void forkFrom(sequence)}
-        loading={loadingHistory}
-      />
+      <div className="conversation-view" hidden={showSettings}>
+        <MessageList
+          entries={state.entries}
+          onRegenerate={regenerate}
+          canRegenerate={state.status !== "running"}
+          onExample={(prompt) => void send(prompt)}
+          onFork={(sequence) => void forkFrom(sequence)}
+          onAttachReference={attachArtifactReference}
+          loading={loadingHistory}
+        />
+      </div>
+      {showSettings ? (
+        <CapabilitySettingsView
+          client={client}
+          sessionId={sessionId.current}
+          sessionOwned={Boolean(
+            activeSession && activeSession.session_id === sessionId.current,
+          )}
+          sessionContext={
+            activeSession?.session_id === sessionId.current ? activeSession : null
+          }
+          agentControls={agentControls}
+          agentControlsLoading={agentControlsLoading}
+          agentControlsFailed={agentControlsFailed}
+          permissionModeDraft={permissionModeDraft}
+          onPermissionModeChange={setPermissionModeDraft}
+          onAgentControlsRefresh={() => {
+            void refreshAgentControls();
+            refreshCosts();
+          }}
+          sessionCost={sessionCost}
+          monthlyCost={monthlyCost}
+          sessionCostLoading={sessionCostLoading}
+          monthlyCostLoading={monthlyCostLoading}
+          sessionCostFailed={sessionCostFailed}
+          monthlyCostFailed={monthlyCostFailed}
+          onContextBound={refreshSessions}
+          onBack={() => {
+            setShowSettings(false);
+            settingsButtonRef.current?.focus();
+          }}
+        />
+      ) : null}
       {pendingApproval && (
         <ApprovalDialog
           toolName={pendingApproval.toolName}

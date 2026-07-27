@@ -157,18 +157,18 @@ The comparison is not one-directional. LoopPlane leads on:
 - **Clean boundaries** — a single Tool Gateway (V) and Event Bus (VI) with enforced
   import boundaries, making the runtime auditable and embeddable.
 
-## C4. Forward roadmap (through unit 075, prioritized)
+## C4. Forward roadmap (through unit 081, prioritized)
 
 The previous edition of this roadmap (written post-v0.4.0) has itself been largely
-executed by the 064–075 line: every former P1 item shipped — cost surfacing (064),
-backend slash commands (065), named permission modes (066), JWKS-refresh hardening
-(067) — as did most of P2 — the durable SSE replay store (071), in-process fairness /
-per-tenant quota (072), PDF / `DocumentBlock` (069), the pre-turn cost guard (068), and
-native Gemini `thought_signature` (070) — plus a code-review remediation pass (073) and
-the web parity / capability-management pair (074 / 075). What remains is the tail below.
-It is a **suggested priority list only** — the next units already on the board are
-`076-web-agent-controls` and `077-desktop-cowork-parity` (not started); new roadmap items
-would be specced as later units.
+executed by the 064–077 line plus the out-of-sequence 080–081 delivery work: every former
+P1 item shipped — cost surfacing (064), backend slash commands (065), named permission
+modes (066), JWKS-refresh hardening (067) — as did most of P2 — durable SSE replay (071),
+in-process fairness/quota (072), PDF / `DocumentBlock` (069), the pre-turn cost guard
+(068), native Gemini `thought_signature` (070), code-review remediation (073), web
+parity/capability management and hardening (074–076), responsive presentation and
+security remediation (080–081), and host-owned Web Agent Controls (077). What remains is
+the tail below. It is a **suggested priority list only** — the next reserved board unit is
+`078-desktop-cowork-parity`; new roadmap items would be specced as later units.
 
 **P1 — platform depth (the remaining distributed tail)**
 - **G20 distributed tail** — cross-process / multi-worker execution above the

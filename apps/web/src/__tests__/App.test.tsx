@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import type { ApiClient } from "../api/client";
 import type { RawEvent } from "../api/types";
@@ -119,5 +119,123 @@ describe("App", () => {
     const stop = await screen.findByText("Stop");
     fireEvent.click(stop);
     await waitFor(() => expect(cancel).toHaveBeenCalledWith("s1"));
+  });
+
+  it("does not submit a prompt until an attached file finishes uploading", async () => {
+    let resolveUpload!: (result: { reference: string; name: string }) => void;
+    const submit = vi.fn().mockResolvedValue({});
+    const client = makeClient({
+      submit,
+      getAgentControls: vi.fn().mockResolvedValue({
+        session_id: "s1",
+        permission: {
+          default_mode: null,
+          selectable_modes: [],
+          selection_scope: "run",
+          rules_configured: false,
+          rule_default: "deny",
+          rule_decisions: [],
+          plan_entry_available: false,
+          plan_exit_requires_approval: true,
+          active_run: null,
+          last_accepted_run: null,
+        },
+        budget: {
+          pricing: "unavailable",
+          session_tracking: "unavailable",
+          monthly_tracking: "unavailable",
+          run_guard: "unknown",
+          session_guard: "unknown",
+          monthly_guard: "unknown",
+          pre_turn_guard: "disabled",
+        },
+        actions: ["attach_non_image_upload"],
+      }),
+      uploadFile: vi.fn().mockReturnValue(
+        new Promise<{ reference: string; name: string }>((resolve) => {
+          resolveUpload = resolve;
+        }),
+      ),
+    });
+    render(<App client={client} />);
+
+    fireEvent.change(screen.getByLabelText("attach files"), {
+      target: { files: [new File(["notes"], "notes.txt")] },
+    });
+    expect(await screen.findByText("uploading")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("prompt"), { target: { value: "summarize" } });
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(submit).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveUpload({ reference: "upload://notes", name: "notes.txt" });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() =>
+      expect(submit).toHaveBeenCalledWith("s1", "summarize", {
+        uploads: [{ reference: "upload://notes" }],
+      }),
+    );
+  });
+
+  it("preserves completed upload references when submission fails", async () => {
+    const submit = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({});
+    const client = makeClient({
+      submit,
+      getAgentControls: vi.fn().mockResolvedValue({
+        session_id: "s1",
+        permission: {
+          default_mode: null,
+          selectable_modes: [],
+          selection_scope: "run",
+          rules_configured: false,
+          rule_default: "deny",
+          rule_decisions: [],
+          plan_entry_available: false,
+          plan_exit_requires_approval: true,
+          active_run: null,
+          last_accepted_run: null,
+        },
+        budget: {
+          pricing: "unavailable",
+          session_tracking: "unavailable",
+          monthly_tracking: "unavailable",
+          run_guard: "unknown",
+          session_guard: "unknown",
+          monthly_guard: "unknown",
+          pre_turn_guard: "disabled",
+        },
+        actions: ["attach_non_image_upload"],
+      }),
+      uploadFile: vi.fn().mockResolvedValue({
+        reference: "upload://notes",
+        name: "notes.txt",
+      }),
+    });
+    render(<App client={client} />);
+
+    fireEvent.change(screen.getByLabelText("attach files"), {
+      target: { files: [new File(["notes"], "notes.txt", { type: "text/plain" })] },
+    });
+    await screen.findByText("done");
+    fireEvent.change(screen.getByLabelText("prompt"), { target: { value: "summarize" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    await screen.findByRole("alert");
+    expect(screen.getByText("notes.txt")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("prompt"), { target: { value: "retry" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() =>
+      expect(submit).toHaveBeenLastCalledWith("s1", "retry", {
+        uploads: [{ reference: "upload://notes" }],
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText("notes.txt")).not.toBeInTheDocument());
   });
 });

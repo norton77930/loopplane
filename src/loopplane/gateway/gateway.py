@@ -81,12 +81,38 @@ class _HandlerAdapter:
         return None
 
 
-class _RegisteredTool:
-    __slots__ = ("adapter", "descriptor")
+class _ManagedAdapterEntry:
+    __slots__ = (
+        "adapter",
+        "closed",
+        "leases",
+        "retired",
+        "shutdown_started",
+        "tools",
+    )
 
-    def __init__(self, descriptor: ToolDescriptor, adapter: ToolAdapter) -> None:
+    def __init__(self, adapter: ToolAdapter) -> None:
+        self.adapter = adapter
+        self.closed = anyio.Event()
+        self.leases = 0
+        self.retired = False
+        self.shutdown_started = False
+        self.tools: dict[str, _RegisteredTool] = {}
+
+
+class _RegisteredTool:
+    __slots__ = ("adapter", "descriptor", "managed")
+
+    def __init__(
+        self,
+        descriptor: ToolDescriptor,
+        adapter: ToolAdapter,
+        *,
+        managed: _ManagedAdapterEntry | None = None,
+    ) -> None:
         self.descriptor = descriptor
         self.adapter = adapter
+        self.managed = managed
 
 
 class ToolGateway:
@@ -102,6 +128,8 @@ class ToolGateway:
         # The per-call time limit is always enforced; pass a large value for
         # an effectively unbounded call rather than disabling it outright.
         self._registry: dict[str, _RegisteredTool] = {}
+        self._scoped_adapters: dict[tuple[str, str], _ManagedAdapterEntry] = {}
+        self._scoped_registry: dict[str, dict[str, _RegisteredTool]] = {}
         self._decide: PolicyDecider = decide if decide is not None else allow_all
         self._call_timeout_seconds = call_timeout_seconds
         self._output_limit_bytes = output_limit_bytes
@@ -120,16 +148,139 @@ class ToolGateway:
     def _add(self, descriptor: ToolDescriptor, adapter: ToolAdapter) -> None:
         if descriptor.name in self._registry:
             raise ValueError(f"tool already registered: {descriptor.name}")
+        if any(
+            descriptor.name in registry for registry in self._scoped_registry.values()
+        ):
+            raise ValueError(
+                f"tool already registered in a scoped registry: {descriptor.name}"
+            )
         self._registry[descriptor.name] = _RegisteredTool(descriptor, adapter)
 
-    def descriptors(self) -> list[ToolDescriptor]:
-        return [tool.descriptor for tool in self._registry.values()]
+    def descriptors(self, principal_id: str | None = None) -> list[ToolDescriptor]:
+        descriptors = [tool.descriptor for tool in self._registry.values()]
+        if principal_id is not None:
+            descriptors.extend(
+                tool.descriptor
+                for tool in self._scoped_registry.get(principal_id, {}).values()
+            )
+        return descriptors
 
-    def is_concurrency_safe(self, tool_name: str) -> bool:
-        tool = self._registry.get(tool_name)
+    def is_concurrency_safe(
+        self, tool_name: str, principal_id: str | None = None
+    ) -> bool:
+        tool = self._find_tool(tool_name, principal_id)
         if tool is None:
             return False
         return tool.descriptor.concurrency_safe
+
+    async def replace_scoped_adapter(
+        self,
+        principal_id: str,
+        adapter_id: str,
+        adapter: ToolAdapter,
+    ) -> None:
+        if not principal_id or not adapter_id:
+            raise ValueError("principal_id and adapter_id are required")
+        descriptors = tuple(adapter.describe())
+        names = [descriptor.name for descriptor in descriptors]
+        if len(names) != len(set(names)):
+            raise ValueError("scoped adapter exposes duplicate tool names")
+
+        key = (principal_id, adapter_id)
+        previous = self._scoped_adapters.get(key)
+        if previous is not None and previous.adapter is adapter:
+            return
+        owner_registry = self._scoped_registry.setdefault(principal_id, {})
+        for name in names:
+            if name in self._registry:
+                raise ValueError(f"tool conflicts with shared registry: {name}")
+            existing = owner_registry.get(name)
+            if existing is not None and existing.managed is not previous:
+                raise ValueError(f"tool already registered for principal: {name}")
+
+        candidate = _ManagedAdapterEntry(adapter)
+        for descriptor in descriptors:
+            candidate.tools[descriptor.name] = _RegisteredTool(
+                descriptor, adapter, managed=candidate
+            )
+
+        if previous is not None:
+            for name, registered in previous.tools.items():
+                if owner_registry.get(name) is registered:
+                    owner_registry.pop(name)
+        owner_registry.update(candidate.tools)
+        self._scoped_adapters[key] = candidate
+
+        if previous is not None and self._retire(previous):
+            await self._shutdown_entry(previous)
+
+    async def remove_scoped_adapter(self, principal_id: str, adapter_id: str) -> None:
+        entry = self._scoped_adapters.pop((principal_id, adapter_id), None)
+        if entry is None:
+            return
+        owner_registry = self._scoped_registry.get(principal_id)
+        if owner_registry is not None:
+            for name, registered in entry.tools.items():
+                if owner_registry.get(name) is registered:
+                    owner_registry.pop(name)
+            if not owner_registry:
+                self._scoped_registry.pop(principal_id, None)
+        if self._retire(entry):
+            await self._shutdown_entry(entry)
+
+    async def shutdown_scoped_adapters(self) -> None:
+        entries = list(self._scoped_adapters.values())
+        self._scoped_adapters.clear()
+        self._scoped_registry.clear()
+        immediate = [entry for entry in entries if self._retire(entry)]
+        for entry in immediate:
+            await self._shutdown_entry(entry)
+        for entry in entries:
+            await entry.closed.wait()
+
+    def _find_tool(
+        self, tool_name: str, principal_id: str | None
+    ) -> _RegisteredTool | None:
+        shared = self._registry.get(tool_name)
+        if shared is not None:
+            return shared
+        if principal_id is None:
+            return None
+        return self._scoped_registry.get(principal_id, {}).get(tool_name)
+
+    def _resolve_and_lease(
+        self, tool_name: str, principal_id: str | None
+    ) -> _RegisteredTool | None:
+        tool = self._find_tool(tool_name, principal_id)
+        if tool is not None and tool.managed is not None:
+            tool.managed.leases += 1
+        return tool
+
+    @staticmethod
+    def _retire(entry: _ManagedAdapterEntry) -> bool:
+        entry.retired = True
+        if entry.leases == 0 and not entry.shutdown_started:
+            entry.shutdown_started = True
+            return True
+        return False
+
+    async def _release_entry(self, entry: _ManagedAdapterEntry) -> None:
+        entry.leases -= 1
+        if entry.leases < 0:
+            raise RuntimeError("managed adapter lease underflow")
+        if entry.retired and entry.leases == 0 and not entry.shutdown_started:
+            entry.shutdown_started = True
+            await self._shutdown_entry(entry)
+
+    @staticmethod
+    async def _shutdown_entry(entry: _ManagedAdapterEntry) -> None:
+        try:
+            with anyio.CancelScope(shield=True):
+                await entry.adapter.shutdown()
+        except Exception:
+            pass
+        finally:
+            entry.closed.set()
 
     async def execute_batch(
         self,
@@ -196,11 +347,10 @@ class ToolGateway:
     ) -> tuple[ToolResultBlock, float]:
         started = anyio.current_time()
 
-        def elapsed() -> float:
-            return anyio.current_time() - started
-
-        # Stage 1: resolve (FR-021).
-        tool = self._registry.get(call.tool_name)
+        # Stage 1: resolve (FR-021). Scoped resolution and the lease increment
+        # are one non-yielding operation, so replacement cannot close the
+        # selected adapter before this call releases it.
+        tool = self._resolve_and_lease(call.tool_name, context.principal_id)
         if tool is None:
             return self._failure(
                 call,
@@ -208,7 +358,25 @@ class ToolGateway:
                     category=ErrorCategory.UNKNOWN_TOOL,
                     reason=f"unknown tool: {call.tool_name}",
                 ),
-            ), elapsed()
+            ), anyio.current_time() - started
+
+        managed = tool.managed
+        try:
+            return await self._run_registered(call, context, emitter, tool, started)
+        finally:
+            if managed is not None:
+                await self._release_entry(managed)
+
+    async def _run_registered(
+        self,
+        call: ToolCallRequest,
+        context: RunContext,
+        emitter: EventEmitter,
+        tool: _RegisteredTool,
+        started: float,
+    ) -> tuple[ToolResultBlock, float]:
+        def elapsed() -> float:
+            return anyio.current_time() - started
 
         # Stage 2: validate before any execution (FR-022).
         problem = validate_input(tool.descriptor.input_schema, call.input)

@@ -8,7 +8,7 @@ from loopplane.webapi.contract_types import live_contract_artifacts
 def test_live_contract_declares_ticket_and_envelopes() -> None:
     artifacts = live_contract_artifacts()
 
-    assert artifacts["version"] == "075-web-capability-management"
+    assert artifacts["version"] == "077-web-agent-controls"
     assert artifacts["ticket_fields"] == {
         "ticket",
         "principal_id",

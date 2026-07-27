@@ -25,7 +25,30 @@ describe("ChatHeader", () => {
         onToggleInspect={noop}
       />,
     );
-    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Running");
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("status")).toHaveAttribute("aria-atomic", "true");
+  });
+
+  it("offers a semantic session-navigation toggle", () => {
+    const onToggleNavigation = vi.fn();
+    render(
+      <ChatHeader
+        status="idle"
+        usage={{ total: ZERO_USAGE }}
+        onStop={noop}
+        inspectOpen={false}
+        onToggleInspect={noop}
+        onToggleNavigation={onToggleNavigation}
+        navigationOpen={false}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Open session navigation" });
+    expect(toggle).toHaveAttribute("aria-controls", "session-navigation");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(onToggleNavigation).toHaveBeenCalledOnce();
   });
 
   it("offers Stop only while running and fires it", () => {

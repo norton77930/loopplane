@@ -52,10 +52,12 @@ from loopplane.webapi.live import (
     replay_event_messages,
 )
 from loopplane.webapi.models import (
+    AgentControlProjectionView,
     ArtifactContent,
     BulkDeleteRequest,
     BulkDeleteResult,
     CapabilityOperationResultView,
+    CapabilitySettingsStatusView,
     CommandRequest,
     CommandResultView,
     ErrorResponse,
@@ -108,6 +110,7 @@ from loopplane.webapi.multimodal import (
     MediaNotAccepted,
     MediaTooLarge,
     UnknownUpload,
+    UploadHandoffRejected,
     assemble_blocks,
 )
 from loopplane.webapi.pool import TenantHostPool
@@ -183,6 +186,7 @@ def create_app(
     auth = authenticator or DENY_ALL
     require = make_auth_dependency(auth)
     sessions: dict[str, SessionEntry] = {}
+    session_hosts: dict[str, tuple[str, LoopPlaneHost]] = {}
     live_tickets = LiveTicketStore()
     catalog = dict(models or {})
     command_registry = default_registry()  # 065: backend slash commands
@@ -205,18 +209,36 @@ def create_app(
         # principals; each host stays sequential). The model is still validated by
         # _select (unknown -> 400) + supplies the media/structured-output flags.
         # Default (no pool) returns _select(model) verbatim — byte-identical.
-        chosen, accepts_media, supports_so = _select(model)
+        effective_model = model
+        resolve_default = getattr(host, "model_default", None)
+        if effective_model is None and callable(resolve_default):
+            available = {model_id: entry.label for model_id, entry in catalog.items()}
+            default = resolve_default(
+                principal.id,
+                available_models=available,
+            )
+            if default.status == "available":
+                effective_model = default.model_id
+        chosen, accepts_media, supports_so = _select(effective_model)
         if host_pool is not None:
             try:
-                chosen = host_pool.host_for(principal.id, model)
+                chosen = host_pool.host_for(principal.id, effective_model)
             except RuntimeError as exc:
                 raise HTTPException(
                     status_code=429, detail="capacity exceeded"
                 ) from exc
         return chosen, accepts_media, supports_so
 
+    def _read_upload_available(selected: LoopPlaneHost) -> bool:
+        if not hasattr(selected, "inspect_tools"):
+            return False
+        return any(tool.name == "read_upload" for tool in selected.inspect_tools())
+
     def _build_blocks(
-        body: RunRequest, owner: str, accepts_media: bool
+        body: RunRequest,
+        owner: str,
+        accepts_media: bool,
+        read_upload_available: bool,
     ) -> list[ContentBlock]:
         # Assemble the user message: image uploads (036) become leading ImageBlocks
         # ahead of the prompt; failures degrade to a public-safe normalized error
@@ -232,10 +254,15 @@ def create_app(
                 uploads,
                 owner,
                 accepts_media=accepts_media,
+                accepts_read_upload=read_upload_available,
                 max_image_bytes=max_image_bytes,
             )
         except MediaTooLarge as exc:
             raise HTTPException(status_code=413, detail="image too large") from exc
+        except UploadHandoffRejected as exc:
+            raise HTTPException(
+                status_code=400, detail="upload handoff unavailable"
+            ) from exc
         except (UnknownUpload, MediaNotAccepted) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -305,6 +332,23 @@ def create_app(
                 return
         raise HTTPException(status_code=404, detail="not found")
 
+    def _agent_control_host_or_404(
+        session_id: str, principal: Principal
+    ) -> LoopPlaneHost:
+        entry = sessions.get(session_id)
+        if entry is not None:
+            if entry.owner != principal.id:
+                raise HTTPException(status_code=404, detail="not found")
+            return entry.host or host
+        routed = session_hosts.get(session_id)
+        if routed is not None:
+            owner, owning_host = routed
+            if owner != principal.id:
+                raise HTTPException(status_code=404, detail="not found")
+            return owning_host
+        _owned_or_404(session_id, principal)
+        return host
+
     # --- US1: run -----------------------------------------------------------
 
     @router.post("/runs")
@@ -313,7 +357,12 @@ def create_app(
     ) -> RunResult:
         chosen, accepts_media, supports_so = _resolve(body.model, principal)
         _check_output_schema(body.output_schema, supports_so)
-        blocks = _build_blocks(body, principal.id, accepts_media)
+        blocks = _build_blocks(
+            body,
+            principal.id,
+            accepts_media,
+            _read_upload_available(chosen),
+        )
         # 061: bound a principal's concurrent in-flight runs (no-op when no pool —
         # nullcontext keeps the default path byte-identical).
         in_flight = (
@@ -329,13 +378,19 @@ def create_app(
                     principal_id=principal.id,
                     output_schema=body.output_schema,
                     model=body.model,
+                    permission_mode=body.permission_mode,
                 )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="permission mode unavailable"
+            ) from exc
         except PlatformFairnessRejected as exc:
             raise HTTPException(status_code=429, detail="capacity exceeded") from exc
         except RuntimeError as exc:
             raise HTTPException(
                 status_code=409, detail="a run is already active"
             ) from exc
+        session_hosts[outcome.session_id] = (principal.id, chosen)
         return RunResult.from_outcome(outcome)
 
     # --- US2: event stream --------------------------------------------------
@@ -346,12 +401,36 @@ def create_app(
     ) -> StreamingResponse:
         chosen, accepts_media, supports_so = _resolve(body.model, principal)
         _check_output_schema(body.output_schema, supports_so)
-        blocks = _build_blocks(body, principal.id, accepts_media)
+        blocks = _build_blocks(
+            body,
+            principal.id,
+            accepts_media,
+            _read_upload_available(chosen),
+        )
         return StreamingResponse(
             run_event_stream(
-                chosen, blocks, principal.id, body.output_schema, model=body.model
+                chosen,
+                blocks,
+                principal.id,
+                body.output_schema,
+                model=body.model,
+                permission_mode=body.permission_mode,
+                on_session=lambda session_id: session_hosts.__setitem__(
+                    session_id, (principal.id, chosen)
+                ),
             ),
             media_type="text/event-stream",
+        )
+
+    # --- 077: owner-scoped agent-control projection ------------------------
+
+    @router.get("/sessions/{session_id}/agent-controls")
+    async def agent_controls(
+        session_id: str, principal: Principal = Depends(require)
+    ) -> AgentControlProjectionView:
+        owning_host = _agent_control_host_or_404(session_id, principal)
+        return AgentControlProjectionView.from_projection(
+            owning_host.agent_controls(session_id)
         )
 
     # --- US3: interactive session -------------------------------------------
@@ -463,65 +542,116 @@ def create_app(
             }
         )
         seen_sequence = last_sequence
-        while True:
+        send_lock = anyio.Lock()
+
+        async def send_live(message: dict[str, object]) -> None:
+            async with send_lock:
+                with suppress(WebSocketDisconnect, RuntimeError):
+                    await websocket.send_json(message)
+
+        async def drive_live(body: RunRequest) -> None:
             try:
-                message = LiveClientMessage.model_validate(
-                    await websocket.receive_json()
+                blocks = _build_blocks(
+                    body,
+                    record.principal_id,
+                    entry.accepts_media,
+                    _read_upload_available(entry.host or host),
                 )
+                await entry.session.submit(
+                    blocks,
+                    output_schema=body.output_schema,
+                    permission_mode=body.permission_mode,
+                )
+            except HTTPException as exc:
+                await send_live(
+                    {"type": "error", "payload": {"detail": str(exc.detail)}}
+                )
+            except ValueError:
+                await send_live(
+                    {
+                        "type": "error",
+                        "payload": {"detail": "permission mode unavailable"},
+                    }
+                )
+            except RuntimeError:
+                await send_live(
+                    {
+                        "type": "error",
+                        "payload": {"detail": "a run is already active"},
+                    }
+                )
+
+        async def pump_events() -> None:
+            nonlocal seen_sequence
+            while True:
+                sent = False
+                for event_message in replay_event_messages(
+                    entry.replay_buffer, seen_sequence
+                ):
+                    await send_live(event_message)
+                    sequence = event_message.get("sequence")
+                    if isinstance(sequence, int):
+                        seen_sequence = max(seen_sequence, sequence)
+                    sent = True
+                await anyio.sleep(0 if sent else 0.01)
+
+        async with anyio.create_task_group() as live_tasks:
+            live_tasks.start_soon(pump_events)
+            try:
+                while True:
+                    message = LiveClientMessage.model_validate(
+                        await websocket.receive_json()
+                    )
+                    if message.sequence is not None:
+                        seen_sequence = max(seen_sequence, message.sequence)
+                    if message.type == "ack":
+                        continue
+                    if message.type == "abort":
+                        entry.session.cancel()
+                        entry.close.set()
+                        await send_live(
+                            {"type": "notice", "payload": {"aborted": True}}
+                        )
+                        continue
+                    if message.type == "approval_decision":
+                        request_id = str(message.payload.get("request_id", ""))
+                        scope = message.payload.get("scope", "once")
+                        resolved = entry.session.answer_approval(
+                            request_id,
+                            allow=bool(message.payload.get("allow", False)),
+                            scope=(scope if scope in ("once", "session") else "once"),
+                            reason=(
+                                str(message.payload["reason"])
+                                if "reason" in message.payload
+                                else None
+                            ),
+                        )
+                        await send_live(
+                            {"type": "notice", "payload": {"resolved": resolved}}
+                        )
+                        continue
+                    if message.type == "question_answer":
+                        request_id = str(message.payload.get("request_id", ""))
+                        raw_answers = message.payload.get("answers", [])
+                        answers = (
+                            [str(answer) for answer in raw_answers]
+                            if isinstance(raw_answers, list)
+                            else []
+                        )
+                        resolved = entry.session.answer_question(request_id, answers)
+                        await send_live(
+                            {"type": "notice", "payload": {"resolved": resolved}}
+                        )
+                        continue
+                    body = RunRequest.model_validate(message.payload)
+                    _check_output_schema(
+                        body.output_schema, entry.supports_structured_output
+                    )
+                    app.state.session_tg.start_soon(drive_live, body)
             except WebSocketDisconnect:
                 return
-            if message.sequence is not None:
-                seen_sequence = max(seen_sequence, message.sequence)
-            if message.type == "ack":
-                continue
-            if message.type == "abort":
-                entry.session.cancel()
-                entry.close.set()
-                await websocket.send_json(
-                    {"type": "notice", "payload": {"aborted": True}}
-                )
-                continue
-            if message.type == "approval_decision":
-                request_id = str(message.payload.get("request_id", ""))
-                scope = message.payload.get("scope", "once")
-                resolved = entry.session.answer_approval(
-                    request_id,
-                    allow=bool(message.payload.get("allow", False)),
-                    scope=scope if scope in ("once", "session") else "once",
-                    reason=(
-                        str(message.payload["reason"])
-                        if "reason" in message.payload
-                        else None
-                    ),
-                )
-                await websocket.send_json(
-                    {"type": "notice", "payload": {"resolved": resolved}}
-                )
-                continue
-            if message.type == "question_answer":
-                request_id = str(message.payload.get("request_id", ""))
-                raw_answers = message.payload.get("answers", [])
-                answers = (
-                    [str(answer) for answer in raw_answers]
-                    if isinstance(raw_answers, list)
-                    else []
-                )
-                resolved = entry.session.answer_question(request_id, answers)
-                await websocket.send_json(
-                    {"type": "notice", "payload": {"resolved": resolved}}
-                )
-                continue
-            body = RunRequest.model_validate(message.payload)
-            _check_output_schema(body.output_schema, entry.supports_structured_output)
-            blocks = _build_blocks(body, record.principal_id, entry.accepts_media)
-            await entry.session.submit(blocks, output_schema=body.output_schema)
-            for event_message in replay_event_messages(
-                entry.replay_buffer, seen_sequence
-            ):
-                await websocket.send_json(event_message)
-                sequence = event_message.get("sequence")
-                if isinstance(sequence, int):
-                    seen_sequence = max(seen_sequence, sequence)
+            finally:
+                live_tasks.cancel_scope.cancel()
 
     @router.post("/sessions/{session_id}/submit")
     async def submit_to_session(
@@ -532,11 +662,22 @@ def create_app(
         # observe progress incrementally reads the session events stream (FR-007).
         entry = _require(session_id, principal)
         _check_output_schema(body.output_schema, entry.supports_structured_output)
-        blocks = _build_blocks(body, principal.id, entry.accepts_media)
+        blocks = _build_blocks(
+            body,
+            principal.id,
+            entry.accepts_media,
+            _read_upload_available(entry.host or host),
+        )
         try:
             outcome = await entry.session.submit(
-                blocks, output_schema=body.output_schema
+                blocks,
+                output_schema=body.output_schema,
+                permission_mode=body.permission_mode,
             )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail="permission mode unavailable"
+            ) from exc
         except PlatformFairnessRejected as exc:
             raise HTTPException(status_code=429, detail="capacity exceeded") from exc
         return RunResult.from_outcome(outcome)
@@ -796,12 +937,21 @@ def create_app(
 
     # --- 075: capability management foundation ------------------------------
 
+    @router.get("/capabilities/settings")
+    async def get_capability_settings(
+        principal: Principal = Depends(require),
+    ) -> CapabilitySettingsStatusView:
+        return CapabilitySettingsStatusView.from_status(
+            host.capability_settings_status(principal_id=principal.id)
+        )
+
     @router.get("/capabilities/memory")
     async def list_managed_memory(
         principal: Principal = Depends(require),
     ) -> list[ManagedMemoryView]:
         return [
-            ManagedMemoryView.from_entry(entry) for entry in host.list_managed_memory()
+            ManagedMemoryView.from_entry(entry)
+            for entry in host.list_managed_memory(principal_id=principal.id)
         ]
 
     @router.post("/capabilities/memory")
@@ -813,11 +963,15 @@ def create_app(
             kind=body.kind,
             description=body.description,
             content=body.content,
+            principal_id=principal.id,
         )
         entry = None
         if result.ok and result.resource_id is not None:
             entry = ManagedMemoryView.from_entry(
-                host.get_managed_memory(result.resource_id)
+                host.get_managed_memory(
+                    result.resource_id,
+                    principal_id=principal.id,
+                )
             )
         return MemoryMutationResponse(
             result=CapabilityOperationResultView.from_result(result),
@@ -830,7 +984,7 @@ def create_app(
     ) -> ManagedMemoryDetailView:
         try:
             return ManagedMemoryDetailView.from_detail(
-                host.get_managed_memory(memory_id)
+                host.get_managed_memory(memory_id, principal_id=principal.id)
             )
         except KeyError:
             raise HTTPException(status_code=404, detail="not found") from None
@@ -841,7 +995,11 @@ def create_app(
         confirm: bool = False,
         principal: Principal = Depends(require),
     ) -> CapabilityOperationResultView:
-        result = host.delete_managed_memory(memory_id, confirm=confirm)
+        result = host.delete_managed_memory(
+            memory_id,
+            confirm=confirm,
+            principal_id=principal.id,
+        )
         return CapabilityOperationResultView.from_result(result)
 
     @router.get("/capabilities/skills")
@@ -849,7 +1007,8 @@ def create_app(
         principal: Principal = Depends(require),
     ) -> list[ManagedSkillView]:
         return [
-            ManagedSkillView.from_skill(skill) for skill in host.list_managed_skills()
+            ManagedSkillView.from_skill(skill)
+            for skill in host.list_managed_skills(principal.id)
         ]
 
     @router.post("/capabilities/skills")
@@ -860,11 +1019,15 @@ def create_app(
             name=body.name,
             description=body.description,
             instructions=body.instructions,
+            principal_id=principal.id,
         )
         skill = None
         if result.ok and result.resource_id is not None:
             skill = ManagedSkillView.from_skill(
-                host.get_managed_skill(result.resource_id)
+                host.get_managed_skill(
+                    result.resource_id,
+                    principal_id=principal.id,
+                )
             )
         return SkillMutationResponse(
             result=CapabilityOperationResultView.from_result(result),
@@ -875,11 +1038,17 @@ def create_app(
     async def import_managed_skill(
         body: SkillImportRequest, principal: Principal = Depends(require)
     ) -> SkillMutationResponse:
-        result = host.import_managed_skill(body.definition)
+        result = host.import_managed_skill(
+            body.definition,
+            principal_id=principal.id,
+        )
         skill = None
         if result.ok and result.resource_id is not None:
             skill = ManagedSkillView.from_skill(
-                host.get_managed_skill(result.resource_id)
+                host.get_managed_skill(
+                    result.resource_id,
+                    principal_id=principal.id,
+                )
             )
         return SkillMutationResponse(
             result=CapabilityOperationResultView.from_result(result),
@@ -891,7 +1060,9 @@ def create_app(
         skill_id: str, principal: Principal = Depends(require)
     ) -> ManagedSkillDetailView:
         try:
-            return ManagedSkillDetailView.from_detail(host.get_managed_skill(skill_id))
+            return ManagedSkillDetailView.from_detail(
+                host.get_managed_skill(skill_id, principal_id=principal.id)
+            )
         except KeyError:
             raise HTTPException(status_code=404, detail="not found") from None
 
@@ -901,7 +1072,11 @@ def create_app(
         confirm: bool = False,
         principal: Principal = Depends(require),
     ) -> CapabilityOperationResultView:
-        result = host.delete_managed_skill(skill_id, confirm=confirm)
+        result = host.delete_managed_skill(
+            skill_id,
+            confirm=confirm,
+            principal_id=principal.id,
+        )
         return CapabilityOperationResultView.from_result(result)
 
     @router.get("/capabilities/mcp")
@@ -918,7 +1093,7 @@ def create_app(
         body: McpConfigurationWriteRequest,
         principal: Principal = Depends(require),
     ) -> McpMutationResponse:
-        result = host.upsert_managed_mcp(
+        result = await host.upsert_managed_mcp(
             name=body.name,
             transport=body.transport,
             url=body.url,
@@ -939,12 +1114,24 @@ def create_app(
             config=config,
         )
 
+    @router.get("/capabilities/mcp/{mcp_id}")
+    async def get_managed_mcp(
+        mcp_id: str,
+        principal: Principal = Depends(require),
+    ) -> ManagedMcpConfigurationView:
+        try:
+            return ManagedMcpConfigurationView.from_config(
+                host.get_managed_mcp(mcp_id, principal_id=principal.id)
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail="not found") from None
+
     @router.post("/capabilities/mcp/{mcp_id}/reconnect")
     async def reconnect_managed_mcp(
         mcp_id: str,
         principal: Principal = Depends(require),
     ) -> CapabilityOperationResultView:
-        result = host.reconnect_managed_mcp(mcp_id, principal_id=principal.id)
+        result = await host.reconnect_managed_mcp(mcp_id, principal_id=principal.id)
         return CapabilityOperationResultView.from_result(result)
 
     @router.delete("/capabilities/mcp/{mcp_id}")
@@ -953,7 +1140,7 @@ def create_app(
         confirm: bool = False,
         principal: Principal = Depends(require),
     ) -> CapabilityOperationResultView:
-        result = host.delete_managed_mcp(
+        result = await host.delete_managed_mcp(
             mcp_id, confirm=confirm, principal_id=principal.id
         )
         return CapabilityOperationResultView.from_result(result)
@@ -1031,6 +1218,7 @@ def create_app(
             name=body.name,
             description=body.description,
             trigger=body.trigger,
+            instruction=body.instruction,
             enabled=body.enabled,
             principal_id=principal.id,
         )
@@ -1069,6 +1257,22 @@ def create_app(
             raise HTTPException(status_code=404, detail="not found") from None
         return CapabilityOperationResultView.from_result(result)
 
+    @router.post("/capabilities/schedules/{schedule_id}/enable")
+    async def enable_managed_schedule(
+        schedule_id: str,
+        principal: Principal = Depends(require),
+    ) -> CapabilityOperationResultView:
+        result = host.enable_managed_schedule(schedule_id, principal_id=principal.id)
+        return CapabilityOperationResultView.from_result(result)
+
+    @router.post("/capabilities/schedules/{schedule_id}/disable")
+    async def disable_managed_schedule(
+        schedule_id: str,
+        principal: Principal = Depends(require),
+    ) -> CapabilityOperationResultView:
+        result = host.disable_managed_schedule(schedule_id, principal_id=principal.id)
+        return CapabilityOperationResultView.from_result(result)
+
     @router.delete("/capabilities/schedules/{schedule_id}")
     async def delete_managed_schedule(
         schedule_id: str,
@@ -1084,7 +1288,13 @@ def create_app(
     async def get_model_default(
         principal: Principal = Depends(require),
     ) -> ModelDefaultView:
-        return ModelDefaultView.from_default(host.model_default(principal.id))
+        available = {model_id: entry.label for model_id, entry in catalog.items()}
+        return ModelDefaultView.from_default(
+            host.model_default(
+                principal.id,
+                available_models=available,
+            )
+        )
 
     @router.post("/capabilities/model-default")
     async def set_model_default(
@@ -1099,7 +1309,28 @@ def create_app(
         )
         return ModelDefaultMutationResponse(
             result=CapabilityOperationResultView.from_result(result),
-            default=ModelDefaultView.from_default(host.model_default(principal.id)),
+            default=ModelDefaultView.from_default(
+                host.model_default(
+                    principal.id,
+                    available_models=available,
+                )
+            ),
+        )
+
+    @router.delete("/capabilities/model-default")
+    async def clear_model_default(
+        principal: Principal = Depends(require),
+    ) -> ModelDefaultMutationResponse:
+        available = {model_id: entry.label for model_id, entry in catalog.items()}
+        result = host.clear_model_default(principal_id=principal.id)
+        return ModelDefaultMutationResponse(
+            result=CapabilityOperationResultView.from_result(result),
+            default=ModelDefaultView.from_default(
+                host.model_default(
+                    principal.id,
+                    available_models=available,
+                )
+            ),
         )
 
     # --- 028: model catalog + file uploads ----------------------------------

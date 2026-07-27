@@ -20,7 +20,13 @@ export type ConversationEntry =
   | { kind: "user"; text: string }
   | { kind: "reasoning"; text: string }
   | { kind: "assistant"; text: string }
-  | { kind: "tool"; callId: string; name: string; outcome?: "success" | "failure" }
+  | {
+      kind: "tool";
+      callId: string;
+      name: string;
+      outcome?: "success" | "failure";
+      artifactReference?: string;
+    }
   | { kind: "terminated"; reason: string; turns: number };
 
 export interface UsageState {
@@ -82,7 +88,13 @@ export function reduce(state: ChatState, event: RawEvent): ChatState {
         ...state,
         entries: state.entries.map((entry) =>
           entry.kind === "tool" && entry.callId === p.call_id && entry.outcome === undefined
-            ? { ...entry, outcome: p.outcome }
+            ? {
+                ...entry,
+                outcome: p.outcome,
+                ...(p.artifact_reference
+                  ? { artifactReference: p.artifact_reference }
+                  : {}),
+              }
             : entry,
         ),
       };

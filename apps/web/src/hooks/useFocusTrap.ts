@@ -4,12 +4,22 @@ import { useEffect, useRef } from "react";
 // mount, cycle Tab/Shift+Tab within, call onClose on Escape, and restore focus to the previously
 // focused element on unmount. A small in-house hook — no a11y dependency.
 const FOCUSABLE =
-  'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function useFocusTrap<T extends HTMLElement>(onClose: () => void) {
+export function useFocusTrap<T extends HTMLElement>(
+  onClose: () => void,
+  enabled = true,
+  restoreFocusOnCleanup = true,
+) {
   const ref = useRef<T>(null);
+  const onCloseRef = useRef(onClose);
 
   useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!enabled) return;
     const previous = document.activeElement as HTMLElement | null;
     const node = ref.current;
     const items = () =>
@@ -19,7 +29,7 @@ export function useFocusTrap<T extends HTMLElement>(onClose: () => void) {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -39,9 +49,9 @@ export function useFocusTrap<T extends HTMLElement>(onClose: () => void) {
     node?.addEventListener("keydown", onKeyDown);
     return () => {
       node?.removeEventListener("keydown", onKeyDown);
-      previous?.focus?.();
+      if (restoreFocusOnCleanup) previous?.focus?.();
     };
-  }, [onClose]);
+  }, [enabled, restoreFocusOnCleanup]);
 
   return ref;
 }

@@ -10,6 +10,7 @@ advertising `accepts_media` per model. In-process only (no socket, no network).
 from __future__ import annotations
 
 import base64
+import json
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -17,7 +18,13 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from loopplane.host import LoopPlaneHost, RuntimeConfig, StorageConfig  # noqa: E402
+from loopplane.host import (  # noqa: E402
+    LoopPlaneHost,
+    RuntimeConfig,
+    StorageConfig,
+    ToolSpec,
+)
+from loopplane.host.upload_tool import make_read_upload_tool  # noqa: E402
 from loopplane.model.boundary import (  # noqa: E402
     ModelIncrement,
     ModelRequest,
@@ -57,10 +64,15 @@ class RecordingModel:
         yield TurnEnd(stop_reason="end-turn", usage=TokenUsage())
 
 
-def _host(root: Path, model: RecordingModel) -> LoopPlaneHost:
+def _host(
+    root: Path,
+    model: RecordingModel,
+    *,
+    tools: tuple[ToolSpec, ...] = (),
+) -> LoopPlaneHost:
     root.mkdir(parents=True, exist_ok=True)
     return LoopPlaneHost(
-        RuntimeConfig(model=model, tools=(), storage=StorageConfig(root=root)),
+        RuntimeConfig(model=model, tools=tools, storage=StorageConfig(root=root)),
         working_scope=root,
     )
 
@@ -105,7 +117,7 @@ def test_uploaded_image_reaches_the_model_as_leading_image_block(
     assert blocks[1].text == "what is this?"
 
 
-def test_non_image_upload_is_not_embedded(tmp_path: Path) -> None:
+def test_non_image_upload_requires_projected_read_upload_tool(tmp_path: Path) -> None:
     model = RecordingModel(accepts_media=True)
     store = UploadStore(tmp_path / "uploads")
     client = make_client(
@@ -122,9 +134,55 @@ def test_non_image_upload_is_not_embedded(tmp_path: Path) -> None:
     run = client.post(
         "/v1/runs", json={"prompt": "read it", "uploads": [{"reference": reference}]}
     )
+
+    assert run.status_code == 400
+    assert run.json() == {"detail": "upload handoff unavailable"}
+    assert reference not in run.text
+    assert model.last_request is None
+
+
+def test_non_image_upload_reaches_model_as_metadata_without_tool_dispatch(
+    tmp_path: Path,
+) -> None:
+    model = RecordingModel(accepts_media=True)
+    store = UploadStore(tmp_path / "uploads")
+    reads = 0
+
+    def read(reference: str) -> bytes | None:
+        nonlocal reads
+        reads += 1
+        return store.read(reference)
+
+    client = make_client(
+        create_app(
+            _host(
+                tmp_path / "store",
+                model,
+                tools=(make_read_upload_tool(read),),
+            ),
+            authenticator=allow_all,
+            uploads=store,
+            default_accepts_media=True,
+        )
+    )
+    up = client.post("/v1/uploads", params={"name": "notes.txt"}, content=b"plain text")
+    reference = up.json()["reference"]
+
+    run = client.post(
+        "/v1/runs", json={"prompt": "read it", "uploads": [{"reference": reference}]}
+    )
+
     assert run.status_code == 200
+    assert reads == 0
     blocks = _last_user_blocks(model)
-    assert [type(b) for b in blocks] == [TextBlock]
+    assert [type(block) for block in blocks] == [TextBlock, TextBlock]
+    handoff = json.loads(blocks[0].text)
+    assert handoff == {
+        "type": "loopplane_upload_reference",
+        "reference": reference,
+        "reader": "read_upload",
+    }
+    assert blocks[1] == TextBlock(text="read it")
 
 
 def test_no_uploads_is_identical_text_only_path(tmp_path: Path) -> None:

@@ -23,6 +23,7 @@ interface Props {
   canRegenerate?: boolean;
   onExample?: (prompt: string) => void;
   onFork?: (sequence: number) => void;
+  onAttachReference?: (reference: string) => void;
   loading?: boolean;
 }
 
@@ -32,6 +33,7 @@ export function MessageList({
   canRegenerate,
   onExample,
   onFork,
+  onAttachReference,
   loading,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -63,7 +65,17 @@ export function MessageList({
   }
 
   return (
-    <div className="messages" data-testid="messages" ref={ref} onScroll={onScroll}>
+    <div
+      className="messages"
+      data-testid="messages"
+      role="log"
+      aria-label="Conversation"
+      aria-live="polite"
+      aria-atomic="false"
+      aria-relevant="additions"
+      ref={ref}
+      onScroll={onScroll}
+    >
       {loading && entries.length === 0 ? (
         <Skeleton />
       ) : entries.length === 0 ? (
@@ -76,6 +88,7 @@ export function MessageList({
             onRegenerate={index === lastAssistant ? onRegenerate : undefined}
             canRegenerate={canRegenerate}
             onFork={onFork ? () => onFork(index + 1) : undefined}
+            onAttachReference={onAttachReference}
           />
         ))
       )}
@@ -92,7 +105,10 @@ function EmptyState({ onExample }: { onExample?: (prompt: string) => void }) {
   const { t } = useTranslation();
   return (
     <div className="empty-state">
-      <div className="empty-title">{t("empty.title")}</div>
+      <h2 className="empty-title">{t("empty.title")}</h2>
+      <p className="empty-description">
+        Ask about your workspace, attach a file, or choose a starting point.
+      </p>
       <div className="empty-examples">
         {EXAMPLES.map((example) => (
           <button
@@ -114,23 +130,34 @@ interface EntryProps {
   onRegenerate?: () => void;
   canRegenerate?: boolean;
   onFork?: () => void;
+  onAttachReference?: (reference: string) => void;
 }
 
-function Entry({ entry, onRegenerate, canRegenerate, onFork }: EntryProps) {
+function Entry({
+  entry,
+  onRegenerate,
+  canRegenerate,
+  onFork,
+  onAttachReference,
+}: EntryProps) {
   switch (entry.kind) {
     case "user":
       return (
-        <div className="message message-user">
+        <article className="message message-user" data-kind="user" aria-label="You message">
           <div className="message-role">You</div>
           <div className="bubble">{entry.text}</div>
           <MessageActions text={entry.text} onFork={onFork} />
-        </div>
+        </article>
       );
     case "reasoning":
       return <ReasoningBlock text={entry.text} />;
     case "assistant":
       return (
-        <div className="message message-assistant">
+        <article
+          className="message message-assistant"
+          data-kind="assistant"
+          aria-label="LoopPlane message"
+        >
           <div className="message-role">LoopPlane</div>
           <Markdown>{entry.text}</Markdown>
           <MessageActions
@@ -139,10 +166,10 @@ function Entry({ entry, onRegenerate, canRegenerate, onFork }: EntryProps) {
             canRegenerate={canRegenerate}
             onFork={onFork}
           />
-        </div>
+        </article>
       );
     case "tool":
-      return <ToolCard entry={entry} />;
+      return <ToolCard entry={entry} onAttachReference={onAttachReference} />;
     case "terminated":
       return (
         <div className="terminated-marker">

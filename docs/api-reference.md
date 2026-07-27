@@ -177,6 +177,7 @@ Unit 068 adds an optional pre-turn estimate using `RuntimeConfig.pre_turn_max_ou
 when complete pricing, model id, max-output estimate, and a known cap are present, an over-budget
 turn can be refused before the model call with the same `budget-exceeded` reason.
 
+- `BudgetPostureSnapshot` — browser-safe enum-only tracking, pricing, and guard posture with no caps, rates, identities, or ledger details (unit 077).
 - `UsdBudgetCaps` — the per-message / per-session USD caps (each `None` = that dimension off).
 - `BudgetChecker` — the in-loop per-session USD accumulator + cap test, including the optional
   non-mutating pre-turn decision (specs 055 and 068).
@@ -266,6 +267,7 @@ The skill execution profile boundary.
 
 The runtime memory store and prompt augmentation.
 
+- `MemorySnapshotAugmentation` — an immutable owner-scoped memory snapshot used for later-session prompt augmentation.
 - `MemoryStore` — the memory store interface.
 - `MemoryEntry` — a stored memory entry.
 - `MemoryAugmentation` — a memory-derived prompt augmentation.
@@ -343,7 +345,9 @@ The Host Application Interface that exposes the runtime to host applications.
 
 ### `loopplane.host`
 
-- `LoopPlaneHost` — the host-facing runtime entry point.
+- `AllowedWorkspaceContextProvider` — optional host-owned, principal-aware source of safe read-only workspace contexts.
+- `CapabilityManagementConfig` — default-off durable capability mutation, runtime activation, MCP endpoint policy, schedule-runner, and allowed-context-provider configuration.
+- `LoopPlaneHost` — the host-facing runtime entry point; managed-MCP upsert/delete operations are asynchronous, and `agent_controls(session_id)` returns the owner-routed browser-safe, non-durable execution posture used by unit 077.
 - `RuntimeConfig` — programmatic runtime configuration.
 - `Session` — a host-driven run session.
 - `RunOutcome` — the terminal outcome of a run.
@@ -568,6 +572,7 @@ Sandbox, policy, and cost governance.
 - `all_of` — combine policies (all must allow).
 - `network_policy` — gate tools that require network egress (opt-in).
 - `plan_mode_policy` — gate non-read-only tools during plan-mode investigation.
+- `per_run_permission_mode_policy` — apply one validated named permission mode to one run while preserving explicit deny and existing safety-policy precedence (unit 077).
 - `rule_dsl_policy` — enforce a host-suppliable declarative permission rule set (allow/deny/ask).
 - `PermissionRuleSet` — a host-suppliable permission rule set with a default decision.
 - `PermissionRuleSpec` — one declarative permission rule (tool matcher, optional input match, decision).
@@ -608,7 +613,7 @@ The web/API host transport over the Host Application Interface.
 - `FileEventReplayStore` — a filesystem event replay store.
 - `SqliteEventReplayStore` — a local SQLite event replay store.
 - `PostgresEventReplayStore` — a PostgreSQL event replay store (`loopplane[postgres]`).
-- `RunRequest` — a run request body.
+- `RunRequest` — a run request body; unit 077 adds an optional validated one-run `permission_mode` and structured opaque upload references. The Web host also exposes an owner-scoped agent-controls projection alongside the existing session/monthly cost reads; rejected modes and unavailable non-image handoffs fail before model work without echoing private values.
 - `UploadRef` — a reference to an uploaded file a run carries (036).
 - `RunResult` — a run result (metadata only).
 - `OpenedSession` — an opened session handle.

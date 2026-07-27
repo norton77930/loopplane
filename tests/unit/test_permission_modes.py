@@ -16,6 +16,8 @@ from loopplane.governance import (
     PERMISSION_MODES,
     PermissionRuleSet,
     PermissionRuleSpec,
+    all_of,
+    per_run_permission_mode_policy,
     permission_mode_ruleset,
     rule_dsl_policy,
 )
@@ -180,3 +182,70 @@ def test_known_modes_are_the_documented_four() -> None:
         "dontAsk",
         "plan",
     }
+
+
+async def test_per_run_mode_policy_applies_only_the_host_approved_context_mode() -> (
+    None
+):
+    policy = per_run_permission_mode_policy(("acceptEdits", "plan"))
+    selected = RunContext(
+        session_id="s",
+        working_scope=pathlib.Path("."),
+        permission_mode="acceptEdits",
+    )
+    default = _ctx()
+
+    allowed = await decide_with_context(
+        policy, call("write_file", path="x"), descriptor(name="write_file"), selected
+    )
+    unchanged = await decide_with_context(
+        policy,
+        call("write_file", path="x"),
+        descriptor(name="write_file"),
+        default,
+    )
+
+    assert isinstance(allowed, PolicyAllow)
+    assert isinstance(unchanged, PolicyAllow)
+
+
+async def test_per_run_mode_cannot_override_an_explicit_deny() -> None:
+    selected = RunContext(
+        session_id="s",
+        working_scope=pathlib.Path("."),
+        permission_mode="acceptEdits",
+    )
+    explicit_deny = rule_dsl_policy(
+        PermissionRuleSet(
+            rules=(PermissionRuleSpec(tool="write_file", decision="deny"),),
+            default="allow",
+        )
+    )
+    composed = all_of(explicit_deny, per_run_permission_mode_policy(("acceptEdits",)))
+
+    verdict = await decide_with_context(
+        composed,
+        call("write_file", path="x"),
+        descriptor(name="write_file"),
+        selected,
+    )
+
+    assert isinstance(verdict, PolicyDeny)
+
+
+async def test_per_run_mode_policy_denies_a_forged_or_bypassing_context_mode() -> None:
+    policy = per_run_permission_mode_policy(("acceptEdits",))
+    forged = RunContext(
+        session_id="s",
+        working_scope=pathlib.Path("."),
+        permission_mode="bypassPermissions",
+    )
+
+    verdict = await decide_with_context(
+        policy,
+        call("run_command", command="whoami"),
+        descriptor(name="run_command"),
+        forged,
+    )
+
+    assert isinstance(verdict, PolicyDeny)

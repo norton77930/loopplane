@@ -17,10 +17,33 @@ describe("ToolCard", () => {
     expect(screen.getByText("failure")).toBeInTheDocument();
   });
 
+  it("offers metadata-only reference attachment without raw open actions", () => {
+    const onAttachReference = vi.fn();
+    render(
+      <ToolCard
+        entry={{
+          kind: "tool",
+          callId: "c1",
+          name: "report",
+          outcome: "success",
+          artifactReference: "artifact://session/report-1",
+        }}
+        onAttachReference={onAttachReference}
+      />,
+    );
+
+    expect(screen.getByText("artifact://session/report-1")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open|download|execute/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Attach reference" }));
+    expect(onAttachReference).toHaveBeenCalledWith("artifact://session/report-1");
+  });
+
   it("toggles its collapsible detail", () => {
     const { container } = render(<ToolCard entry={{ kind: "tool", callId: "c1", name: "echo" }} />);
     expect(container.querySelector(".tool-detail")).toBeNull();
-    fireEvent.click(screen.getByRole("button"));
-    expect(container.querySelector(".tool-detail")).not.toBeNull();
+    const toggle = screen.getByRole("button");
+    expect(toggle).toHaveAttribute("aria-controls");
+    fireEvent.click(toggle);
+    expect(screen.getByRole("region", { name: "echo tool details" })).toBeInTheDocument();
   });
 });

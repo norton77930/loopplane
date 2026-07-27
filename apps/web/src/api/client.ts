@@ -3,8 +3,9 @@
 
 import { streamEvents } from "./events";
 import { RestSessionTransport } from "./restTransport";
-import type { SessionTransport } from "./transport";
+import type { SessionTransport, SubmitOptions } from "./transport";
 import type {
+  AgentControlProjection,
   BulkDeleteRequest,
   McpServerView,
   CapabilityOperationResult,
@@ -13,6 +14,8 @@ import type {
   McpMutationResponse,
   MemoryEntryView,
   MemoryCapability,
+  MonthlyCostView,
+  MemoryCapabilityDetail,
   MemoryMutationResponse,
   MemoryWriteRequest,
   BulkDeleteResult,
@@ -20,6 +23,8 @@ import type {
   ManagedSchedule,
   ModelDefaultMutationResponse,
   ManagedSkill,
+  ManagedSkillDetail,
+  CapabilitySettingsStatus,
   SkillMutationResponse,
   SkillWriteRequest,
   ModelInfo,
@@ -28,6 +33,7 @@ import type {
   RawEvent,
   ScheduleMutationResponse,
   ScheduleWriteRequest,
+  SessionCostView,
   SessionSummary,
   SkillsResponse,
   ToolView,
@@ -115,10 +121,20 @@ export class ApiClient {
     yield* streamEvents(res.body);
   }
 
-  async submit(id: string, prompt: string): Promise<unknown> {
+  async submit(
+    id: string,
+    prompt: string,
+    options: SubmitOptions = {},
+  ): Promise<unknown> {
     return this.json(`/v1/sessions/${id}/submit`, {
       method: "POST",
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({
+        prompt,
+        ...(options.permissionMode
+          ? { permission_mode: options.permissionMode }
+          : {}),
+        ...(options.uploads?.length ? { uploads: options.uploads } : {}),
+      }),
     });
   }
 
@@ -154,6 +170,18 @@ export class ApiClient {
 
   async history(id: string): Promise<unknown[]> {
     return this.json(`/v1/sessions/${id}/history`);
+  }
+
+  async getAgentControls(id: string): Promise<AgentControlProjection> {
+    return this.json(`/v1/sessions/${id}/agent-controls`);
+  }
+
+  async getSessionCost(id: string): Promise<SessionCostView> {
+    return this.json(`/v1/sessions/${id}/cost`);
+  }
+
+  async getMonthlyCost(): Promise<MonthlyCostView> {
+    return this.json("/v1/cost/monthly");
   }
 
   // 030 — session management.
@@ -217,8 +245,16 @@ export class ApiClient {
   }
 
   // 075 — capability management foundation.
+  async getCapabilitySettings(): Promise<CapabilitySettingsStatus> {
+    return this.json("/v1/capabilities/settings");
+  }
+
   async listMemoryEntries(): Promise<MemoryCapability[]> {
     return this.json("/v1/capabilities/memory");
+  }
+
+  async getMemoryEntry(id: string): Promise<MemoryCapabilityDetail> {
+    return this.json(`/v1/capabilities/memory/${encodeURIComponent(id)}`);
   }
 
   async writeMemoryEntry(
@@ -230,7 +266,7 @@ export class ApiClient {
     });
   }
 
-  async deleteMemoryEntry(id: string): Promise<unknown> {
+  async deleteMemoryEntry(id: string): Promise<CapabilityOperationResult> {
     return this.json(
       `/v1/capabilities/memory/${encodeURIComponent(id)}?confirm=true`,
       { method: "DELETE" },
@@ -239,6 +275,10 @@ export class ApiClient {
 
   async listManagedSkills(): Promise<ManagedSkill[]> {
     return this.json("/v1/capabilities/skills");
+  }
+
+  async getManagedSkill(id: string): Promise<ManagedSkillDetail> {
+    return this.json(`/v1/capabilities/skills/${encodeURIComponent(id)}`);
   }
 
   async writeManagedSkill(
@@ -259,7 +299,7 @@ export class ApiClient {
     });
   }
 
-  async deleteManagedSkill(id: string): Promise<unknown> {
+  async deleteManagedSkill(id: string): Promise<CapabilityOperationResult> {
     return this.json(
       `/v1/capabilities/skills/${encodeURIComponent(id)}?confirm=true`,
       { method: "DELETE" },
@@ -268,6 +308,10 @@ export class ApiClient {
 
   async listMcpConfigurations(): Promise<McpConfiguration[]> {
     return this.json("/v1/capabilities/mcp");
+  }
+
+  async getMcpConfiguration(id: string): Promise<McpConfiguration> {
+    return this.json(`/v1/capabilities/mcp/${encodeURIComponent(id)}`);
   }
 
   async upsertMcpConfiguration(
@@ -297,6 +341,10 @@ export class ApiClient {
 
   async listWorkspaceContexts(): Promise<WorkspaceContext[]> {
     return this.json("/v1/capabilities/contexts");
+  }
+
+  async getWorkspaceContext(id: string): Promise<WorkspaceContext> {
+    return this.json(`/v1/capabilities/contexts/${encodeURIComponent(id)}`);
   }
 
   async upsertWorkspaceContext(
@@ -329,6 +377,12 @@ export class ApiClient {
     return this.json("/v1/capabilities/schedules");
   }
 
+  async getSchedule(id: string): Promise<ManagedSchedule> {
+    return this.json(
+      `/v1/capabilities/schedules/${encodeURIComponent(id)}`,
+    );
+  }
+
   async upsertSchedule(
     request: ScheduleWriteRequest,
   ): Promise<ScheduleMutationResponse> {
@@ -341,6 +395,20 @@ export class ApiClient {
   async runScheduleNow(id: string): Promise<CapabilityOperationResult> {
     return this.json(
       `/v1/capabilities/schedules/${encodeURIComponent(id)}/run-now`,
+      { method: "POST" },
+    );
+  }
+
+  async enableSchedule(id: string): Promise<CapabilityOperationResult> {
+    return this.json(
+      `/v1/capabilities/schedules/${encodeURIComponent(id)}/enable`,
+      { method: "POST" },
+    );
+  }
+
+  async disableSchedule(id: string): Promise<CapabilityOperationResult> {
+    return this.json(
+      `/v1/capabilities/schedules/${encodeURIComponent(id)}/disable`,
       { method: "POST" },
     );
   }
@@ -361,6 +429,10 @@ export class ApiClient {
       method: "POST",
       body: JSON.stringify({ model_id: modelId }),
     });
+  }
+
+  async clearModelDefault(): Promise<ModelDefaultMutationResponse> {
+    return this.json("/v1/capabilities/model-default", { method: "DELETE" });
   }
 
   private async json<T>(path: string, init?: RequestInit): Promise<T> {

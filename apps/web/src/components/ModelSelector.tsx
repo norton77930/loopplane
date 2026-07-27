@@ -9,9 +9,10 @@ interface Props {
   client: ApiClient;
   value: string | null;
   onChange: (model: string | null) => void;
+  scope?: "current" | "next";
 }
 
-export function ModelSelector({ client, value, onChange }: Props) {
+export function ModelSelector({ client, value, onChange, scope = "current" }: Props) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   useEffect(() => {
     let live = true;
@@ -28,7 +29,7 @@ export function ModelSelector({ client, value, onChange }: Props) {
   return (
     <select
       className="model-selector"
-      aria-label="model"
+      aria-label={scope === "next" ? "Next chat model" : "model"}
       value={value ?? ""}
       onChange={(event) => onChange(event.target.value || null)}
     >

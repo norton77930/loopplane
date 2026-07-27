@@ -34,15 +34,20 @@ describe("UsageIndicator", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("shows the estimated cost when one is provided", () => {
+  it("shows exact authoritative cost without an estimate label", () => {
     render(
       <UsageIndicator
         usage={{ total: { input_tokens: 10, output_tokens: 5, cached_tokens: 0, reasoning_tokens: 0 } }}
-        cost={0.0123}
+        cost="0.012300"
       />,
     );
     const usage = screen.getByTestId("usage");
-    expect(usage).toHaveTextContent("est.");
-    expect(usage).toHaveTextContent("0.0123");
+    expect(usage).toHaveTextContent("$0.012300");
+    expect(usage).not.toHaveTextContent("est.");
+  });
+
+  it("keeps authoritative known zero visible even before token totals arrive", () => {
+    render(<UsageIndicator usage={{ total: ZERO_USAGE }} cost="0" />);
+    expect(screen.getByTestId("usage")).toHaveTextContent("$0");
   });
 });

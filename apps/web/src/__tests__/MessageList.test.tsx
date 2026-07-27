@@ -3,6 +3,34 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MessageList } from "../components/MessageList";
 
 describe("MessageList", () => {
+  it("exposes a semantic conversation hierarchy for messages and termination", () => {
+    render(
+      <MessageList
+        entries={[
+          { kind: "user", text: "hello" },
+          { kind: "assistant", text: "hi" },
+          { kind: "terminated", reason: "done", turns: 1 },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("log", { name: "Conversation" }))
+      .toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("log", { name: "Conversation" }))
+      .toHaveAttribute("aria-atomic", "false");
+    expect(screen.getByRole("log", { name: "Conversation" }))
+      .toHaveAttribute("aria-relevant", "additions");
+    expect(screen.getByRole("article", { name: "You message" })).toHaveAttribute(
+      "data-kind",
+      "user",
+    );
+    expect(
+      screen.getByRole("article", { name: "LoopPlane message" }),
+    ).toHaveAttribute("data-kind", "assistant");
+    expect(screen.getByText(/Run ended/)).toHaveTextContent("done");
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("renders entries in stream order: user, assistant markdown, tool, terminated", () => {
     render(
       <MessageList
@@ -76,6 +104,8 @@ describe("MessageList", () => {
   it("shows example prompts on an empty conversation and sends one", () => {
     const onExample = vi.fn();
     render(<MessageList entries={[]} onExample={onExample} />);
+    expect(screen.getByRole("heading", { level: 2, name: "Start a conversation" }))
+      .toBeInTheDocument();
     fireEvent.click(screen.getByText("Explain what this project does"));
     expect(onExample).toHaveBeenCalledWith("Explain what this project does");
   });

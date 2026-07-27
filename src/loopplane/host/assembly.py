@@ -30,11 +30,15 @@ from loopplane.governance import (
     PermissionRuleSet,
     all_of,
     network_policy,
+    per_run_permission_mode_policy,
     permission_mode_ruleset,
     plan_mode_policy,
     rule_dsl_policy,
     safe_failure,
 )
+from loopplane.host.agent_controls import selectable_browser_modes
+from loopplane.host.capability_manager import CapabilityManager
+from loopplane.host.capability_store import CapabilitySettingsStore
 from loopplane.host.config import (
     RuntimeConfig,
     approval_effects,
@@ -74,6 +78,7 @@ class AssembledRuntime:
     gateway: ToolGateway
     skills: Mapping[str, LoadedSkill]
     memory_store: MemoryStore | None
+    capability_manager: CapabilityManager
 
 
 def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRuntime:
@@ -195,6 +200,19 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
 
         gateway.register_adapter(WorktreeToolsAdapter())
 
+    capability_store = (
+        CapabilitySettingsStore(config.storage.root)
+        if config.storage is not None
+        else None
+    )
+    capability_manager = CapabilityManager(
+        config=config.capability_management,
+        store=capability_store,
+        gateway=gateway,
+        shared_memory=memory_store,
+        shared_skills=skills_map,
+    )
+
     sink = RunSink()
     if config.observability:
         # The overlay observes events as an isolated side-branch inside RunSink's
@@ -212,6 +230,12 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         controller_kwargs["memory_store"] = memory_store
     if skills_map:
         controller_kwargs["skills"] = skills_map
+    if (
+        config.capability_management is not None
+        and config.capability_management.runtime_activation_enabled
+    ):
+        controller_kwargs["scoped_memory_provider"] = capability_manager.memory_provider
+        controller_kwargs["scoped_skills_provider"] = capability_manager.skills_provider
     if config.auto_compact_threshold is not None:
         controller_kwargs["auto_compact_threshold"] = config.auto_compact_threshold
     if config.compaction_summarizer is not None:
@@ -290,6 +314,7 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         gateway=gateway,
         skills=skills_map or {},
         memory_store=memory_store,
+        capability_manager=capability_manager,
     )
 
 
@@ -345,13 +370,19 @@ def _build_decider(
     # When egress is off the gate must be installed so network tools deny by default;
     # when on, the policy is a no-op allow and only matters if approval is also wired.
     network_gate_needed = not config.allow_network
-    plan_mode_needed = plan_mode
+    browser_modes = tuple(option.id for option in selectable_browser_modes(config))
+    # Dynamic plan entry needs the already-existing plan policy installed even when
+    # the static host plan_mode remains off. The policy itself is a no-op for all
+    # contexts without an active PlanModeState.
+    plan_mode_needed = plan_mode or "plan" in browser_modes
     rules_needed = permission_rules is not None and bool(permission_rules.rules)
+    browser_mode_needed = bool(browser_modes)
     if (
         not approval_needed
         and not network_gate_needed
         and not plan_mode_needed
         and not rules_needed
+        and not browser_mode_needed
     ):
         return None
 
@@ -376,6 +407,11 @@ def _build_decider(
         # Regexes are compiled here, so a malformed rule fails the build (fail-closed).
         assert permission_rules is not None
         deciders.append(rule_dsl_policy(permission_rules))
+    if browser_mode_needed:
+        # 077: a context-reading overlay for one accepted browser selection. It uses
+        # the same decide stage and is composed below, so no selected mode can rescue
+        # an explicit/safety deny from any existing decider.
+        deciders.append(per_run_permission_mode_policy(browser_modes))
 
     # Deny-wins composition (all_of) wrapped fail-closed (safe_failure); a single
     # decider composes the same way, so this is uniform whether or not approval is

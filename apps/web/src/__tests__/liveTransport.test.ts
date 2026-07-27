@@ -56,19 +56,57 @@ describe("LiveSessionTransport", () => {
     });
   });
 
-  it("sends submit and abort messages over the live socket", async () => {
+  it("sends submit options and abort messages over the live socket", async () => {
     const transport = new LiveSessionTransport({
       sessionId: "s1",
       ticket: "ticket-1",
       WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
     });
-    await transport.submit("s1", "hello");
+    await transport.submit("s1", "hello", { permissionMode: "plan" });
     const socket = FakeSocket.instances[0];
     await transport.cancel("s1");
 
-    expect(socket.sent.map((item) => JSON.parse(item).type)).toEqual([
-      "submit",
-      "abort",
+    expect(socket.sent.map((item) => JSON.parse(item))).toEqual([
+      {
+        type: "submit",
+        payload: { prompt: "hello", permission_mode: "plan" },
+      },
+      { type: "abort", payload: {} },
     ]);
+  });
+
+  it("submits completed uploads through the structured live field", async () => {
+    const transport = new LiveSessionTransport({
+      sessionId: "s1",
+      ticket: "ticket-1",
+      WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+    });
+
+    await transport.submit("s1", "summarize", {
+      uploads: [{ reference: "upload://notes" }],
+    });
+
+    expect(JSON.parse(FakeSocket.instances[0].sent[0])).toEqual({
+      type: "submit",
+      payload: {
+        prompt: "summarize",
+        uploads: [{ reference: "upload://notes" }],
+      },
+    });
+  });
+
+  it("preserves the existing live payload when no mode is selected", async () => {
+    const transport = new LiveSessionTransport({
+      sessionId: "s1",
+      ticket: "ticket-1",
+      WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+    });
+
+    await transport.submit("s1", "hello");
+
+    expect(JSON.parse(FakeSocket.instances[0].sent[0])).toEqual({
+      type: "submit",
+      payload: { prompt: "hello" },
+    });
   });
 });

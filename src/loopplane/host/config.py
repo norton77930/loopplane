@@ -26,6 +26,11 @@ from loopplane.governance import (
     PermissionRuleSet,
     PermissionRuleSpec,
 )
+from loopplane.host.capabilities import (
+    AllowedWorkspaceContextProvider,
+    ManagedMcpEndpointPolicy,
+    ManagedScheduleRunner,
+)
 from loopplane.ledger import UsdLedger
 from loopplane.model import ModelBoundary, ToolDescriptor
 from loopplane.pricing import PricingTable
@@ -92,6 +97,17 @@ class SkillsConfig:
 
 
 @dataclass(frozen=True)
+class CapabilityManagementConfig:
+    """Host-owned gates and collaborators for durable capability settings."""
+
+    mutations_enabled: bool = False
+    runtime_activation_enabled: bool = False
+    mcp_endpoint_policy: ManagedMcpEndpointPolicy | None = None
+    schedule_runner: ManagedScheduleRunner | None = None
+    allowed_context_provider: AllowedWorkspaceContextProvider | None = None
+
+
+@dataclass(frozen=True)
 class RuntimeConfig:
     """The minimal declarative composition of a run (FR-010).
 
@@ -106,6 +122,7 @@ class RuntimeConfig:
     storage: StorageConfig | None = None
     memory: MemoryConfig | None = None
     skills: SkillsConfig | None = None
+    capability_management: CapabilityManagementConfig | None = None
     observability: bool = False
     # Opt-in network egress (spec 034): off by default, so a network-flagged tool
     # is denied at the Gateway's decide stage unless the host turns this on. Carries
@@ -130,6 +147,10 @@ class RuntimeConfig:
     # bare string; carries no secret. acceptEdits/bypassPermissions are mutually
     # exclusive with permission_rules (validated); dontAsk/plan may combine with them.
     permission_mode: str | None = None
+    # Browser-selectable per-run permission modes (spec 077). This is a distinct
+    # host-owned allow-list: it is empty by default, so browser callers retain the
+    # existing behavior unless an embedding host explicitly exposes a mode.
+    browser_permission_modes: tuple[str, ...] = ()
     # Opt-in proactive auto-compaction threshold (spec 041): None by default. When a
     # fraction f in (0, 1] is supplied, the prompt assembler compacts history (the
     # existing mechanical digest) before a turn once the estimated assembled-context
@@ -234,11 +255,15 @@ class RuntimeConfig:
             storage=_coerce_storage(data.get("storage")),
             memory=_coerce_memory(data.get("memory")),
             skills=_coerce_skills(data.get("skills")),
+            capability_management=_coerce_capability_management(
+                data.get("capability_management")
+            ),
             observability=bool(data.get("observability", False)),
             allow_network=bool(data.get("allow_network", False)),
             plan_mode=bool(data.get("plan_mode", False)),
             permission_rules=_coerce_permission_rules(data.get("permission_rules")),
             permission_mode=data.get("permission_mode"),
+            browser_permission_modes=tuple(data.get("browser_permission_modes", ())),
             auto_compact_threshold=_coerce_threshold(
                 data.get("auto_compact_threshold")
             ),
@@ -323,6 +348,22 @@ def _coerce_skills(value: Any) -> SkillsConfig | None:
     return SkillsConfig(sources=tuple(Path(p) for p in sources))
 
 
+def _coerce_capability_management(
+    value: Any,
+) -> CapabilityManagementConfig | None:
+    if value is None or isinstance(value, CapabilityManagementConfig):
+        return value
+    if not isinstance(value, Mapping):
+        raise ConfigError("capability_management must be a mapping")
+    return CapabilityManagementConfig(
+        mutations_enabled=bool(value.get("mutations_enabled", False)),
+        runtime_activation_enabled=bool(value.get("runtime_activation_enabled", False)),
+        mcp_endpoint_policy=value.get("mcp_endpoint_policy"),
+        schedule_runner=value.get("schedule_runner"),
+        allowed_context_provider=value.get("allowed_context_provider"),
+    )
+
+
 def _coerce_permission_rules(value: Any) -> PermissionRuleSet | None:
     """Coerce the declarative permission rules (spec 039): a ``PermissionRuleSet``
     passes through; a mapping ``{"rules": [{tool, match?, decision}, ...], "default":
@@ -386,6 +427,28 @@ def validate_config(config: RuntimeConfig) -> None:
                 raise ConfigError(
                     "platform_fairness must provide admit() and model_turn()"
                 )
+
+    capability_management = config.capability_management
+    if capability_management is not None:
+        endpoint_policy = capability_management.mcp_endpoint_policy
+        if endpoint_policy is not None and not callable(endpoint_policy):
+            raise ConfigError(
+                "capability_management.mcp_endpoint_policy must be callable"
+            )
+        schedule_runner = capability_management.schedule_runner
+        if schedule_runner is not None and not callable(
+            getattr(schedule_runner, "run_now", None)
+        ):
+            raise ConfigError(
+                "capability_management.schedule_runner must provide run_now()"
+            )
+        allowed_context_provider = capability_management.allowed_context_provider
+        if allowed_context_provider is not None and not callable(
+            allowed_context_provider
+        ):
+            raise ConfigError(
+                "capability_management.allowed_context_provider must be callable"
+            )
 
     names = collect_tool_names(config)
     seen: set[str] = set()

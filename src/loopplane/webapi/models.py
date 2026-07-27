@@ -11,11 +11,18 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from loopplane.host import RunOutcome
+from loopplane.host.agent_controls import (
+    AcceptedRunPosture,
+    AgentControlProjection,
+)
 from loopplane.host.capabilities import (
+    CapabilityAction,
     CapabilityOperationResult,
+    CapabilityScope,
+    CapabilitySettingsStatus,
     ManagedMcpConfiguration,
     ManagedMemoryDetail,
     ManagedMemoryEntry,
@@ -55,10 +62,15 @@ class _SummaryLike(Protocol):
 # --- requests ----------------------------------------------------------------
 
 
-class ScheduleWriteRequest(BaseModel):
+class _CapabilityMutationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ScheduleWriteRequest(_CapabilityMutationRequest):
     name: str = Field(min_length=1)
     description: str = ""
     trigger: str = Field(min_length=1)
+    instruction: str = ""
     enabled: bool = True
 
     @field_validator("name", "trigger")
@@ -70,7 +82,7 @@ class ScheduleWriteRequest(BaseModel):
         return trimmed
 
 
-class ModelDefaultWriteRequest(BaseModel):
+class ModelDefaultWriteRequest(_CapabilityMutationRequest):
     model_id: str = Field(min_length=1)
 
     @field_validator("model_id")
@@ -102,6 +114,9 @@ class RunRequest(BaseModel):
     # 045 — optional JSON schema constraining the response (structured output);
     # rejected upfront if the selected model does not support it.
     output_schema: dict[str, object] | None = None
+    # 077: optional, host-validated, one-run metadata. Omission preserves the
+    # pre-existing request exactly; validation/rejection happens at the host seam.
+    permission_mode: str | None = None
 
 
 class RenameRequest(BaseModel):
@@ -210,6 +225,101 @@ class MonthlyCostView(BaseModel):
             principal_id=principal_id,
             month=month,
             usd_spent=None if spent is None else str(spent),
+        )
+
+
+class PermissionModeOptionView(BaseModel):
+    id: str
+    kind: Literal["standard", "plan"]
+    summary: str
+
+
+class AcceptedRunPostureView(BaseModel):
+    mode: str
+    state: Literal["active", "settled"]
+    plan_active: bool
+
+
+class PermissionPostureView(BaseModel):
+    default_mode: str | None
+    selectable_modes: list[PermissionModeOptionView]
+    selection_scope: Literal["run"]
+    rules_configured: bool
+    rule_default: Literal["allow", "ask", "deny"] | None
+    rule_decisions: list[Literal["allow", "ask", "deny"]]
+    plan_entry_available: bool
+    plan_exit_requires_approval: bool
+    active_run: AcceptedRunPostureView | None
+    last_accepted_run: AcceptedRunPostureView | None
+
+
+class BudgetGuardPostureView(BaseModel):
+    tracking: Literal["available", "unavailable", "unknown"]
+    pricing: Literal["priced", "partially_unpriced", "unpriced", "unknown"]
+    message_guard: Literal["enabled", "disabled", "unknown"]
+    session_guard: Literal["disabled", "within", "near", "exceeded", "unknown"]
+    monthly_guard: Literal["disabled", "within", "near", "exceeded", "unknown"]
+    pre_turn_guard: Literal["enabled", "disabled", "unknown"]
+
+
+def _accepted_run_posture_data(
+    value: AcceptedRunPosture | None,
+) -> dict[str, object] | None:
+    if value is None:
+        return None
+    return {
+        "mode": value.mode,
+        "state": value.state,
+        "plan_active": value.plan_active,
+    }
+
+
+class AgentControlProjectionView(BaseModel):
+    """Public-safe owner-scoped 077 response; contains no raw policy/config data."""
+
+    session_id: str
+    permission: PermissionPostureView
+    budget: BudgetGuardPostureView
+    actions: list[str]
+
+    @classmethod
+    def from_projection(
+        cls, projection: AgentControlProjection
+    ) -> AgentControlProjectionView:
+        return cls.model_validate(
+            {
+                "session_id": projection.session_id,
+                "permission": {
+                    "default_mode": projection.permission.default_mode,
+                    "selectable_modes": [
+                        {"id": item.id, "kind": item.kind, "summary": item.summary}
+                        for item in projection.permission.selectable_modes
+                    ],
+                    "selection_scope": projection.permission.selection_scope,
+                    "rules_configured": projection.permission.rules_configured,
+                    "rule_default": projection.permission.rule_default,
+                    "rule_decisions": list(projection.permission.rule_decisions),
+                    "plan_entry_available": projection.permission.plan_entry_available,
+                    "plan_exit_requires_approval": (
+                        projection.permission.plan_exit_requires_approval
+                    ),
+                    "active_run": _accepted_run_posture_data(
+                        projection.permission.active_run
+                    ),
+                    "last_accepted_run": _accepted_run_posture_data(
+                        projection.permission.last_accepted_run
+                    ),
+                },
+                "budget": {
+                    "tracking": projection.budget.tracking,
+                    "pricing": projection.budget.pricing,
+                    "message_guard": projection.budget.message_guard,
+                    "session_guard": projection.budget.session_guard,
+                    "monthly_guard": projection.budget.monthly_guard,
+                    "pre_turn_guard": projection.budget.pre_turn_guard,
+                },
+                "actions": list(projection.actions),
+            }
         )
 
 
@@ -370,6 +480,9 @@ class ManagedMemoryView(BaseModel):
     snippet: str
     status: str
     updated_at: datetime | None = None
+    scope: CapabilityScope
+    actions: list[CapabilityAction]
+    problem: str | None = None
 
     @classmethod
     def from_entry(cls, entry: ManagedMemoryEntry) -> ManagedMemoryView:
@@ -384,6 +497,8 @@ class ManagedSkillView(BaseModel):
     status: str
     problem: str | None = None
     updated_at: datetime | None = None
+    scope: CapabilityScope
+    actions: list[CapabilityAction]
 
     @classmethod
     def from_skill(cls, skill: ManagedSkill) -> ManagedSkillView:
@@ -395,9 +510,13 @@ class ManagedMcpConfigurationView(BaseModel):
     name: str
     status: str
     tool_count: int
+    transport: Literal["http", "sse", "websocket"] | None = None
+    url: str | None = None
     tools: list[str]
     problem: str | None = None
     updated_at: datetime | None = None
+    scope: CapabilityScope
+    actions: list[CapabilityAction]
 
     @classmethod
     def from_config(
@@ -408,9 +527,13 @@ class ManagedMcpConfigurationView(BaseModel):
             name=config.name,
             status=config.status,
             tool_count=config.tool_count,
+            transport=config.transport,
+            url=config.url,
             tools=list(config.tools),
             problem=config.problem,
             updated_at=config.updated_at,
+            scope=config.scope,
+            actions=list(config.actions),
         )
 
 
@@ -421,6 +544,9 @@ class WorkspaceContextView(BaseModel):
     workspace_label: str
     status: str
     updated_at: datetime | None = None
+    scope: CapabilityScope
+    actions: list[CapabilityAction]
+    problem: str | None = None
 
     @classmethod
     def from_context(cls, context: WorkspaceContext) -> WorkspaceContextView:
@@ -431,6 +557,9 @@ class WorkspaceContextView(BaseModel):
             workspace_label=context.workspace_label,
             status=context.status,
             updated_at=context.updated_at,
+            scope=context.scope,
+            actions=list(context.actions),
+            problem=context.problem,
         )
 
 
@@ -440,10 +569,14 @@ class ManagedScheduleView(BaseModel):
     description: str
     trigger: str
     enabled: bool
+    instruction: str
     status: str
     next_run_at: datetime | None = None
     last_run_at: datetime | None = None
     problem: str | None = None
+    updated_at: datetime | None = None
+    scope: CapabilityScope
+    actions: list[CapabilityAction]
 
     @classmethod
     def from_schedule(cls, schedule: ManagedSchedule) -> ManagedScheduleView:
@@ -453,10 +586,14 @@ class ManagedScheduleView(BaseModel):
             description=schedule.description,
             trigger=schedule.trigger,
             enabled=schedule.enabled,
+            instruction=schedule.instruction,
             status=schedule.status,
             next_run_at=schedule.next_run_at,
             last_run_at=schedule.last_run_at,
             problem=schedule.problem,
+            updated_at=schedule.updated_at,
+            scope=schedule.scope,
+            actions=list(schedule.actions),
         )
 
 
@@ -465,10 +602,27 @@ class ModelDefaultView(BaseModel):
     label: str | None
     status: str
     updated_at: datetime | None = None
+    scope: CapabilityScope
+    actions: list[CapabilityAction]
+    problem: str | None = None
 
     @classmethod
     def from_default(cls, default: ModelDefault) -> ModelDefaultView:
         return cls(**default.__dict__)
+
+
+class CapabilitySettingsStatusView(BaseModel):
+    storage_available: bool
+    mutations_enabled: bool
+    runtime_activation_enabled: bool
+    mcp_endpoint_policy_available: bool
+    schedule_runner_available: bool
+
+    @classmethod
+    def from_status(
+        cls, status: CapabilitySettingsStatus
+    ) -> CapabilitySettingsStatusView:
+        return cls(**status.__dict__)
 
 
 class CapabilityOperationResultView(BaseModel):
@@ -486,7 +640,6 @@ class CapabilityOperationResultView(BaseModel):
 
 class ManagedMemoryDetailView(ManagedMemoryView):
     content: str
-    problem: str | None = None
 
     @classmethod
     def from_detail(cls, entry: ManagedMemoryDetail) -> ManagedMemoryDetailView:
@@ -521,7 +674,7 @@ class ModelDefaultMutationResponse(BaseModel):
     default: ModelDefaultView
 
 
-class MemoryWriteRequest(BaseModel):
+class MemoryWriteRequest(_CapabilityMutationRequest):
     name: str = Field(min_length=1)
     kind: str = Field(min_length=1)
     description: str = ""
@@ -536,7 +689,7 @@ class MemoryWriteRequest(BaseModel):
         return trimmed
 
 
-class SkillWriteRequest(BaseModel):
+class SkillWriteRequest(_CapabilityMutationRequest):
     name: str = Field(min_length=1)
     description: str = ""
     instructions: str = Field(min_length=1)
@@ -550,11 +703,11 @@ class SkillWriteRequest(BaseModel):
         return trimmed
 
 
-class SkillImportRequest(BaseModel):
+class SkillImportRequest(_CapabilityMutationRequest):
     definition: dict[str, object]
 
 
-class McpConfigurationWriteRequest(BaseModel):
+class McpConfigurationWriteRequest(_CapabilityMutationRequest):
     name: str = Field(min_length=1)
     transport: Literal["http", "sse", "stdio", "websocket"]
     url: str | None = None
@@ -575,7 +728,7 @@ class McpMutationResponse(BaseModel):
     config: ManagedMcpConfigurationView | None = None
 
 
-class WorkspaceContextWriteRequest(BaseModel):
+class WorkspaceContextWriteRequest(_CapabilityMutationRequest):
     name: str = Field(min_length=1)
     description: str = ""
     workspace_label: str = Field(min_length=1)
@@ -594,7 +747,7 @@ class WorkspaceContextMutationResponse(BaseModel):
     context: WorkspaceContextView | None = None
 
 
-class SessionContextBindRequest(BaseModel):
+class SessionContextBindRequest(_CapabilityMutationRequest):
     context_id: str = Field(min_length=1)
 
 

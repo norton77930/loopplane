@@ -169,6 +169,10 @@ class RunContext:
     # (the plan-mode policy is then a no-op). Shared by reference with the decider and
     # the ``exit_plan_mode`` tool, which both receive this same per-run context.
     plan_mode: PlanModeState | None = None
+    # Optional host-validated browser permission-mode selection (spec 077). ``None``
+    # preserves the configured host behavior; a value is per-run metadata consumed by
+    # the existing decide-stage policy only and is never checkpointed.
+    permission_mode: str | None = None
     # Optional per-run JSON schema for structured output (spec 045); ``None`` means
     # unconstrained. Set only in ``RuntimeController.drive()`` (the single RunContext
     # construction site) from the run request, then forwarded to the assembled
