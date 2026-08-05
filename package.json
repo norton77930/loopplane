@@ -1,0 +1,20 @@
+{
+  "name": "loopplane-workspace",
+  "private": true,
+  "description": "Private npm workspaces root for LoopPlane Web, Desktop, and shared cowork presentation (078).",
+  "workspaces": [
+    "apps/web",
+    "apps/desktop",
+    "packages/cowork-presentation"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck -w @loopplane/web && npm run typecheck -w @loopplane/desktop && npm run typecheck -w @loopplane/cowork-presentation",
+    "test": "npm run test -w @loopplane/web && npm run test -w @loopplane/desktop && npm run test -w @loopplane/cowork-presentation",
+    "build:web": "npm run build -w @loopplane/web",
+    "build:desktop": "npm run build -w @loopplane/desktop",
+    "build:sidecar": "npm run build:sidecar -w @loopplane/desktop"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -119,3 +119,23 @@ Sorted relative paths + content SHA-256 (ordinal path order; line format `path�
 - **Non-claims**: No product source, package manifests, workflow, or verifier implementation was added in T003.
 
 <!-- T003-RED-EVIDENCE END -->
+
+## T004 — verifier + final npm graph materialization
+
+<!-- T004-EVIDENCE START -->
+
+- **Verifier**: `scripts/verify-desktop-stage-b.ps1`
+  - Modes: `bootstrap` | `final` | `delivery`
+  - Credential seam: `LOOPPLANE_STAGE_B_GITHUB_TOKEN` only (no `GH_TOKEN`/`GITHUB_TOKEN` fallback)
+  - `-SelfTest <case>` covers T003 contract cases without network
+- **npm graph (pre-implementation final manifests)**:
+  - root `package.json` (workspaces: web, desktop, cowork-presentation)
+  - `packages/cowork-presentation/package.json`
+  - updated `apps/web/package.json` / `apps/desktop/package.json` (workspace dep + final scripts/`main`/`files`)
+  - sole root `package-lock.json`
+  - removed app-local locks: `apps/web/package-lock.json`, `apps/desktop/package-lock.json`
+- **Command**: `uv run pytest tests/contract/test_desktop_delivery_gate.py -q`
+- **Result**: **GREEN** — `40 passed`
+- **Non-claims**: No product presentation source scaffolding, no install/build of Desktop artifact, ADR remains Proposed, T006+ not authorized until T005.
+
+<!-- T004-EVIDENCE END -->
