@@ -41,7 +41,7 @@
 
 **⚠️ CRITICAL**: No user-story implementation begins until this phase passes.
 
-- [ ] T009 [P] Add `apps/desktop/sidecar/**` import/live-store reach-through guards in `tests/contract/test_desktop_boundary.py`, allowing startup storage validation only through the public non-instance `loopplane.host.validate_active_generation` facade; preserve the existing tools-layer import guard in `tests/contract/test_tools_boundary.py`, and extend the sole `.invoke()` execution audit in `tests/contract/test_tool_gateway.py` where needed (FR-006, FR-020, FR-043–FR-045; SC-010)
+- [x] T009 [P] Add `apps/desktop/sidecar/**` import/live-store reach-through guards in `tests/contract/test_desktop_boundary.py`, allowing startup storage validation only through the public non-instance `loopplane.host.validate_active_generation` facade; preserve the existing tools-layer import guard in `tests/contract/test_tools_boundary.py`, and extend the sole `.invoke()` execution audit in `tests/contract/test_tool_gateway.py` where needed (FR-006, FR-020, FR-043–FR-045; SC-010)
 - [ ] T010 [P] Add synthetic LoopPlane-secret/path/rule/PID/error markers plus authorized conversation/artifact markers and content-surface-versus-secondary-surface assertions in `tests/helpers/public_safety.py` and `tests/contract/test_desktop_public_safety.py` (FR-022, FR-028, FR-034, FR-041; SC-005–SC-007)
 - [ ] T011 [P] Build an in-memory stdio/clock/fault sidecar harness with byte-split UTF-8 and child-failure controls in `tests/helpers/desktop_sidecar.py` (FR-004–FR-008; SC-002)
 - [ ] T012 [P] Build Electron IPC sender/window/child-process/native-dialog test doubles in `apps/desktop/electron/__tests__/helpers.ts` (FR-002–FR-005, FR-023; SC-001–SC-002)

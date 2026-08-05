@@ -278,6 +278,9 @@ async def test_raw_internal_errors_never_cross_the_boundary(tmp_path: Path) -> N
 def test_no_execution_path_outside_the_gateway() -> None:
     """SC-002 structural audit: only the Gateway calls adapter/handler
     invocation, and the loop/controller never import tool sources.
+
+    078 T009: also scan ``apps/desktop/sidecar/**`` so Desktop adaptation
+    cannot grow a parallel invoke path outside the Tool Gateway.
     """
     offenders: list[str] = []
     for path in SRC_ROOT.rglob("*.py"):
@@ -294,3 +297,13 @@ def test_no_execution_path_outside_the_gateway() -> None:
             source = path.read_text("utf-8")
             assert "loopplane.tools" not in source, path
             assert "loopplane.adapters" not in source, path
+
+    sidecar_root = Path(__file__).resolve().parents[2] / "apps" / "desktop" / "sidecar"
+    if sidecar_root.is_dir():
+        for path in sidecar_root.rglob("*.py"):
+            if "__pycache__" in path.parts:
+                continue
+            source = path.read_text(encoding="utf-8")
+            assert ".invoke(" not in source, path
+            assert ".handler(" not in source, path
+            assert "loopplane.tools" not in source, path
