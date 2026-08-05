@@ -103,3 +103,19 @@ Sorted relative paths + content SHA-256 (ordinal path order; line format `path�
 - This evidence block cannot authorize itself or substitute for API refetch.
 
 <!-- STAGE-B-BOOTSTRAP-EVIDENCE END -->
+
+## T003 — delivery-gate RED observation
+
+<!-- T003-RED-EVIDENCE START -->
+
+- **When (local)**: after T002 bootstrap authorization
+- **Artifacts**:
+  - `tests/contract/test_desktop_delivery_gate.py`
+  - `tests/helpers/desktop_stage_b_policy.py`
+- **Command**: `uv run pytest tests/contract/test_desktop_delivery_gate.py -q`
+- **Result**: **RED as required** — `32 failed, 8 passed`
+  - 8 pure policy oracle tests pass (mode locators, C2 rule, tree-diff allowlist, extras)
+  - 32 verifier entrypoint / `-SelfTest` cases fail because `scripts/verify-desktop-stage-b.ps1` is not yet implemented (T004)
+- **Non-claims**: No product source, package manifests, workflow, or verifier implementation was added in T003.
+
+<!-- T003-RED-EVIDENCE END -->
