@@ -206,3 +206,27 @@ Accepted Root package-lock SHA-256: c1808e1b4b13bd191d9538d5dbed34a47eaefe3e4864
 - Accepted root package-lock SHA-256: `c1808e1b4b13bd191d9538d5dbed34a47eaefe3e48641ac1268b497fd5ab99cd` (**MATCH**, no drift)
 
 <!-- T007-T008-EVIDENCE END -->
+
+## Phase 2 foundations (T010–T015)
+
+<!-- PHASE2-EVIDENCE START -->
+
+### Artifacts
+- T010: `tests/helpers/public_safety.py`, `tests/contract/test_desktop_public_safety.py`
+- T011: `tests/helpers/desktop_sidecar.py` (+ harness self-tests)
+- T012: `apps/desktop/electron/__tests__/helpers.ts` (+ desktop self-tests)
+- T013: `packages/cowork-presentation/src/__tests__/{host-contract,events,fixtures.selftest}.ts`
+- T014: `tests/helpers/desktop_profile.py` (+ fixture self-tests)
+- T015: `tests/helpers/test_phase2_false_green.py` intentional negative mutations
+
+### Commands / results
+- `uv run pytest tests/helpers tests/contract/test_desktop_public_safety.py tests/contract/test_desktop_boundary.py -q` → **21 passed**
+- `npm run test -w @loopplane/cowork-presentation` → **2 passed** (fixture self-tests)
+- `npm run test -w @loopplane/desktop` → **16 passed** (includes 4 electron-helpers self-tests)
+- `uv run ruff check` on new helpers → clean
+- False-green checks: secondary surfaces fail on secret leak; byte-split does not return full line at chunk size 1
+
+### Checkpoint
+Phase 2 harnesses/guards pass on baseline and fail on representative negative mutations. User-story implementation (US1 T016+) may begin.
+
+<!-- PHASE2-EVIDENCE END -->
