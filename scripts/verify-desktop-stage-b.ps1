@@ -43,13 +43,16 @@ $script:ForbiddenChildTokens = @('LOOPPLANE_STAGE_B_GITHUB_TOKEN', 'GH_TOKEN', '
 
 $script:AllowAddOrModify = @(
     'tests/contract/test_desktop_delivery_gate.py',
+    'tests/helpers/desktop_stage_b_policy.py',
     'scripts/verify-desktop-stage-b.ps1',
     'package.json',
     'package-lock.json',
     'apps/web/package.json',
     'apps/desktop/package.json',
     'packages/cowork-presentation/package.json',
-    'specs/078-desktop-cowork-parity/implementation-evidence.md'
+    'specs/078-desktop-cowork-parity/implementation-evidence.md',
+    'specs/078-desktop-cowork-parity/tasks.md',
+    'docs/loopplane-agent-board.md'
 )
 $script:AllowDelete = @(
     'apps/web/package-lock.json',

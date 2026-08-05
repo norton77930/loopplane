@@ -22,6 +22,7 @@ ALLOWED_AUTHOR_ASSOCIATIONS: Final[frozenset[str]] = frozenset(
 FINAL_TREE_DIFF_ALLOW_ADD_OR_MODIFY: Final[frozenset[str]] = frozenset(
     {
         "tests/contract/test_desktop_delivery_gate.py",
+        "tests/helpers/desktop_stage_b_policy.py",
         "scripts/verify-desktop-stage-b.ps1",
         "package.json",
         "package-lock.json",
@@ -29,6 +30,8 @@ FINAL_TREE_DIFF_ALLOW_ADD_OR_MODIFY: Final[frozenset[str]] = frozenset(
         "apps/desktop/package.json",
         "packages/cowork-presentation/package.json",
         "specs/078-desktop-cowork-parity/implementation-evidence.md",
+        "specs/078-desktop-cowork-parity/tasks.md",
+        "docs/loopplane-agent-board.md",
     }
 )
 

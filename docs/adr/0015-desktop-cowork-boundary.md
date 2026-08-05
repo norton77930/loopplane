@@ -1,6 +1,6 @@
 # ADR 0015: Desktop cowork process, profile, and presentation boundary
 
-- **Status**: Proposed (2026-07-30) — no gate is authorized; external-human Stage A may later write only `apps/desktop/sidecar/pyinstaller-build.in`, `apps/desktop/sidecar/pyinstaller-build-windows-py312.txt`, and `specs/078-desktop-cowork-parity/implementation-evidence.md`; T002 bootstrap authority is limited to T003/T004, no T006+ product implementation begins before distinct final external-human Stage-B acceptance, and no freeze/package/artifact smoke begins before the distinct post-implementation Stage-C delivery review.
+- **Status**: Accepted (2026-08-05) — Stage A complete; T002 bootstrap and T005 final Stage-B submitted reviews verified; T006+ product implementation is authorized. Freeze/package/artifact smoke remains blocked until the distinct post-implementation Stage-C delivery review (T090).
 - **Deciders**: LoopPlane maintainer; spec 078 (`desktop-cowork-parity`).
 - **Supersedes / superseded by**: Does not supersede an existing ADR. It upgrades the unit-019
   Electron demo shell while preserving the runtime architecture established by prior ADRs.
@@ -343,5 +343,14 @@ T005 final mode must receive immutable T002/T005 locator tuples, refetch the sin
 T090 separately requires immutable T002/T005/T090 locator tuples and a third submitted Stage-C delivery review over the exact post-T089 implementation commit, with a review ID distinct from T002/T005 and the same expected-approver identity checks under the C2 self-approval rule. Delivery mode independently refetches all three review/commit/complete-tree/blob authorities, proves same PR and pairwise-distinct IDs, reruns the T002-to-T005 full-tree allowlist, and rederives the prior bundles/locks without trusting ADR/evidence. It binds the actual product, verifier/wrapper, workflow, PyInstaller-spec, packaging/accessibility, and UI-Automation smoke source, revalidates the T005 manifests/locks/Python authorities, and materializes exact reviewed source before the first freeze/package/smoke. It emits a bounded non-secret descriptor and exits; all wrappers/build descendants then run with GitHub token variables absent. It does not change this ADR or its acceptance block; its distinct machine-readable delivery field set belongs only in `implementation-evidence.md`. Any stale/substituted locator, full-tree-diff, delivery-review, implementation determinant, or credential-bearing child-environment drift requires a new applicable review or corrected token-free invocation.
 
 <!-- STAGE-B-ACCEPTANCE START -->
-<!-- T005 populates this bounded block only after final external Stage-B verification succeeds. -->
+Stage B Approval API URL: https://github.com/norton77930/loopplane/pull/3#pullrequestreview-4864943765
+Stage B Approval ID: 4864943765
+Stage B Approval Node ID: PRR_kwDOS4xEH88AAAABIfkmlQ
+Stage B Approval Submitted At: 2026-08-05T13:37:41Z
+Stage B Approver Login: norton777930
+Stage B Reviewed Commit SHA: 8fe0a00400abfbf6eb466c9dec9c21bf0352b8fb
+Stage B Reviewed Tree SHA: d09077f3a53bf5005cfa94c1eaf944a22ae926ad
+Stage B Review Bundle SHA-256: da2b0b0594611209a21ad68f01bc38a15a1f53c4bd9bd1f7c18d681e9bba7dbc
+Accepted PyInstaller lock SHA-256: 363a52720adf8cd9299334fa9b95719c627192aa23fcfeb1e6ecebafdaef3cf6
+Accepted Root package-lock SHA-256: c1808e1b4b13bd191d9538d5dbed34a47eaefe3e48641ac1268b497fd5ab99cd
 <!-- STAGE-B-ACCEPTANCE END -->

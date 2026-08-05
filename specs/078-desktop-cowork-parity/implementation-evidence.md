@@ -139,3 +139,46 @@ Sorted relative paths + content SHA-256 (ordinal path order; line format `path�
 - **Non-claims**: No product presentation source scaffolding, no install/build of Desktop artifact, ADR remains Proposed, T006+ not authorized until T005.
 
 <!-- T004-EVIDENCE END -->
+
+## Stage B final (T005) — implementation authorization
+
+<!-- STAGE-B-FINAL-EVIDENCE START -->
+
+### Gate checks (refetched 2026-08-05)
+
+| Check | Result |
+|-------|--------|
+| PR | #3 open; author `norton77930` |
+| T002 bootstrap review | `4864730949` / commit `5319634a7e5c77b21ffa5355595fae18f9d82083` / approver `norton777930` |
+| T005 final review | `4864943765` / commit `8fe0a00400abfbf6eb466c9dec9c21bf0352b8fb` / approver `norton777930` |
+| Pairwise distinct IDs | PASS |
+| Same PR | PASS |
+| Final `state` | `APPROVED` |
+| Final `user.type` / association | `User` / `COLLABORATOR` |
+| PR-author inequality | PASS |
+| Final tree SHA | `d09077f3a53bf5005cfa94c1eaf944a22ae926ad` |
+| Tree truncated | false |
+| T002→T005 full-tree allowlist | PASS after including T003 helper/tasks/board paths (see contract allowlist) |
+| App-local locks | absent |
+| ADR | **Accepted** |
+
+### Identical final field set
+
+Stage B Approval API URL: https://github.com/norton77930/loopplane/pull/3#pullrequestreview-4864943765
+Stage B Approval ID: 4864943765
+Stage B Approval Node ID: PRR_kwDOS4xEH88AAAABIfkmlQ
+Stage B Approval Submitted At: 2026-08-05T13:37:41Z
+Stage B Approver Login: norton777930
+Stage B Reviewed Commit SHA: 8fe0a00400abfbf6eb466c9dec9c21bf0352b8fb
+Stage B Reviewed Tree SHA: d09077f3a53bf5005cfa94c1eaf944a22ae926ad
+Stage B Review Bundle SHA-256: da2b0b0594611209a21ad68f01bc38a15a1f53c4bd9bd1f7c18d681e9bba7dbc
+Accepted PyInstaller lock SHA-256: 363a52720adf8cd9299334fa9b95719c627192aa23fcfeb1e6ecebafdaef3cf6
+Accepted Root package-lock SHA-256: c1808e1b4b13bd191d9538d5dbed34a47eaefe3e48641ac1268b497fd5ab99cd
+
+### Authorization
+
+- **T006+ product implementation is authorized** under 078 tasks.
+- Freeze/package/smoke remains blocked until **T090** Stage-C delivery review.
+- Accepted manifests/root lock/PyInstaller lock are immutable after this gate; further graph changes require a new T005.
+
+<!-- STAGE-B-FINAL-EVIDENCE END -->
