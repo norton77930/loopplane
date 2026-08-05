@@ -182,3 +182,27 @@ Accepted Root package-lock SHA-256: c1808e1b4b13bd191d9538d5dbed34a47eaefe3e4864
 - Accepted manifests/root lock/PyInstaller lock are immutable after this gate; further graph changes require a new T005.
 
 <!-- STAGE-B-FINAL-EVIDENCE END -->
+
+## T007–T008 — workspace resolution and install/typecheck/test evidence
+
+<!-- T007-T008-EVIDENCE START -->
+
+### T007
+- `apps/web/tsconfig.json` and `apps/desktop/tsconfig.json`: `paths` for `@loopplane/cowork-presentation` → package `src`
+- `apps/desktop/vite.config.ts`: resolve alias for `@loopplane/cowork-presentation`
+- Accepted package manifests/locks: **unchanged** (digest match below)
+
+### T008
+- Added `packages/cowork-presentation/vitest.config.ts` (`passWithNoTests: true`) and `src/test-setup.ts`
+- `npm ci --ignore-scripts` from sole root lock: **exit 0** (695 packages)
+- Sole lock check: root `package-lock.json` present; `apps/web` and `apps/desktop` app locks **absent**
+- Typecheck: shared / web / desktop `tsc --noEmit` **exit 0**
+- Tests:
+  - shared vitest: **exit 0** (0 files, passWithNoTests)
+  - web: **57 files / 192 tests passed**
+  - desktop: **3 files / 12 tests passed**
+- T003 delivery-gate regression: **40 passed**
+- Verifier SelfTest `modes-declared`: **exit 0**
+- Accepted root package-lock SHA-256: `c1808e1b4b13bd191d9538d5dbed34a47eaefe3e48641ac1268b497fd5ab99cd` (**MATCH**, no drift)
+
+<!-- T007-T008-EVIDENCE END -->

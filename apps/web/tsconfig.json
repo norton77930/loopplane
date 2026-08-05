@@ -11,7 +11,16 @@
     "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["vitest/globals", "@testing-library/jest-dom"]
+    "baseUrl": ".",
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
+    "paths": {
+      "@loopplane/cowork-presentation": [
+        "../../packages/cowork-presentation/src/index.ts"
+      ],
+      "@loopplane/cowork-presentation/*": [
+        "../../packages/cowork-presentation/src/*"
+      ]
+    }
   },
   "include": ["src", "vite.config.ts"]
 }
