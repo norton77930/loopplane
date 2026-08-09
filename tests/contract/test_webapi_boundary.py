@@ -50,7 +50,12 @@ PROHIBITED_TOKENS = (
 
 
 def _modules() -> list[Path]:
-    return sorted(WEBAPI_DIR.glob("*.py"))
+    """Scan the package recursively so every mounted domain router is guarded."""
+    return sorted(WEBAPI_DIR.rglob("*.py"))
+
+
+def _label(path: Path) -> str:
+    return path.relative_to(WEBAPI_DIR).as_posix()
 
 
 def _parsed(path: Path) -> ast.Module:
@@ -71,7 +76,7 @@ def test_webapi_imports_only_host_and_event_surfaces() -> None:
                     module == prefix or module.startswith(prefix + ".")
                     for prefix in ALLOWED_PREFIXES
                 ):
-                    violations.append(f"{path.name}: imports {module}")
+                    violations.append(f"{_label(path)}: imports {module}")
     assert not violations, "Boundary violations:\n" + "\n".join(violations)
 
 
@@ -81,7 +86,7 @@ def test_webapi_references_no_runtime_internal_or_bus() -> None:
         text = path.read_text(encoding="utf-8")
         for token in PROHIBITED_TOKENS:
             if token in text:
-                violations.append(f"{path.name}: references {token!r}")
+                violations.append(f"{_label(path)}: references {token!r}")
     assert not violations, "Runtime-internal / re-emit references:\n" + "\n".join(
         violations
     )
