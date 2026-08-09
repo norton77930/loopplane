@@ -121,6 +121,26 @@ units 069–070), **0012** (durable event replay store), **0013** (platform fair
   exposes action-driven safe shared details, and removes the legacy mutable Settings
   surface. The maintainer-approved public host MCP upsert/delete methods are now async;
   HTTP routes and JSON envelopes remain unchanged.
+- **082** Open-source release readiness (repository tooling, governance, documentation, and internal refactoring) —
+  tag-triggered release automation (`.github/workflows/release.yml`: validate → build →
+  publish → release) gated by a standard-library-only release-sync validator
+  (`scripts/release_sync_check.py`) that fails closed when a `vX.Y.Z` tag,
+  `loopplane.__version__`, the validly dated `CHANGELOG.md` section, or its referenced
+  unit statuses on the agent board disagree; PyPI **trusted
+  publishing** (OIDC, no long-lived token, idempotent re-runs) that stays inert until the
+  maintainer turns dry-run mode off; distribution-metadata validation (`twine check`) in
+  CI; a human-gated release runbook (`docs/release-process.md`); `GOVERNANCE.md`,
+  `.github/CODEOWNERS`, and a contributor hazard map in `CONTRIBUTING.md` covering the
+  deliberately kept compromises; and five thematic capability guides under `docs/guides/`
+  indexed from the documentation README, kept honest by an offline docs link-contract
+  test; a default-deny import matrix with file-scoped exception enforcement (US5); the
+  WebAPI route-router refactor with its outward contract unchanged (US6a); and an
+  test-debt refresh (US7). The unit's architecture-audit refresh was **declined** when it
+  landed: it was written against a base predating units 078, 083, and 079, so adopting it
+  would have replaced a snapshot that declares its drift with one silently missing three
+  shipped units; the reason is recorded in `docs/architecture/ARCHITECTURE_AUDIT.md`. No
+  outward contract, schema, dependency, or
+  default change.
 
 ## [0.4.0] - 2026-06-21
 

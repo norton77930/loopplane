@@ -10,11 +10,20 @@ that need no runtime harness.
 from __future__ import annotations
 
 import typing
+from collections.abc import AsyncIterator
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 import loopplane.controller as controller
+from loopplane.checkpoint import (
+    AssistantMessageRecord,
+    FileCheckpointStore,
+    SessionMetaRecord,
+    TerminationRecord,
+    UserInputRecord,
+)
 from loopplane.controller import (
     ApprovalDecision,
     Cancel,
@@ -22,7 +31,10 @@ from loopplane.controller import (
     SessionState,
     SubmitInput,
 )
-from loopplane.model.content import TextBlock
+from loopplane.controller.controller import RuntimeController
+from loopplane.events import RunTerminatedEvent, RuntimeEvent
+from loopplane.gateway import ToolGateway
+from loopplane.model import ModelIncrement, ModelRequest, TextBlock, TextIncrement
 
 
 def test_session_state_wire_values_are_stable() -> None:
@@ -64,3 +76,53 @@ def test_question_answer_requires_answers() -> None:
 
 def test_cancel_is_a_frozen_marker() -> None:
     assert Cancel() == Cancel()
+
+
+def _checkpoint_store(base_dir: Path) -> FileCheckpointStore:
+    return FileCheckpointStore(base_dir / "sessions")
+
+
+class _SingleTextModel:
+    def context_capacity(self) -> int:
+        return 100_000
+
+    async def stream_turn(
+        self, _request: ModelRequest
+    ) -> AsyncIterator[ModelIncrement]:
+        yield TextIncrement(text="complete")
+
+
+@pytest.mark.anyio
+async def test_terminal_record_is_persisted_in_append_order_before_forwarding(
+    tmp_path: Path,
+) -> None:
+    store = _checkpoint_store(tmp_path)
+    forwarded_terminal_records: list[TerminationRecord] = []
+
+    async def sink(event: RuntimeEvent) -> None:
+        if isinstance(event, RunTerminatedEvent):
+            records, problems = store.load(event.session_id)
+            assert problems == []
+            assert isinstance(records[-1], TerminationRecord)
+            forwarded_terminal_records.append(records[-1])
+
+    runtime = RuntimeController(
+        model=_SingleTextModel(),
+        gateway=ToolGateway(),
+        event_sink=sink,
+        checkpoint_store=store,
+    )
+    session_id = runtime.create_session(working_scope=tmp_path)
+
+    await runtime.drive(session_id, [TextBlock(text="hello")])
+
+    records, problems = store.load(session_id)
+    assert problems == []
+    assert [type(record) for record in records] == [
+        SessionMetaRecord,
+        UserInputRecord,
+        AssistantMessageRecord,
+        TerminationRecord,
+    ]
+    assert [record.sequence for record in records] == [1, 2, 3, 4]
+    assert forwarded_terminal_records == [records[-1]]
