@@ -20,7 +20,11 @@ For development (the test toolchain — ruff, mypy, pytest), use uv:
 uv sync
 ```
 
-Publishing to a public package index is a future step.
+LoopPlane is not on a public package index yet, so the clone above is the
+install path today; index install is the intended primary path and becomes
+`pip install loopplane` with no other change once the first publish happens. The
+full extras matrix (which extra for which deployment) is in the
+[project README](../README.md#extras).
 
 ## Smallest end-to-end run
 

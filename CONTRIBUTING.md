@@ -66,6 +66,99 @@ uv run pytest                  # tests
   one normalized event bus. Please respect these rather than routing around them.
 - **Commit messages** follow a Conventional-Commits-style prefix, e.g.
   `feat: …`, `fix: …`, `docs: …`, `test: …`, `refactor: …`.
+- **Some "flaws" are load-bearing.** A few things in this codebase look like
+  defects and are not. Read the hazard map below before cleaning any of them up.
+
+## Hazard map — what looks broken but is not
+
+This section exists because the most likely first pull request from a newcomer is
+a well-intentioned cleanup of something that is deliberate. Each item below is a
+documented compromise with a test or a rule behind it. If you think one of them
+is genuinely wrong, that is a fine conversation — open an issue and make the
+case. Please do not open a PR that "fixes" it first.
+
+### 1. The quarantined imports are deliberate — never hoist them
+
+Two places in the runtime import across a boundary in a way that looks untidy:
+
+- `src/loopplane/context.py` imports from `loopplane.tools` **only** under
+  `if TYPE_CHECKING:`. This is the wall that keeps `loop`, `controller`, and
+  `engineering` from depending on `tools` at runtime: the file defines neutral
+  Protocols, and the type-only import exists purely so those Protocols can be
+  typed. Hoisting it to a top-level import creates a real import cycle across the
+  whole controller/tools/assembly chain.
+- `src/loopplane/host/assembly.py` imports concrete implementations **inside
+  functions** (lazy imports). This is the single composition root, and the
+  laziness is what keeps the package importable when optional extras are not
+  installed — plus it breaks the `engineering → host → assembly` cycle.
+
+Both are recorded as risks **R1** and **R4** in
+`docs/architecture/RISK_REGISTER.md`, precisely because an IDE "organize imports"
+action or a linter instinct makes them look like mistakes. Nothing appears broken
+statically after you hoist them; things break at import time in environments that
+differ from yours.
+
+**Rule:** never convert a `TYPE_CHECKING` or function-scoped import in these
+files to a top-level import. Verify with
+`python -c "import loopplane.host"` in an environment with no extras installed.
+
+### 2. Boundary-guard tests are the specification, not the obstacle
+
+`tests/contract/test_*_boundary.py` (and a few in `tests/integration/`) are
+AST-based guards that assert which packages may import which. They are derived
+from `docs/architecture/TARGET_ARCHITECTURE_BOUNDARIES.md`, which is normative.
+
+If a guard fails on your branch, the import is wrong — not the guard. Adding an
+allowance to a guard is a boundary change and needs a maintainer decision first
+(see the gates below). The guards also carry negative self-tests, so a guard that
+cannot fail is itself treated as a bug.
+
+### 3. Human approval gates come before implementation
+
+Some changes need an explicit maintainer decision **before** code is written:
+event or checkpoint schema changes, Tool Gateway SPI or stage-order changes, any
+default-value change, new dependencies or install extras, outward
+HTTP/SSE/WebSocket contract changes, and releases. The full list is §E of
+`docs/architecture/AI_HANDOFF_OPERATING_TEMPLATE.md`; what each gate means and
+how a decision is recorded is in [`GOVERNANCE.md`](GOVERNANCE.md).
+
+A high-quality PR that trips a gate without a prior decision will still be asked
+to stop and discuss. Opening the issue first costs you far less than the rework.
+
+### 4. New behavior is additive and off by default
+
+A new option must leave behavior **byte-identical when it is unset**. That is why
+so many capabilities are gated behind a `RuntimeConfig` field defaulting to
+`None` or `0`. Changing an existing default is a behavior change for every
+existing deployment, and it is a gated decision — not a tidy-up.
+
+Related invariants worth knowing before you refactor:
+
+- `SCHEMA_VERSION` and `RECORD_SCHEMA_VERSION` are versioned contracts.
+- Tools execute **only** through `ToolGateway`; nothing else may call `.invoke()`.
+- `EventSink` is the only outbound event seam; consumers never re-emit it.
+- No re-exports are added to the top-level `src/loopplane/__init__.py`.
+
+### 5. Every committed file must be public-safe
+
+The project treats public safety as a hard constraint (Constitution VII), and
+`tests/contract/test_public_safety.py` enforces it repository-wide. Before you
+push, check that your diff contains no:
+
+- secrets, API keys, tokens, or private key material — including in tests and
+  fixtures;
+- absolute local paths from your machine, or private network addresses;
+- internal or third-party proprietary names, or pasted non-public material.
+
+Use placeholders and relative, repository-rooted paths in documentation and
+examples.
+
+### 6. Documentation is written in English
+
+All committed documentation, comments, and commit messages are in English, so a
+single audience can review the whole repository. Guides under `docs/guides/` are
+navigational only: where they disagree with `docs/api-reference.md` or
+`docs/capabilities.md`, the reference wins and the guide is the bug.
 
 ## Pull request process
 

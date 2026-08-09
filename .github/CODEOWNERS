@@ -1,0 +1,51 @@
+# Code owners for LoopPlane.
+#
+# GitHub requests a review from the owner of every matching path when a pull
+# request touches it. The last matching pattern wins, so the load-bearing paths
+# are listed after the catch-all.
+#
+# Why these paths: they are the highest-blast-radius seams in the runtime
+# (see docs/architecture/TARGET_ARCHITECTURE_BOUNDARIES.md and
+# docs/architecture/RISK_REGISTER.md) or they carry the project's governance and
+# release machinery. Changes to them frequently trip a human approval gate -
+# see GOVERNANCE.md and CONTRIBUTING.md's hazard map before opening a PR.
+
+# Default owner for everything in the repository.
+*                                       @norton77930
+
+# --- Load-bearing runtime seams -----------------------------------------
+# The model boundary: every provider adapter depends on these shapes.
+/src/loopplane/model/                   @norton77930
+# The normalized error surface: public-safe by contract.
+/src/loopplane/errors.py                @norton77930
+# The single outbound event seam and its versioned schema (Constitution VI).
+/src/loopplane/events/                  @norton77930
+# The neutral Protocol wall between the loop/controller side and tools (R1).
+/src/loopplane/context.py               @norton77930
+# The single tool-execution chokepoint and its SPI (Constitution V).
+/src/loopplane/gateway/                 @norton77930
+# The single composition root; its lazy imports are deliberate (R4).
+/src/loopplane/host/assembly.py         @norton77930
+
+# --- Outward contracts ---------------------------------------------------
+# The HTTP/SSE/WebSocket contract the web and desktop apps generate types from.
+/src/loopplane/webapi/                  @norton77930
+# Boundary guards and public-safety/packaging contracts.
+/tests/contract/                        @norton77930
+
+# --- Governance, architecture, and release -------------------------------
+/.specify/memory/constitution.md        @norton77930
+/docs/architecture/                     @norton77930
+/docs/adr/                              @norton77930
+/docs/loopplane-agent-board.md          @norton77930
+/.github/                               @norton77930
+/.github/workflows/                     @norton77930
+/GOVERNANCE.md                          @norton77930
+/CONTRIBUTING.md                        @norton77930
+/SECURITY.md                            @norton77930
+/CODE_OF_CONDUCT.md                     @norton77930
+/LICENSE                                @norton77930
+/pyproject.toml                         @norton77930
+/uv.lock                                @norton77930
+/CHANGELOG.md                           @norton77930
+/scripts/                               @norton77930

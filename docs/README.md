@@ -28,7 +28,30 @@ the [API reference](./api-reference.md).
 - [The `loopplane` CLI](./cli.md) — a thin terminal host over the host interface (unit 017).
 - [Web frontend](./web-frontend.md) — a single-page UI over the web/API host (unit 018).
 - [Desktop GUI](./desktop-gui.md) — a local Electron shell over a sidecar host (unit 019).
-- [Model providers](./model-providers.md) — real Anthropic and OpenAI model adapters (unit 020).
+- [Model providers](./model-providers.md) — Anthropic, OpenAI(-compatible), OpenRouter, Ollama, and Gemini adapters, structured output, thought signatures (units 020, 035, 037, 045, 070).
+
+## Capability guides
+
+Consolidated, thematic on-ramps covering the units after the per-layer guides above
+(021–081). Each guide names the units it covers and defers to the
+[capabilities](./capabilities.md) overview and the [API reference](./api-reference.md) as
+the authorities.
+
+- [Agent tools & permissions](./guides/agent-tools-and-permissions.md) — the tool surface,
+  multimodal input, network egress, sandboxed execution, permission rules and modes, plan
+  mode, slash commands (units 033–069).
+- [Autonomy & multi-agent](./guides/autonomy-and-multi-agent.md) — orchestration,
+  model-driven subagents, background tasks, agent scheduling, messaging/swarm, worktree
+  isolation, and the caps that keep them off by default (units 013–051).
+- [Cost governance](./guides/cost-governance.md) — prompt caching, compaction, pricing,
+  USD budget caps, the durable ledger, queryable spend, the pre-turn guard
+  (units 040–068).
+- [Platform & deployment](./guides/platform-and-deployment.md) — running the web/API host:
+  auth and JWT/JWKS, MCP transports and resources, resumable and durable streaming,
+  Postgres backends, tenant pooling and fairness (units 011–072).
+- [Web UI product](./guides/web-ui-product.md) — the SPA product surface: conversation,
+  sessions, inspection, capability management, agent controls, accessibility
+  (units 018–081).
 
 ## Reference
 
@@ -42,6 +65,7 @@ the [API reference](./api-reference.md).
 - [Code review 001-072](./code-review-001-072.md) — remediation findings and verification evidence.
 - [Spec task audit exceptions](./spec-task-audit-exceptions.md) — documented historical task-checklist drift.
 - [Release readiness](./release-readiness.md) — the pre-release gate checklist.
+- [Release process](./release-process.md) — the maintainer runbook for cutting a release.
 - [Manual QA](./manual-qa.md) — the human acceptance pass (browser, desktop, real model).
 
 Runnable examples are catalogued in the [examples index](../examples/README.md).

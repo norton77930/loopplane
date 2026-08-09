@@ -1,4 +1,4 @@
-# Model providers (unit 020)
+# Model providers (units 020, 035, 037, 045, 070)
 
 LoopPlane drives the conversation loop through one model-facing seam — the **model
 boundary**. A deterministic scripted model ships for tests and credential-free demos; this
@@ -107,3 +107,51 @@ no SDK network and no credential. The two runnable examples
 exit cleanly when no key is set. A single opt-in, secret-gated live test
 (`tests/live/test_live_models.py`) is skipped unless the provider key and a model name are
 present, and is excluded from the default CI gates.
+
+## Later provider units (035, 037, 045, 070)
+
+Everything above is unit 020, the original two adapters. The provider line was extended
+afterwards; the sections below cover the rest. As always,
+[`capabilities.md`](capabilities.md) and [`api-reference.md`](api-reference.md) are the
+authorities for exact scope and names.
+
+### OpenRouter and Ollama (035)
+
+`loopplane.adapters.openai_compat` reuses the OpenAI wire format instead of adding new
+adapters: `openrouter_model(...)` and `ollama_model(...)` are thin constructors over
+`OpenAIModel` with the right base URL (`OPENROUTER_BASE_URL`, `OLLAMA_BASE_URL`). One
+provider brokers many models; the other runs locally. Neither needs an extra beyond
+`openai`, because the wire format is the same.
+
+### Native Google Gemini (037)
+
+`loopplane.adapters.gemini` (`GeminiConfig`, `GeminiModel`) is a real Gemini adapter behind
+the `gemini` extra, wrapping the official SDK with the same lazy-import guard as the other
+adapters. It slots into `RuntimeConfig(model=...)` unchanged.
+
+### Structured output (045)
+
+Structured output is negotiated as a **model-boundary capability**, not a gateway tool: the
+adapter advertises whether it supports a response schema, and the loop asks for one when
+it can. It is available on the OpenAI-family adapters (`response_format` / JSON schema).
+Adapters without support say so rather than approximating.
+
+### Gemini thought signatures (070)
+
+Native Gemini multi-turn tool use requires replaying a per-call `thought_signature`. Unit
+070 adds an optional, absent-by-default `provider_signature` on tool-call content so the
+signature round-trips through the loop and back to the provider (ADR 0011). Absent by
+default means every other provider is byte-identical to before.
+
+### Which provider needs which extra
+
+| Provider | Extra | Adapter |
+| --- | --- | --- |
+| Anthropic | `anthropic` | `loopplane.adapters.anthropic` |
+| OpenAI (and any OpenAI-compatible endpoint) | `openai` | `loopplane.adapters.openai` |
+| OpenRouter | `openai` | `loopplane.adapters.openai_compat` |
+| Ollama (local) | `openai` | `loopplane.adapters.openai_compat` |
+| Google Gemini | `gemini` | `loopplane.adapters.gemini` |
+
+Multimodal input (images, documents/PDF) is provider-negotiated — see
+[Agent tools & permissions](guides/agent-tools-and-permissions.md).

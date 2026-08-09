@@ -1,5 +1,9 @@
 # LoopPlane
 
+[![CI](https://github.com/norton77930/loopplane/actions/workflows/ci.yml/badge.svg)](https://github.com/norton77930/loopplane/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+
 **Spec-first, embeddable agent harness runtime.**
 
 LoopPlane is a Python-first foundation for building observable, governed,
@@ -10,20 +14,54 @@ crash.
 
 ## Install
 
-LoopPlane targets **Python 3.12+**. From a clone of the repository:
+LoopPlane targets **Python 3.12+**.
+
+> **Publication status:** LoopPlane is not on a public package index yet, so the
+> install below is from a clone. Index install is the intended primary path and
+> the release machinery is in place; this note goes away with the first publish.
 
 ```sh
+git clone https://github.com/norton77930/loopplane.git
+cd loopplane
 pip install .            # core: anyio + pydantic + jsonschema
 pip install ".[web]"     # + the web/API host (FastAPI)
 ```
 
-Optional extras cover the model providers (`anthropic`, `openai`, `gemini`),
-MCP, networking, OAuth, OpenTelemetry, and Postgres — see
-[Getting started](docs/getting-started.md) for the full list. Installing the
-package also provides the `loopplane` console script (the CLI host).
+After the first publish the same two lines become `pip install loopplane` and
+`pip install "loopplane[web]"`, with no other change. Installing the package
+provides the `loopplane` console script (the CLI host).
 
-For development, `uv sync` installs the test toolchain (ruff, mypy, pytest).
-Publishing to a public package index is a future step.
+For development, `uv sync` installs the test toolchain (ruff, mypy, pytest); see
+[Contributing](CONTRIBUTING.md).
+
+### Extras
+
+The base install is deliberately small — anyio, pydantic, jsonschema. Everything
+else is an optional extra:
+
+| Extra | Pulls in | Install it for |
+| --- | --- | --- |
+| `anthropic` | Anthropic SDK | Claude models |
+| `openai` | OpenAI SDK | OpenAI, OpenRouter, Ollama, and any OpenAI-compatible endpoint |
+| `gemini` | Google GenAI SDK | native Gemini models |
+| `web` | FastAPI | the Python web/API host (REST + SSE + WebSocket); the SPA is built separately under `apps/web` |
+| `mcp` | MCP SDK | MCP servers and MCP resources |
+| `net` | httpx | `web_fetch` / `web_search` (still default-deny until enabled) |
+| `oauth` | PyJWT + httpx | OAuth / JWT / JWKS principal verification |
+| `postgres` | psycopg | Postgres checkpoint, ledger, and event-replay backends |
+| `otel` | OpenTelemetry API | OpenTelemetry observability export |
+
+Combine what a deployment needs, for example:
+
+```sh
+pip install ".[anthropic]"                        # local CLI against Claude
+pip install ".[web,openai]"                       # single-node web service
+pip install ".[web,anthropic,postgres,oauth]"     # multi-tenant deployment
+pip install ".[web,anthropic,mcp,net,postgres,oauth,otel]"   # everything server-side
+```
+
+There is no `all` convenience extra yet — adding one is a maintainer decision
+(see [Governance](GOVERNANCE.md)).
 
 ## Quickstart
 
@@ -67,7 +105,8 @@ python examples/host_quickstart.py
 - [Getting started](docs/getting-started.md) — install and first run.
 - [Capabilities](docs/capabilities.md) — the full functional scope.
 - [API reference](docs/api-reference.md) — every public package and name.
-- [Documentation index](docs/README.md) — all guides.
+- [Documentation index](docs/README.md) — all guides, including the thematic
+  capability guides under `docs/guides/`.
 - [Examples](examples/README.md) — runnable, credential-free quickstarts.
 
 ## Development
@@ -81,6 +120,16 @@ uv run ruff check .
 uv run mypy
 uv run pytest
 ```
+
+## Contributing
+
+Issues and pull requests are welcome. Start with
+[CONTRIBUTING.md](CONTRIBUTING.md) — especially its **hazard map**, which lists
+the deliberately kept compromises (two quarantined import boundaries, the
+boundary-guard tests, the default-off rule) that should not be "fixed".
+[GOVERNANCE.md](GOVERNANCE.md) explains who decides what and which changes need
+a maintainer decision before implementation. Security reports go through
+[SECURITY.md](SECURITY.md), never a public issue.
 
 ## Design principles
 
