@@ -288,12 +288,12 @@ function Test-PathInside {
 }
 
 function Get-Hex {
-    param([Parameter(Mandatory = $true)][byte[]] $Bytes)
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][byte[]] $Bytes)
     return ([System.BitConverter]::ToString($Bytes)).Replace('-', '').ToLowerInvariant()
 }
 
 function Get-Sha256Bytes {
-    param([Parameter(Mandatory = $true)][byte[]] $Bytes)
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][byte[]] $Bytes)
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
         return Get-Hex ($sha.ComputeHash($Bytes))
@@ -308,7 +308,7 @@ function Get-Sha256File {
 }
 
 function Get-GitBlobSha {
-    param([Parameter(Mandatory = $true)][byte[]] $Bytes)
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][byte[]] $Bytes)
     $header = [System.Text.Encoding]::ASCII.GetBytes(
         'blob ' + $Bytes.Length + [char]0
     )
@@ -416,7 +416,7 @@ function Get-DeliveryEntries {
     if ($result.Count -eq 0) {
         throw 'delivery_tree_empty'
     }
-    return , $result.ToArray()
+    return $result.ToArray()
 }
 
 function Read-AsciiLine {
@@ -483,12 +483,7 @@ function Get-GitBlobBatch {
         $probeId = '0000000000000000000000000000000000000000'
         $probe = [System.Text.Encoding]::ASCII.GetBytes($probeId + "`n")
         $input.Write($probe, 0, $probe.Length)
-        foreach ($objectId in $ordered) {
-            $line = [System.Text.Encoding]::ASCII.GetBytes($objectId + "`n")
-            $input.Write($line, 0, $line.Length)
-        }
         $input.Flush()
-        $input.Close()
 
         $output = $process.StandardOutput.BaseStream
         $probeHeader = Read-AsciiLine $output
@@ -501,6 +496,10 @@ function Get-GitBlobBatch {
         $result = @{}
         [long]$total = 0
         foreach ($objectId in $ordered) {
+            $line = [System.Text.Encoding]::ASCII.GetBytes($objectId + "`n")
+            $input.Write($line, 0, $line.Length)
+            $input.Flush()
+
             $header = Read-AsciiLine $output
             $parts = $header.Split(' ')
             if ($parts.Count -ne 3 -or
@@ -535,6 +534,7 @@ function Get-GitBlobBatch {
             }
             $result[$objectId] = $bytes
         }
+        $input.Close()
         if (-not $process.WaitForExit(60000)) {
             $process.Kill()
             throw 'git_batch_timeout'
@@ -563,7 +563,7 @@ function Write-MaterializedFile {
     param(
         [Parameter(Mandatory = $true)][string] $BaseRoot,
         [Parameter(Mandatory = $true)][string] $RelativePath,
-        [Parameter(Mandatory = $true)][byte[]] $Bytes,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][byte[]] $Bytes,
         [Parameter(Mandatory = $true)] $OwnedDirectories
     )
     Assert-SafeRelativePath $RelativePath
@@ -922,6 +922,12 @@ function New-SyntheticMaterialization {
         git_blob_sha = Get-GitBlobSha $sourceBytes
         role = 'reviewed-source'
     })
+    [void]$files.Add([pscustomobject]@{
+        relative_path = 'reviewed-source/apps/desktop/empty.txt'
+        bytes = [byte[]]@()
+        git_blob_sha = 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391'
+        role = 'reviewed-source'
+    })
     foreach ($property in $script:AcceptedInputPaths.Keys) {
         $relative = $script:AcceptedInputPaths[$property]
         $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
@@ -1148,14 +1154,50 @@ function Invoke-SelfTest {
         }
         'delivery-cat-file-binds-git-blob' {
             $git = (Get-Command git.exe -ErrorAction Stop).Source
-            $objectId = (& $git -C $script:RepositoryRoot rev-parse 'HEAD:package.json').Trim()
-            if ($LASTEXITCODE -ne 0) {
+            $objectIds = [string[]]@(
+                & $git -C $script:RepositoryRoot ls-tree -r HEAD |
+                    ForEach-Object {
+                        $metadata = ($_ -split "`t", 2)[0] -split ' '
+                        if ($metadata[1] -ceq 'blob') {
+                            $metadata[2]
+                        }
+                    } |
+                    Select-Object -Unique -First 256
+            )
+            if ($objectIds.Count -lt 128) {
                 $ok = $false
             } else {
-                $blobs = Get-GitBlobBatch @($objectId)
-                $bytes = [byte[]]$blobs[$objectId]
-                $ok = (Get-GitBlobSha $bytes) -ceq $objectId
+                $blobs = Get-GitBlobBatch $objectIds
+                $ok = ($blobs.Count -eq $objectIds.Count)
+                foreach ($objectId in $objectIds) {
+                    $bytes = [byte[]]$blobs[$objectId]
+                    $ok = $ok -and ((Get-GitBlobSha $bytes) -ceq $objectId)
+                }
             }
+        }
+        'delivery-entries-remain-flat' {
+            $tree = [pscustomobject]@{
+                tree = @(
+                    [pscustomobject]@{
+                        path = 'apps/desktop/first.ts'
+                        mode = '100644'
+                        type = 'blob'
+                        sha = ('a' * 40)
+                    },
+                    [pscustomobject]@{
+                        path = 'apps/desktop/second.ts'
+                        mode = '100644'
+                        type = 'blob'
+                        sha = ('b' * 40)
+                    }
+                )
+            }
+            $entries = @(Get-DeliveryEntries $tree)
+            $ok = ($entries.Count -eq 2) -and
+                ($entries[0] -isnot [System.Array]) -and
+                ($entries[1] -isnot [System.Array]) -and
+                ([string]$entries[0].sha -ceq ('a' * 40)) -and
+                ([string]$entries[1].sha -ceq ('b' * 40))
         }
         'delivery-descriptor-binds-t002-t005-t090' {
             $fixture = $null

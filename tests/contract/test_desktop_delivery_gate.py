@@ -75,6 +75,7 @@ SELFTEST_CASES: dict[str, bool] = {
     "delivery-child-env-must-scrub-tokens": True,
     "reject-freeze-before-delivery-review": True,
     "delivery-cat-file-binds-git-blob": True,
+    "delivery-entries-remain-flat": True,
     "delivery-descriptor-binds-t002-t005-t090": True,
     "delivery-materializes-reviewed-snapshots": True,
     "delivery-rejects-preexisting-materialization-root": True,
@@ -306,6 +307,7 @@ def _run_selftest(
         errors="replace",
         env=env,
         check=False,
+        timeout=120,
     )
 
 
