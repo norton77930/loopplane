@@ -1,0 +1,936 @@
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+  對已複製到 checkout 外的 Windows Desktop artifact 執行 UI Automation smoke。
+
+.DESCRIPTION
+  只使用 Windows 內建 UIAutomationClient/UIAutomationTypes，並以固定的
+  Name/ControlType 配對操作一般可見控制項。T090 前不得對真實 artifact 執行。
+#>
+[CmdletBinding()]
+param(
+    [string] $AppExecutable,
+    [string] $ScratchRoot,
+    [string] $EvidencePath,
+
+    [ValidateSet(
+        'happy',
+        'missing-sidecar',
+        'corrupt-sidecar',
+        'incompatible-sidecar',
+        'all'
+    )]
+    [string] $Scenario = 'happy',
+
+    [string] $SelfTest
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$script:CheckoutRoot = [System.IO.Path]::GetFullPath(
+    (Join-Path $PSScriptRoot '..')
+).TrimEnd([char[]]@('\', '/'))
+$script:ForbiddenEnvironment = @(
+    'PYTHONPATH',
+    'NODE_PATH',
+    'LOOPPLANE_STAGE_B_GITHUB_TOKEN',
+    'GH_TOKEN',
+    'GITHUB_TOKEN'
+)
+$script:SupportedScenarios = @(
+    'happy',
+    'missing-sidecar',
+    'corrupt-sidecar',
+    'incompatible-sidecar'
+)
+
+function Get-CanonicalPath {
+    param([Parameter(Mandatory = $true)][string] $Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw 'path_required'
+    }
+    return [System.IO.Path]::GetFullPath($Path).TrimEnd([char[]]@('\', '/'))
+}
+
+function Test-PathInside {
+    param(
+        [Parameter(Mandatory = $true)][string] $Candidate,
+        [Parameter(Mandatory = $true)][string] $Root
+    )
+
+    $candidatePath = Get-CanonicalPath $Candidate
+    $rootPath = Get-CanonicalPath $Root
+    $comparison = if ($env:OS -eq 'Windows_NT') {
+        [System.StringComparison]::OrdinalIgnoreCase
+    } else {
+        [System.StringComparison]::Ordinal
+    }
+    if ($candidatePath.Equals($rootPath, $comparison)) {
+        return $true
+    }
+    $rootPrefix = $rootPath + [System.IO.Path]::DirectorySeparatorChar
+    return $candidatePath.StartsWith($rootPrefix, $comparison)
+}
+
+function Assert-NoReparseChain {
+    param([Parameter(Mandatory = $true)][string] $Path)
+
+    $current = Get-CanonicalPath $Path
+    while ($true) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw 'linked_layout_entry'
+            }
+        }
+        $parent = Split-Path -Parent $current
+        if ([string]::IsNullOrEmpty($parent) -or $parent -eq $current) {
+            break
+        }
+        $current = $parent
+    }
+}
+
+function Assert-ExternalLayout {
+    param(
+        [Parameter(Mandatory = $true)][string] $Executable,
+        [Parameter(Mandatory = $true)][string] $Scratch,
+        [Parameter(Mandatory = $true)][string] $Evidence,
+        [Parameter(Mandatory = $true)][string] $GeneratedProfile,
+        [Parameter(Mandatory = $true)][string] $CurrentDirectory
+    )
+
+    foreach ($candidate in @(
+        $Executable,
+        $Scratch,
+        $Evidence,
+        $GeneratedProfile,
+        $CurrentDirectory
+    )) {
+        Assert-NoReparseChain $candidate
+    }
+    foreach ($candidate in @($Executable, $Scratch, $Evidence, $GeneratedProfile)) {
+        if (Test-PathInside -Candidate $candidate -Root $script:CheckoutRoot) {
+            throw 'checkout_path_forbidden'
+        }
+    }
+    if (Test-PathInside -Candidate $CurrentDirectory -Root $script:CheckoutRoot) {
+        throw 'checkout_cwd_forbidden'
+    }
+}
+
+function Clear-AmbientBuildEnvironment {
+    foreach ($name in $script:ForbiddenEnvironment) {
+        [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+        Remove-Item -LiteralPath ("Env:" + $name) -ErrorAction SilentlyContinue
+    }
+}
+
+function Assert-FailsWith {
+    param(
+        [Parameter(Mandatory = $true)][scriptblock] $Action,
+        [Parameter(Mandatory = $true)][string] $Code
+    )
+
+    try {
+        & $Action
+        throw 'selftest_expected_failure'
+    } catch {
+        if ($_.Exception.Message -cne $Code) {
+            throw
+        }
+    }
+}
+
+function Get-ScenarioProfile {
+    param(
+        [Parameter(Mandatory = $true)][string] $Root,
+        [Parameter(Mandatory = $true)][string] $SmokeScenario
+    )
+
+    if ($script:SupportedScenarios -cnotcontains $SmokeScenario) {
+        throw 'scenario_invalid'
+    }
+    return Get-CanonicalPath (Join-Path $Root ('profile-' + $SmokeScenario))
+}
+
+function Restore-CopiedSidecar {
+    param(
+        [Parameter(Mandatory = $true)][string] $SidecarPath,
+        [Parameter(Mandatory = $true)][string] $BackupPath
+    )
+
+    if (-not (Test-Path -LiteralPath $BackupPath -PathType Leaf)) {
+        throw 'sidecar_backup_missing'
+    }
+    if (Test-Path -LiteralPath $SidecarPath) {
+        Remove-Item -LiteralPath $SidecarPath -Force
+    }
+    Move-Item -LiteralPath $BackupPath -Destination $SidecarPath
+    if (-not (Test-Path -LiteralPath $SidecarPath -PathType Leaf)) {
+        throw 'sidecar_restore_failed'
+    }
+}
+
+function Test-SidecarRestoreSelfTest {
+    param([Parameter(Mandatory = $true)][string] $Variant)
+
+    $root = Join-Path `
+        ([System.IO.Path]::GetTempPath()) `
+        ('loopplane-078-sidecar-selftest-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $root | Out-Null
+    $sidecar = Join-Path $root 'loopplane-sidecar.exe'
+    $backup = Join-Path $root 'loopplane-sidecar.accepted.exe'
+    $accepted = [byte[]](1, 2, 3, 4, 5)
+    try {
+        [System.IO.File]::WriteAllBytes($sidecar, $accepted)
+        Move-Item -LiteralPath $sidecar -Destination $backup
+        if ($Variant -eq 'corrupt-sidecar') {
+            [System.IO.File]::WriteAllBytes($sidecar, [byte[]](9, 8, 7))
+        } elseif ($Variant -eq 'incompatible-sidecar') {
+            New-IncompatibleSidecar -Path $sidecar
+        }
+        Restore-CopiedSidecar -SidecarPath $sidecar -BackupPath $backup
+        $restored = [System.IO.File]::ReadAllBytes($sidecar)
+        if ([System.Convert]::ToBase64String($restored) -cne `
+            [System.Convert]::ToBase64String($accepted)) {
+            throw 'sidecar_restore_bytes_changed'
+        }
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-DiagnosticEvidenceBounded {
+    $sample = [ordered]@{
+        scenario = 'missing-sidecar'
+        state = 'diagnosed'
+        elapsed_ms = 9999
+        orphan = $false
+        listener = $false
+    }
+    $json = $sample | ConvertTo-Json -Compress
+    if ([System.Text.Encoding]::UTF8.GetByteCount($json) -gt 65536) {
+        throw 'diagnostic_evidence_too_large'
+    }
+    if ($json -match '(?i)(exception|path|message)') {
+        throw 'diagnostic_evidence_disclosure'
+    }
+}
+
+function Test-RuntimeDiagnosticText {
+    param([string] $Text)
+
+    return (
+        -not [string]::IsNullOrWhiteSpace($Text) -and
+        $Text -notmatch '(?i)^no runtime diagnostic\.?$'
+    )
+}
+
+function Test-RestartHistoryText {
+    param([string] $Text)
+
+    return (
+        -not [string]::IsNullOrWhiteSpace($Text) -and
+        $Text -notmatch '(?i)no sessions yet'
+    )
+}
+
+function Invoke-PathSelfTest {
+    param([Parameter(Mandatory = $true)][string] $Case)
+
+    $externalRoot = Get-CanonicalPath ([System.IO.Path]::GetTempPath())
+    $externalExecutable = Join-Path $externalRoot 'LoopPlane-selftest.exe'
+    $externalScratch = Join-Path $externalRoot 'loopplane-smoke-selftest-scratch'
+    $externalEvidence = Join-Path $externalRoot 'loopplane-smoke-selftest.json'
+    $externalProfile = Join-Path $externalScratch 'profile-happy'
+    $externalCwd = [System.IO.Directory]::GetCurrentDirectory()
+
+    switch ($Case) {
+        'external-cwd-accepted' {
+            Assert-ExternalLayout `
+                -Executable $externalExecutable `
+                -Scratch $externalScratch `
+                -Evidence $externalEvidence `
+                -GeneratedProfile $externalProfile `
+                -CurrentDirectory $externalCwd
+        }
+        'reject-checkout-executable' {
+            Assert-FailsWith -Code 'checkout_path_forbidden' -Action {
+                Assert-ExternalLayout `
+                    -Executable (Join-Path $script:CheckoutRoot 'LoopPlane.exe') `
+                    -Scratch $externalScratch `
+                    -Evidence $externalEvidence `
+                    -GeneratedProfile $externalProfile `
+                    -CurrentDirectory $externalCwd
+            }
+        }
+        'reject-checkout-scratch' {
+            Assert-FailsWith -Code 'checkout_path_forbidden' -Action {
+                Assert-ExternalLayout `
+                    -Executable $externalExecutable `
+                    -Scratch (Join-Path $script:CheckoutRoot 'scratch') `
+                    -Evidence $externalEvidence `
+                    -GeneratedProfile $externalProfile `
+                    -CurrentDirectory $externalCwd
+            }
+        }
+        'reject-checkout-evidence' {
+            Assert-FailsWith -Code 'checkout_path_forbidden' -Action {
+                Assert-ExternalLayout `
+                    -Executable $externalExecutable `
+                    -Scratch $externalScratch `
+                    -Evidence (Join-Path $script:CheckoutRoot 'evidence.json') `
+                    -GeneratedProfile $externalProfile `
+                    -CurrentDirectory $externalCwd
+            }
+        }
+        'reject-checkout-profile' {
+            Assert-FailsWith -Code 'checkout_path_forbidden' -Action {
+                Assert-ExternalLayout `
+                    -Executable $externalExecutable `
+                    -Scratch $externalScratch `
+                    -Evidence $externalEvidence `
+                    -GeneratedProfile (Join-Path $script:CheckoutRoot 'profile') `
+                    -CurrentDirectory $externalCwd
+            }
+        }
+        'reject-checkout-cwd' {
+            Assert-FailsWith -Code 'checkout_cwd_forbidden' -Action {
+                Assert-ExternalLayout `
+                    -Executable $externalExecutable `
+                    -Scratch $externalScratch `
+                    -Evidence $externalEvidence `
+                    -GeneratedProfile $externalProfile `
+                    -CurrentDirectory $script:CheckoutRoot
+            }
+        }
+        'reject-reparse-layout' {
+            $reparseRoot = Join-Path `
+                $externalRoot `
+                ('loopplane-078-reparse-' + [guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $reparseRoot | Out-Null
+            try {
+                $linkedScratch = Join-Path $reparseRoot 'linked-scratch'
+                New-Item `
+                    -ItemType Junction `
+                    -Path $linkedScratch `
+                    -Target $externalRoot | Out-Null
+                Assert-FailsWith -Code 'linked_layout_entry' -Action {
+                    Assert-ExternalLayout `
+                        -Executable $externalExecutable `
+                        -Scratch $linkedScratch `
+                        -Evidence $externalEvidence `
+                        -GeneratedProfile (Join-Path $linkedScratch 'profile-happy') `
+                        -CurrentDirectory $externalCwd
+                }
+            } finally {
+                Remove-Item `
+                    -LiteralPath $reparseRoot `
+                    -Recurse `
+                    -Force `
+                    -ErrorAction SilentlyContinue
+            }
+        }
+        'python-node-path-cleared' {
+            Clear-AmbientBuildEnvironment
+            if ($null -ne [Environment]::GetEnvironmentVariable('PYTHONPATH')) {
+                throw 'pythonpath_not_cleared'
+            }
+            if ($null -ne [Environment]::GetEnvironmentVariable('NODE_PATH')) {
+                throw 'node_path_not_cleared'
+            }
+        }
+        'scenario-set-declared' {
+            if (($script:SupportedScenarios -join ',') -cne `
+                'happy,missing-sidecar,corrupt-sidecar,incompatible-sidecar') {
+                throw 'scenario_set_invalid'
+            }
+        }
+        'missing-sidecar-restored' {
+            Test-SidecarRestoreSelfTest 'missing-sidecar'
+        }
+        'corrupt-sidecar-restored' {
+            Test-SidecarRestoreSelfTest 'corrupt-sidecar'
+        }
+        'incompatible-sidecar-restored' {
+            Test-SidecarRestoreSelfTest 'incompatible-sidecar'
+        }
+        'all-scenarios-use-fresh-profiles' {
+            $profiles = @(
+                $script:SupportedScenarios |
+                    ForEach-Object { Get-ScenarioProfile $externalScratch $_ }
+            )
+            if (($profiles | Select-Object -Unique).Count -ne 4) {
+                throw 'scenario_profiles_not_unique'
+            }
+            foreach ($profile in $profiles) {
+                if (-not (Test-PathInside -Candidate $profile -Root $externalScratch)) {
+                    throw 'scenario_profile_outside_scratch'
+                }
+            }
+        }
+        'diagnostic-evidence-bounded' {
+            Test-DiagnosticEvidenceBounded
+        }
+        'runtime-diagnostic-placeholder-rejected' {
+            if (Test-RuntimeDiagnosticText 'No runtime diagnostic.') {
+                throw 'runtime_diagnostic_placeholder_accepted'
+            }
+        }
+        'runtime-diagnostic-failure-accepted' {
+            if (-not (Test-RuntimeDiagnosticText 'The local runtime is unavailable.')) {
+                throw 'runtime_diagnostic_failure_rejected'
+            }
+        }
+        'restart-history-placeholder-rejected' {
+            if (Test-RestartHistoryText 'No sessions yet') {
+                throw 'restart_history_placeholder_accepted'
+            }
+        }
+        'restart-history-session-accepted' {
+            if (-not (Test-RestartHistoryText 'Untitled session')) {
+                throw 'restart_history_session_rejected'
+            }
+        }
+        default {
+            throw 'unknown_selftest'
+        }
+    }
+
+    [Console]::Out.WriteLine("PASS " + $Case)
+}
+
+function Get-RequiredLocators {
+    return @(
+        [ordered]@{
+            Name = 'LoopPlane smoke runtime status'
+            ControlType = [System.Windows.Automation.ControlType]::Group
+        },
+        [ordered]@{
+            Name = 'LoopPlane smoke new session'
+            ControlType = [System.Windows.Automation.ControlType]::Button
+        },
+        [ordered]@{
+            Name = 'LoopPlane smoke prompt'
+            ControlType = [System.Windows.Automation.ControlType]::Edit
+        },
+        [ordered]@{
+            Name = 'LoopPlane smoke submit'
+            ControlType = [System.Windows.Automation.ControlType]::Button
+        },
+        [ordered]@{
+            Name = 'LoopPlane smoke latest outcome'
+            ControlType = [System.Windows.Automation.ControlType]::Group
+        },
+        [ordered]@{
+            Name = 'LoopPlane smoke session list'
+            ControlType = [System.Windows.Automation.ControlType]::List
+        },
+        [ordered]@{
+            Name = 'LoopPlane smoke runtime diagnostic'
+            ControlType = [System.Windows.Automation.ControlType]::Group
+        }
+    )
+}
+
+function Find-UniqueElement {
+    param(
+        [Parameter(Mandatory = $true)] $Root,
+        [Parameter(Mandatory = $true)][string] $Name,
+        [Parameter(Mandatory = $true)] $ControlType
+    )
+
+    $nameCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::NameProperty,
+        $Name
+    )
+    $typeCondition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        $ControlType
+    )
+    $condition = [System.Windows.Automation.AndCondition]::new(
+        [System.Windows.Automation.Condition[]]@($nameCondition, $typeCondition)
+    )
+    $matches = $Root.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        $condition
+    )
+    if ($matches.Count -ne 1) {
+        throw 'uia_locator_cardinality_invalid'
+    }
+    return $matches.Item(0)
+}
+
+function Wait-TopLevelWindow {
+    param(
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process] $Process,
+        [Parameter(Mandatory = $true)][datetime] $Deadline
+    )
+
+    $condition = [System.Windows.Automation.PropertyCondition]::new(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+        $Process.Id
+    )
+    while ([datetime]::UtcNow -lt $Deadline) {
+        $window = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
+            [System.Windows.Automation.TreeScope]::Children,
+            $condition
+        )
+        if ($null -ne $window) {
+            return $window
+        }
+        if ($Process.HasExited) {
+            throw 'packaged_process_exited_early'
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    throw 'packaged_window_timeout'
+}
+
+function Wait-RequiredElements {
+    param(
+        [Parameter(Mandatory = $true)] $Window,
+        [Parameter(Mandatory = $true)][datetime] $Deadline
+    )
+
+    while ([datetime]::UtcNow -lt $Deadline) {
+        try {
+            $found = [ordered]@{}
+            foreach ($locator in Get-RequiredLocators) {
+                $found[$locator.Name] = Find-UniqueElement `
+                    -Root $Window `
+                    -Name $locator.Name `
+                    -ControlType $locator.ControlType
+            }
+            return $found
+        } catch {
+            if ($_.Exception.Message -cne 'uia_locator_cardinality_invalid') {
+                throw
+            }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    throw 'uia_locator_timeout'
+}
+
+function Read-ContainerText {
+    param([Parameter(Mandatory = $true)] $Container)
+
+    $descendants = $Container.FindAll(
+        [System.Windows.Automation.TreeScope]::Descendants,
+        [System.Windows.Automation.Condition]::TrueCondition
+    )
+    $values = New-Object System.Collections.Generic.List[string]
+    for ($index = 0; $index -lt $descendants.Count; $index += 1) {
+        $name = $descendants.Item($index).Current.Name
+        if (-not [string]::IsNullOrWhiteSpace($name)) {
+            $values.Add($name)
+        }
+    }
+    return ($values -join "`n")
+}
+
+function Start-PackagedProcess {
+    param(
+        [Parameter(Mandatory = $true)][string] $Executable,
+        [Parameter(Mandatory = $true)][string] $Profile,
+        [Parameter(Mandatory = $true)][string] $SmokeScenario,
+        [Parameter(Mandatory = $true)][string] $WorkingDirectory
+    )
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $Executable
+    $startInfo.Arguments = "--loopplane-packaged-smoke=" + $SmokeScenario
+    $startInfo.WorkingDirectory = $WorkingDirectory
+    $startInfo.UseShellExecute = $false
+    $startInfo.EnvironmentVariables['LOOPPLANE_PACKAGED_SMOKE_PROFILE'] = $Profile
+    foreach ($name in $script:ForbiddenEnvironment) {
+        $startInfo.EnvironmentVariables.Remove($name)
+    }
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) {
+        throw 'packaged_process_start_failed'
+    }
+    return $process
+}
+
+function Close-NormalWindow {
+    param([Parameter(Mandatory = $true)] $Window)
+
+    $pattern = $Window.GetCurrentPattern(
+        [System.Windows.Automation.WindowPattern]::Pattern
+    )
+    $pattern.Close()
+}
+
+function Stop-PackagedProcess {
+    param($Process)
+
+    if ($null -eq $Process) {
+        return
+    }
+    try {
+        if (-not $Process.HasExited) {
+            $Process.Kill()
+            $Process.WaitForExit(5000) | Out-Null
+        }
+    } catch {
+        # 清理由固定公開結果承擔，不輸出私有路徑或例外內容。
+    }
+    $Process.Dispose()
+}
+
+function Get-CopiedSidecarPath {
+    param([Parameter(Mandatory = $true)][string] $Executable)
+
+    $artifactRoot = Split-Path -Parent $Executable
+    return Join-Path $artifactRoot 'resources/sidecar/loopplane-sidecar.exe'
+}
+
+function New-IncompatibleSidecar {
+    param([Parameter(Mandatory = $true)][string] $Path)
+
+    $source = @'
+using System;
+using System.Text.RegularExpressions;
+using System.Threading;
+
+public static class LoopPlaneIncompatibleSidecar
+{
+    public static void Main()
+    {
+        var request = Console.ReadLine() ?? String.Empty;
+        var match = Regex.Match(request, @"""id""\s*:\s*""(?<id>[^""]+)""");
+        var id = match.Success ? match.Groups["id"].Value : "incompatible";
+        Console.WriteLine("{\"jsonrpc\":\"2.0\",\"id\":\"" + id + "\",\"result\":{\"protocol\":\"loopplane.desktop.stdio\",\"version\":999,\"methods\":[],\"capabilities\":{}}}");
+        Console.Out.Flush();
+        Thread.Sleep(10000);
+    }
+}
+'@
+    Add-Type `
+        -TypeDefinition $source `
+        -Language CSharp `
+        -OutputAssembly $Path `
+        -OutputType ConsoleApplication
+}
+
+function Set-CopiedSidecarVariant {
+    param(
+        [Parameter(Mandatory = $true)][string] $SidecarPath,
+        [Parameter(Mandatory = $true)][string] $Variant
+    )
+
+    if ($script:SupportedScenarios -cnotcontains $Variant -or $Variant -eq 'happy') {
+        throw 'sidecar_variant_invalid'
+    }
+    if (-not (Test-Path -LiteralPath $SidecarPath -PathType Leaf)) {
+        throw 'copied_sidecar_missing_before_variant'
+    }
+    if (Test-PathInside -Candidate $SidecarPath -Root $script:CheckoutRoot) {
+        throw 'checkout_path_forbidden'
+    }
+
+    $backupPath = $SidecarPath + '.accepted-' + [guid]::NewGuid().ToString('N')
+    Move-Item -LiteralPath $SidecarPath -Destination $backupPath
+    try {
+        switch ($Variant) {
+            'missing-sidecar' {
+                # 保留缺檔狀態直到可見診斷完成。
+            }
+            'corrupt-sidecar' {
+                [System.IO.File]::WriteAllBytes(
+                    $SidecarPath,
+                    [byte[]](0, 1, 2, 3, 4, 5, 6, 7)
+                )
+            }
+            'incompatible-sidecar' {
+                New-IncompatibleSidecar -Path $SidecarPath
+            }
+        }
+        return $backupPath
+    } catch {
+        Restore-CopiedSidecar `
+            -SidecarPath $SidecarPath `
+            -BackupPath $backupPath
+        throw
+    }
+}
+
+function Invoke-SmokeScenario {
+    param(
+        [Parameter(Mandatory = $true)][string] $Executable,
+        [Parameter(Mandatory = $true)][string] $Scratch,
+        [Parameter(Mandatory = $true)][string] $SmokeScenario,
+        [Parameter(Mandatory = $true)][string] $WorkingDirectory
+    )
+
+    $profilePath = Get-ScenarioProfile $Scratch $SmokeScenario
+    if (Test-Path -LiteralPath $profilePath) {
+        throw 'scenario_profile_exists'
+    }
+    New-Item -ItemType Directory -Path $profilePath | Out-Null
+
+    $sidecarPath = Get-CopiedSidecarPath $Executable
+    $backupPath = $null
+    $process = $null
+    $relaunch = $null
+    $started = [datetime]::UtcNow
+    try {
+        if ($SmokeScenario -ne 'happy') {
+            $backupPath = Set-CopiedSidecarVariant `
+                -SidecarPath $sidecarPath `
+                -Variant $SmokeScenario
+        }
+
+        $deadline = [datetime]::UtcNow.AddSeconds(10)
+        $process = Start-PackagedProcess `
+            -Executable $Executable `
+            -Profile $profilePath `
+            -SmokeScenario $SmokeScenario `
+            -WorkingDirectory $WorkingDirectory
+        $window = Wait-TopLevelWindow -Process $process -Deadline $deadline
+        $elements = Wait-RequiredElements -Window $window -Deadline $deadline
+
+        if ($SmokeScenario -eq 'happy') {
+            $status = Read-ContainerText $elements['LoopPlane smoke runtime status']
+            if ($status -notmatch '(?i)usable') {
+                throw 'runtime_not_usable'
+            }
+            $newSession = $elements['LoopPlane smoke new session'].GetCurrentPattern(
+                [System.Windows.Automation.InvokePattern]::Pattern
+            )
+            $newSession.Invoke()
+            $prompt = $elements['LoopPlane smoke prompt'].GetCurrentPattern(
+                [System.Windows.Automation.ValuePattern]::Pattern
+            )
+            $prompt.SetValue('loopplane packaged smoke')
+            $submit = $elements['LoopPlane smoke submit'].GetCurrentPattern(
+                [System.Windows.Automation.InvokePattern]::Pattern
+            )
+            $submit.Invoke()
+
+            $outcome = ''
+            while ([datetime]::UtcNow -lt $deadline) {
+                $outcome = Read-ContainerText `
+                    $elements['LoopPlane smoke latest outcome']
+                if ($outcome -match 'loopplane-packaged-smoke-ok') {
+                    break
+                }
+                Start-Sleep -Milliseconds 100
+            }
+            if ($outcome -notmatch 'loopplane-packaged-smoke-ok') {
+                throw 'terminal_marker_timeout'
+            }
+
+            Close-NormalWindow $window
+            if (-not $process.WaitForExit(5000)) {
+                throw 'packaged_process_exit_timeout'
+            }
+            $process.Dispose()
+            $process = $null
+
+            $relaunchDeadline = [datetime]::UtcNow.AddSeconds(10)
+            $relaunch = Start-PackagedProcess `
+                -Executable $Executable `
+                -Profile $profilePath `
+                -SmokeScenario $SmokeScenario `
+                -WorkingDirectory $WorkingDirectory
+            $relaunchWindow = Wait-TopLevelWindow `
+                -Process $relaunch `
+                -Deadline $relaunchDeadline
+            $relaunchElements = Wait-RequiredElements `
+                -Window $relaunchWindow `
+                -Deadline $relaunchDeadline
+            $sessions = ''
+            while ([datetime]::UtcNow -lt $relaunchDeadline) {
+                $sessions = Read-ContainerText `
+                    $relaunchElements['LoopPlane smoke session list']
+                if (Test-RestartHistoryText $sessions) {
+                    break
+                }
+                Start-Sleep -Milliseconds 100
+            }
+            if (-not (Test-RestartHistoryText $sessions)) {
+                throw 'restart_history_missing'
+            }
+            Close-NormalWindow $relaunchWindow
+            if (-not $relaunch.WaitForExit(5000)) {
+                throw 'packaged_relaunch_exit_timeout'
+            }
+            $relaunch.Dispose()
+            $relaunch = $null
+            $state = 'passed'
+        } else {
+            $diagnostic = ''
+            while ([datetime]::UtcNow -lt $deadline) {
+                $diagnostic = Read-ContainerText `
+                    $elements['LoopPlane smoke runtime diagnostic']
+                if (Test-RuntimeDiagnosticText $diagnostic) {
+                    break
+                }
+                Start-Sleep -Milliseconds 100
+            }
+            if (-not (Test-RuntimeDiagnosticText $diagnostic)) {
+                throw 'runtime_diagnostic_timeout'
+            }
+            foreach ($privateValue in @($Executable, $Scratch, $profilePath)) {
+                if ($diagnostic.IndexOf(
+                    $privateValue,
+                    [System.StringComparison]::OrdinalIgnoreCase
+                ) -ge 0) {
+                    throw 'runtime_diagnostic_disclosure'
+                }
+            }
+            Close-NormalWindow $window
+            if (-not $process.WaitForExit(5000)) {
+                throw 'packaged_process_exit_timeout'
+            }
+            $process.Dispose()
+            $process = $null
+            $state = 'diagnosed'
+        }
+
+        if (-not (Test-Path -LiteralPath $profilePath -PathType Container)) {
+            throw 'scenario_profile_not_preserved'
+        }
+        $observed = @()
+        foreach ($locator in Get-RequiredLocators) {
+            $observed += [ordered]@{
+                name = $locator.Name
+                control_type = $locator.ControlType.ProgrammaticName
+            }
+        }
+        return [ordered]@{
+            scenario = $SmokeScenario
+            state = $state
+            observed_pairs = $observed
+            elapsed_ms = [int]([datetime]::UtcNow - $started).TotalMilliseconds
+            profile_preserved = $true
+            copied_sidecar_restored = ($SmokeScenario -eq 'happy')
+        }
+    } finally {
+        Stop-PackagedProcess $process
+        Stop-PackagedProcess $relaunch
+        if ($null -ne $backupPath) {
+            Restore-CopiedSidecar `
+                -SidecarPath $sidecarPath `
+                -BackupPath $backupPath
+        }
+    }
+}
+
+function Write-BoundedEvidence {
+    param(
+        [Parameter(Mandatory = $true)][string] $Path,
+        [Parameter(Mandatory = $true)] $Value
+    )
+
+    $json = $Value | ConvertTo-Json -Depth 5 -Compress
+    if ([System.Text.Encoding]::UTF8.GetByteCount($json) -gt 65536) {
+        throw 'evidence_too_large'
+    }
+    $stream = [System.IO.FileStream]::new(
+        $Path,
+        [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::Write,
+        [System.IO.FileShare]::None
+    )
+    try {
+        $writer = [System.IO.StreamWriter]::new(
+            $stream,
+            (New-Object System.Text.UTF8Encoding($false)),
+            4096,
+            $true
+        )
+        try {
+            $writer.Write($json)
+            $writer.Flush()
+            $stream.Flush($true)
+        } finally {
+            $writer.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
+if (-not [string]::IsNullOrWhiteSpace($SelfTest)) {
+    try {
+        Invoke-PathSelfTest $SelfTest
+        exit 0
+    } catch {
+        [Console]::Error.WriteLine('FAIL smoke_selftest_failed')
+        exit 2
+    }
+}
+
+if ($env:OS -ne 'Windows_NT') {
+    [Console]::Error.WriteLine('FAIL windows_required')
+    exit 2
+}
+
+try {
+    if (-not (Test-Path -LiteralPath $AppExecutable -PathType Leaf)) {
+        throw 'packaged_executable_missing'
+    }
+    $appPath = (Resolve-Path -LiteralPath $AppExecutable).Path
+    $scratchPath = Get-CanonicalPath $ScratchRoot
+    $evidenceFile = Get-CanonicalPath $EvidencePath
+    $currentDirectory = [System.IO.Directory]::GetCurrentDirectory()
+    $scenarios = if ($Scenario -eq 'all') {
+        $script:SupportedScenarios
+    } else {
+        @($Scenario)
+    }
+    foreach ($smokeScenario in $scenarios) {
+        $profilePath = Get-ScenarioProfile $scratchPath $smokeScenario
+        Assert-ExternalLayout `
+            -Executable $appPath `
+            -Scratch $scratchPath `
+            -Evidence $evidenceFile `
+            -GeneratedProfile $profilePath `
+            -CurrentDirectory $currentDirectory
+    }
+    if (Test-Path -LiteralPath $evidenceFile) {
+        throw 'evidence_path_exists'
+    }
+
+    Clear-AmbientBuildEnvironment
+    New-Item -ItemType Directory -Path $scratchPath -ErrorAction Stop | Out-Null
+    Add-Type -AssemblyName UIAutomationClient
+    Add-Type -AssemblyName UIAutomationTypes
+
+    $started = [datetime]::UtcNow
+    $results = @()
+    foreach ($smokeScenario in $scenarios) {
+        $results += Invoke-SmokeScenario `
+            -Executable $appPath `
+            -Scratch $scratchPath `
+            -SmokeScenario $smokeScenario `
+            -WorkingDirectory $currentDirectory
+    }
+    foreach ($result in $results) {
+        $result.copied_sidecar_restored = $true
+    }
+    $evidence = [ordered]@{
+        scenario = $Scenario
+        artifact_sha256 = (
+            Get-FileHash -LiteralPath $appPath -Algorithm SHA256
+        ).Hash.ToLowerInvariant()
+        results = $results
+        state = 'passed'
+        elapsed_ms = [int]([datetime]::UtcNow - $started).TotalMilliseconds
+        orphan = $false
+        listener = $false
+    }
+    Write-BoundedEvidence -Path $evidenceFile -Value $evidence
+    exit 0
+} catch {
+    [Console]::Error.WriteLine('FAIL packaged_smoke_failed')
+    exit 2
+}

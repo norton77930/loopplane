@@ -113,6 +113,32 @@ async def test_gateway_offloads_oversized_results_through_the_handoff(
     assert artifact_store.retrieve("s1", result.artifact_reference) == big
 
 
+async def test_session_cleanup_does_not_unlink_through_mutable_parent_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Detached cleanup must anchor deletion to opened, no-follow directories."""
+
+    store = ArtifactStore(tmp_path)
+    await store.offload(
+        session_id="s1",
+        call_id="c1",
+        outputs=[TextBlock(text="owned artifact")],
+    )
+    original_unlink = Path.unlink
+
+    def reject_quarantine_path_unlink(path: Path, missing_ok: bool = False) -> None:
+        if ".d" in path.parts:
+            raise AssertionError("quarantine member deletion used pathname resolution")
+        original_unlink(path, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", reject_quarantine_path_unlink)
+
+    store.delete_session("s1")
+
+    assert (tmp_path / "s1").exists() is False
+
+
 async def test_replacement_budget_replaces_largest_results_first(
     tmp_path: Path,
 ) -> None:

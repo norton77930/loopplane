@@ -29,12 +29,19 @@ param(
     [string] $DeliveryReviewId,
     [string] $DeliveryCommitSha,
 
-    [string] $AllowSelfApproval
+    [string] $AllowSelfApproval,
+
+    [switch] $MaterializeAcceptedInputs,
+    [string] $DescriptorPath,
+    [string] $AssertMaterializedInputs
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$script:RepositoryRoot = [System.IO.Path]::GetFullPath(
+    (Join-Path $PSScriptRoot '..')
+).TrimEnd([char[]]@('\', '/'))
 $script:ApiVersion = '2022-11-28'
 $script:AllowedAssociations = @('OWNER', 'MEMBER', 'COLLABORATOR')
 $script:TokenEnv = 'LOOPPLANE_STAGE_B_GITHUB_TOKEN'
@@ -57,6 +64,48 @@ $script:AllowAddOrModify = @(
 $script:AllowDelete = @(
     'apps/web/package-lock.json',
     'apps/desktop/package-lock.json'
+)
+$script:AcceptedInputPaths = [ordered]@{
+    rootPackageJsonPath = 'package.json'
+    rootPackageLockPath = 'package-lock.json'
+    webPackageJsonPath = 'apps/web/package.json'
+    desktopPackageJsonPath = 'apps/desktop/package.json'
+    sharedPackageJsonPath = 'packages/cowork-presentation/package.json'
+    pyprojectPath = 'pyproject.toml'
+    uvLockPath = 'uv.lock'
+    pyinstallerLockPath = 'apps/desktop/sidecar/pyinstaller-build-windows-py312.txt'
+}
+$script:DeliveryExactPaths = @(
+    'package.json',
+    'package-lock.json',
+    'pyproject.toml',
+    'uv.lock',
+    '.github/workflows/desktop.yml',
+    'scripts/verify-desktop-stage-b.ps1',
+    'scripts/build-desktop-sidecar.ps1',
+    'scripts/build-desktop-package.ps1',
+    'scripts/smoke-desktop-artifact.ps1',
+    'docs/adr/0015-desktop-cowork-boundary.md'
+)
+$script:DeliveryPrefixes = @(
+    'src/loopplane/',
+    'apps/desktop/',
+    'apps/web/',
+    'packages/cowork-presentation/',
+    'tests/',
+    'specs/078-desktop-cowork-parity/'
+)
+$script:GeneratedSegments = @(
+    '.git',
+    '.superpowers',
+    'node_modules',
+    '.build',
+    'release',
+    'dist',
+    'dist-electron',
+    '__pycache__',
+    'profiles',
+    'backups'
 )
 
 function Write-PublicFail {
@@ -207,6 +256,706 @@ function Assert-NoTokenLeak {
     if ($Text -match '(?i)authorization\s*:\s*bearer\s+\S+') { return $false }
     if ($Text -match 'ghs_|github_pat_|TEST_STAGE_B_TOKEN_VALUE_DO_NOT_LEAK') { return $false }
     return $true
+}
+
+function Get-CanonicalPath {
+    param([Parameter(Mandatory = $true)][string] $Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw 'path_required'
+    }
+    return [System.IO.Path]::GetFullPath($Path).TrimEnd([char[]]@('\', '/'))
+}
+
+function Test-PathInside {
+    param(
+        [Parameter(Mandatory = $true)][string] $Candidate,
+        [Parameter(Mandatory = $true)][string] $Root
+    )
+    $candidatePath = Get-CanonicalPath $Candidate
+    $rootPath = Get-CanonicalPath $Root
+    $comparison = if ($env:OS -eq 'Windows_NT') {
+        [System.StringComparison]::OrdinalIgnoreCase
+    } else {
+        [System.StringComparison]::Ordinal
+    }
+    if ($candidatePath.Equals($rootPath, $comparison)) {
+        return $true
+    }
+    return $candidatePath.StartsWith(
+        $rootPath + [System.IO.Path]::DirectorySeparatorChar,
+        $comparison
+    )
+}
+
+function Get-Hex {
+    param([Parameter(Mandatory = $true)][byte[]] $Bytes)
+    return ([System.BitConverter]::ToString($Bytes)).Replace('-', '').ToLowerInvariant()
+}
+
+function Get-Sha256Bytes {
+    param([Parameter(Mandatory = $true)][byte[]] $Bytes)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return Get-Hex ($sha.ComputeHash($Bytes))
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Get-Sha256File {
+    param([Parameter(Mandatory = $true)][string] $Path)
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Get-GitBlobSha {
+    param([Parameter(Mandatory = $true)][byte[]] $Bytes)
+    $header = [System.Text.Encoding]::ASCII.GetBytes(
+        'blob ' + $Bytes.Length + [char]0
+    )
+    $payload = New-Object byte[] ($header.Length + $Bytes.Length)
+    [System.Buffer]::BlockCopy($header, 0, $payload, 0, $header.Length)
+    [System.Buffer]::BlockCopy($Bytes, 0, $payload, $header.Length, $Bytes.Length)
+    $sha = [System.Security.Cryptography.SHA1]::Create()
+    try {
+        return Get-Hex ($sha.ComputeHash($payload))
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Assert-SafeRelativePath {
+    param([Parameter(Mandatory = $true)][string] $RelativePath)
+    if ([string]::IsNullOrWhiteSpace($RelativePath) -or
+        [System.IO.Path]::IsPathRooted($RelativePath)) {
+        throw 'unsafe_relative_path'
+    }
+    $segments = $RelativePath.Replace('\', '/').Split('/')
+    foreach ($segment in $segments) {
+        if ([string]::IsNullOrWhiteSpace($segment) -or
+            $segment -eq '.' -or
+            $segment -eq '..' -or
+            $segment.IndexOfAny([System.IO.Path]::GetInvalidFileNameChars()) -ge 0) {
+            throw 'unsafe_relative_path'
+        }
+    }
+}
+
+function Test-DeliveryDeterminantPath {
+    param([Parameter(Mandatory = $true)][string] $Path)
+    if ($script:DeliveryExactPaths -contains $Path) {
+        return $true
+    }
+    foreach ($prefix in $script:DeliveryPrefixes) {
+        if ($Path.StartsWith($prefix, [System.StringComparison]::Ordinal)) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Test-GeneratedPath {
+    param([Parameter(Mandatory = $true)][string] $Path)
+    $segments = $Path.Replace('\', '/').Split('/')
+    foreach ($segment in $segments) {
+        if ($script:GeneratedSegments -contains $segment) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Get-LeafTreeMap {
+    param($Tree)
+    $result = @{}
+    foreach ($entry in $Tree.tree) {
+        if ([string]$entry.type -eq 'tree') {
+            continue
+        }
+        $path = [string]$entry.path
+        if ($result.ContainsKey($path)) {
+            throw 'duplicate_tree_path'
+        }
+        $result[$path] = @{
+            Mode = [string]$entry.mode
+            Type = [string]$entry.type
+            Sha = [string]$entry.sha
+        }
+    }
+    return $result
+}
+
+function Get-DeliveryEntries {
+    param($Tree)
+    $caseSet = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    $result = New-Object System.Collections.Generic.List[object]
+    foreach ($entry in $Tree.tree) {
+        $path = [string]$entry.path
+        if (-not (Test-DeliveryDeterminantPath $path)) {
+            continue
+        }
+        if (Test-GeneratedPath $path) {
+            throw 'reviewed_tree_contains_generated_output'
+        }
+        Assert-SafeRelativePath $path
+        if (-not $caseSet.Add($path)) {
+            throw 'case_colliding_tree_path'
+        }
+        if ([string]$entry.type -ne 'blob' -or
+            [string]$entry.mode -notin @('100644', '100755')) {
+            throw 'reviewed_tree_non_regular_entry'
+        }
+        [void]$result.Add([pscustomobject]@{
+            path = $path
+            mode = [string]$entry.mode
+            type = [string]$entry.type
+            sha = [string]$entry.sha
+        })
+    }
+    if ($result.Count -eq 0) {
+        throw 'delivery_tree_empty'
+    }
+    return , $result.ToArray()
+}
+
+function Read-AsciiLine {
+    param([Parameter(Mandatory = $true)][System.IO.Stream] $Stream)
+    $bytes = New-Object System.Collections.Generic.List[byte]
+    while ($true) {
+        $value = $Stream.ReadByte()
+        if ($value -lt 0) {
+            throw 'git_batch_unexpected_eof'
+        }
+        if ($value -eq 10) {
+            break
+        }
+        if ($value -ne 13) {
+            if ($bytes.Count -ge 256) {
+                throw 'git_batch_header_too_large'
+            }
+            [void]$bytes.Add([byte]$value)
+        }
+    }
+    return [System.Text.Encoding]::ASCII.GetString($bytes.ToArray())
+}
+
+function Get-GitBlobBatch {
+    param([Parameter(Mandatory = $true)][string[]] $ObjectIds)
+    $unique = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::Ordinal
+    )
+    foreach ($objectId in $ObjectIds) {
+        if ($objectId -notmatch '^[0-9a-f]{40}$') {
+            throw 'git_blob_id_invalid'
+        }
+        [void]$unique.Add($objectId)
+    }
+    $ordered = [string[]]($unique | ForEach-Object { [string]$_ })
+    [Array]::Sort($ordered, [System.StringComparer]::Ordinal)
+
+    $git = (Get-Command git.exe -ErrorAction Stop).Source
+    $start = New-Object System.Diagnostics.ProcessStartInfo
+    $start.FileName = $git
+    $start.Arguments = '-c credential.interactive=never cat-file --batch'
+    $start.WorkingDirectory = $script:RepositoryRoot
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardInput = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    foreach ($name in $script:ForbiddenChildTokens) {
+        [void]$start.EnvironmentVariables.Remove($name)
+    }
+    $start.EnvironmentVariables['GIT_TERMINAL_PROMPT'] = '0'
+    $start.EnvironmentVariables['GCM_INTERACTIVE'] = 'Never'
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $start
+    if (-not $process.Start()) {
+        throw 'git_batch_start_failed'
+    }
+    try {
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $input = $process.StandardInput.BaseStream
+        # Windows PowerShell 5.1 會在 redirected StandardInput 前置 UTF-8 BOM；
+        # 先送一個必定 missing 的犧牲查詢，避免 BOM 汙染第一個真實 object id。
+        $probeId = '0000000000000000000000000000000000000000'
+        $probe = [System.Text.Encoding]::ASCII.GetBytes($probeId + "`n")
+        $input.Write($probe, 0, $probe.Length)
+        foreach ($objectId in $ordered) {
+            $line = [System.Text.Encoding]::ASCII.GetBytes($objectId + "`n")
+            $input.Write($line, 0, $line.Length)
+        }
+        $input.Flush()
+        $input.Close()
+
+        $output = $process.StandardOutput.BaseStream
+        $probeHeader = Read-AsciiLine $output
+        if (-not $probeHeader.EndsWith(
+            ' missing',
+            [System.StringComparison]::Ordinal
+        )) {
+            throw 'git_batch_probe_mismatch'
+        }
+        $result = @{}
+        [long]$total = 0
+        foreach ($objectId in $ordered) {
+            $header = Read-AsciiLine $output
+            $parts = $header.Split(' ')
+            if ($parts.Count -ne 3 -or
+                $parts[0] -cne $objectId -or
+                $parts[1] -cne 'blob') {
+                throw 'git_batch_object_mismatch'
+            }
+            [long]$size = 0
+            if (-not [long]::TryParse($parts[2], [ref]$size) -or
+                $size -lt 0 -or
+                $size -gt 16777216) {
+                throw 'git_blob_size_invalid'
+            }
+            $total += $size
+            if ($total -gt 134217728) {
+                throw 'git_blob_total_too_large'
+            }
+            $bytes = New-Object byte[] $size
+            $offset = 0
+            while ($offset -lt $size) {
+                $read = $output.Read($bytes, $offset, $size - $offset)
+                if ($read -le 0) {
+                    throw 'git_batch_unexpected_eof'
+                }
+                $offset += $read
+            }
+            if ($output.ReadByte() -ne 10) {
+                throw 'git_batch_delimiter_invalid'
+            }
+            if ((Get-GitBlobSha $bytes) -cne $objectId) {
+                throw 'git_blob_identity_mismatch'
+            }
+            $result[$objectId] = $bytes
+        }
+        if (-not $process.WaitForExit(60000)) {
+            $process.Kill()
+            throw 'git_batch_timeout'
+        }
+        [void]$stderrTask.Result
+        if ($process.ExitCode -ne 0) {
+            throw 'git_batch_failed'
+        }
+        return $result
+    } finally {
+        $process.Dispose()
+    }
+}
+
+function New-FreshDirectory {
+    param([Parameter(Mandatory = $true)][string] $Path)
+    $canonical = Get-CanonicalPath $Path
+    if (Test-Path -LiteralPath $canonical) {
+        throw 'materialization_root_exists'
+    }
+    New-Item -ItemType Directory -Path $canonical | Out-Null
+    return $canonical
+}
+
+function Write-MaterializedFile {
+    param(
+        [Parameter(Mandatory = $true)][string] $BaseRoot,
+        [Parameter(Mandatory = $true)][string] $RelativePath,
+        [Parameter(Mandatory = $true)][byte[]] $Bytes,
+        [Parameter(Mandatory = $true)] $OwnedDirectories
+    )
+    Assert-SafeRelativePath $RelativePath
+    $segments = $RelativePath.Replace('\', '/').Split('/')
+    $directory = Get-CanonicalPath $BaseRoot
+    for ($index = 0; $index -lt ($segments.Count - 1); $index++) {
+        $directory = Join-Path $directory $segments[$index]
+        $canonicalDirectory = Get-CanonicalPath $directory
+        if (-not $OwnedDirectories.Contains($canonicalDirectory)) {
+            if (Test-Path -LiteralPath $canonicalDirectory) {
+                throw 'preexisting_materialization_entry'
+            }
+            New-Item -ItemType Directory -Path $canonicalDirectory | Out-Null
+            [void]$OwnedDirectories.Add($canonicalDirectory)
+        }
+    }
+    $destination = Get-CanonicalPath (Join-Path $BaseRoot $RelativePath)
+    if (-not (Test-PathInside $destination $BaseRoot)) {
+        throw 'materialization_path_escape'
+    }
+    $stream = [System.IO.File]::Open(
+        $destination,
+        [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::Write,
+        [System.IO.FileShare]::None
+    )
+    try {
+        $stream.Write($Bytes, 0, $Bytes.Length)
+        $stream.Flush($true)
+    } finally {
+        $stream.Dispose()
+    }
+    return $destination
+}
+
+function Write-JsonCreateNew {
+    param(
+        [Parameter(Mandatory = $true)][string] $Path,
+        [Parameter(Mandatory = $true)] $Value,
+        [int] $Depth = 8,
+        [int] $MaximumBytes = 2097152
+    )
+    $json = $Value | ConvertTo-Json -Depth $Depth -Compress
+    $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes($json)
+    if ($bytes.Length -gt $MaximumBytes) {
+        throw 'json_output_too_large'
+    }
+    $parent = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
+        throw 'json_parent_missing'
+    }
+    $stream = [System.IO.File]::Open(
+        $Path,
+        [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::Write,
+        [System.IO.FileShare]::None
+    )
+    try {
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+    } finally {
+        $stream.Dispose()
+    }
+}
+
+function Set-FileReadOnly {
+    param([Parameter(Mandatory = $true)][string] $Path)
+    $item = Get-Item -LiteralPath $Path -Force
+    if ($item.PSIsContainer) {
+        throw 'readonly_target_not_file'
+    }
+    $item.IsReadOnly = $true
+}
+
+function Assert-NoReparseChain {
+    param([Parameter(Mandatory = $true)][string] $Path)
+    $current = Get-CanonicalPath $Path
+    while ($true) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw 'linked_materialization_entry'
+            }
+        }
+        $parent = Split-Path -Parent $current
+        if ([string]::IsNullOrEmpty($parent) -or $parent -eq $current) {
+            break
+        }
+        $current = $parent
+    }
+}
+
+function Get-TreeInventorySha256 {
+    param([Parameter(Mandatory = $true)][object[]] $Entries)
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($entry in $Entries) {
+        [void]$lines.Add(
+            ([string]$entry.path) + ' ' +
+            ([string]$entry.mode) + ' ' +
+            ([string]$entry.type) + ' ' +
+            ([string]$entry.sha)
+        )
+    }
+    $ordered = [string[]]$lines.ToArray()
+    [Array]::Sort($ordered, [System.StringComparer]::Ordinal)
+    $text = if ($ordered.Count -gt 0) {
+        ([string]::Join("`n", $ordered)) + "`n"
+    } else {
+        ''
+    }
+    return Get-Sha256Bytes ([System.Text.UTF8Encoding]::new($false).GetBytes($text))
+}
+
+function New-MaterializationDescriptor {
+    param(
+        [Parameter(Mandatory = $true)][string] $DescriptorFile,
+        [Parameter(Mandatory = $true)][string] $MaterializationRoot,
+        [Parameter(Mandatory = $true)][object[]] $Files,
+        [Parameter(Mandatory = $true)] $Authority,
+        [Parameter(Mandatory = $true)] $Identities
+    )
+    $root = New-FreshDirectory $MaterializationRoot
+    $ownedDirectories = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    [void]$ownedDirectories.Add($root)
+    $records = New-Object System.Collections.Generic.List[object]
+    foreach ($file in $Files) {
+        $path = Write-MaterializedFile `
+            $root `
+            ([string]$file.relative_path) `
+            ([byte[]]$file.bytes) `
+            $ownedDirectories
+        [void]$records.Add([ordered]@{
+            relative_path = ([string]$file.relative_path).Replace('\', '/')
+            path = $path
+            sha256 = Get-Sha256Bytes ([byte[]]$file.bytes)
+            git_blob_sha = [string]$file.git_blob_sha
+            role = [string]$file.role
+        })
+    }
+
+    $inventory = [ordered]@{
+        schema_version = 1
+        inputs = $records.ToArray()
+    }
+    $inventoryRelative = 'materialization-manifest.json'
+    $inventoryPath = Get-CanonicalPath (Join-Path $root $inventoryRelative)
+    Write-JsonCreateNew $inventoryPath $inventory 8 2097152
+    $inventorySha256 = Get-Sha256File $inventoryPath
+
+    foreach ($entry in Get-ChildItem -LiteralPath $root -File -Recurse -Force) {
+        Set-FileReadOnly $entry.FullName
+    }
+
+    $propertyPaths = @{}
+    $propertyDigests = @{}
+    foreach ($property in $script:AcceptedInputPaths.Keys) {
+        $relative = ('accepted-dependencies/' + $script:AcceptedInputPaths[$property])
+        $match = @($records | Where-Object {
+            [string]$_.relative_path -ceq $relative
+        })
+        if ($match.Count -ne 1) {
+            throw 'accepted_input_record_missing'
+        }
+        $propertyPaths[$property] = [string]$match[0].path
+        $propertyDigests[$property.Replace('Path', 'Sha256')] = [string]$match[0].sha256
+    }
+
+    $descriptor = [ordered]@{
+        schema_version = 1
+        mode = 'delivery'
+        created_at_utc = [datetime]::UtcNow.ToString('o')
+        materialization_root = $root
+        reviewedSourceRoot = Get-CanonicalPath (Join-Path $root 'reviewed-source')
+        inventory_path = $inventoryPath
+        inventory_sha256 = $inventorySha256
+        authority = $Authority
+        identities = $Identities
+    }
+    foreach ($property in $script:AcceptedInputPaths.Keys) {
+        $descriptor[$property] = $propertyPaths[$property]
+        $descriptor[$property.Replace('Path', 'Sha256')] =
+            $propertyDigests[$property.Replace('Path', 'Sha256')]
+    }
+
+    Write-JsonCreateNew $DescriptorFile $descriptor 8 65536
+    Set-FileReadOnly $DescriptorFile
+    Assert-MaterializedInputs $DescriptorFile | Out-Null
+    return [pscustomobject]$descriptor
+}
+
+function Assert-DeliveryDescriptorShape {
+    param($Descriptor)
+    if ($null -eq $Descriptor -or
+        [int]$Descriptor.schema_version -ne 1 -or
+        [string]$Descriptor.mode -cne 'delivery') {
+        throw 'descriptor_schema_invalid'
+    }
+    $ids = @(
+        [string]$Descriptor.authority.bootstrap_review_id,
+        [string]$Descriptor.authority.final_review_id,
+        [string]$Descriptor.authority.delivery_review_id
+    )
+    if (-not (Test-PairwiseDistinct $ids)) {
+        throw 'delivery_review_chain_invalid'
+    }
+    $created = [datetime]::MinValue
+    if (-not [datetime]::TryParse(
+        [string]$Descriptor.created_at_utc,
+        [ref]$created
+    )) {
+        throw 'descriptor_timestamp_invalid'
+    }
+    $createdUtc = $created.ToUniversalTime()
+    $now = [datetime]::UtcNow
+    if ($createdUtc -gt $now) {
+        throw 'descriptor_timestamp_future'
+    }
+    if ($now - $createdUtc -gt [timespan]::FromMinutes(15)) {
+        throw 'descriptor_stale'
+    }
+}
+
+function Assert-MaterializedInputs {
+    param([Parameter(Mandatory = $true)][string] $DescriptorFile)
+    $descriptorPath = Get-CanonicalPath $DescriptorFile
+    if (-not (Test-Path -LiteralPath $descriptorPath -PathType Leaf)) {
+        throw 'descriptor_missing'
+    }
+    Assert-NoReparseChain $descriptorPath
+    $descriptorInfo = Get-Item -LiteralPath $descriptorPath -Force
+    if (-not $descriptorInfo.IsReadOnly -or $descriptorInfo.Length -gt 65536) {
+        throw 'descriptor_not_sealed'
+    }
+    $descriptor = Get-Content -LiteralPath $descriptorPath -Raw | ConvertFrom-Json
+    Assert-DeliveryDescriptorShape $descriptor
+
+    $root = Get-CanonicalPath $descriptor.materialization_root
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) {
+        throw 'materialization_root_missing'
+    }
+    Assert-NoReparseChain $root
+    $sourceRoot = Get-CanonicalPath $descriptor.reviewedSourceRoot
+    if (-not (Test-PathInside $sourceRoot $root) -or
+        -not (Test-Path -LiteralPath $sourceRoot -PathType Container)) {
+        throw 'reviewed_source_root_invalid'
+    }
+    Assert-NoReparseChain $sourceRoot
+
+    $inventoryPath = Get-CanonicalPath $descriptor.inventory_path
+    if (-not (Test-PathInside $inventoryPath $root) -or
+        -not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
+        throw 'materialization_inventory_missing'
+    }
+    Assert-NoReparseChain $inventoryPath
+    $inventoryInfo = Get-Item -LiteralPath $inventoryPath -Force
+    if (-not $inventoryInfo.IsReadOnly -or $inventoryInfo.Length -gt 2097152 -or
+        (Get-Sha256File $inventoryPath) -cne [string]$descriptor.inventory_sha256) {
+        throw 'materialization_inventory_invalid'
+    }
+    $inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
+    if ([int]$inventory.schema_version -ne 1 -or
+        @($inventory.inputs).Count -gt 10000) {
+        throw 'materialization_inventory_invalid'
+    }
+
+    $expected = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    [void]$expected.Add($inventoryPath)
+    $inputByPath = @{}
+    foreach ($input in @($inventory.inputs)) {
+        $relative = [string]$input.relative_path
+        Assert-SafeRelativePath $relative
+        $expectedPath = Get-CanonicalPath (Join-Path $root $relative)
+        $declaredPath = Get-CanonicalPath $input.path
+        if ($declaredPath -cne $expectedPath -or
+            -not (Test-PathInside $declaredPath $root) -or
+            -not $expected.Add($declaredPath)) {
+            throw 'materialization_inventory_path_invalid'
+        }
+        if (-not (Test-Path -LiteralPath $declaredPath -PathType Leaf)) {
+            throw 'materialized_input_missing'
+        }
+        Assert-NoReparseChain $declaredPath
+        $info = Get-Item -LiteralPath $declaredPath -Force
+        if (-not $info.IsReadOnly -or
+            (Get-Sha256File $declaredPath) -cne [string]$input.sha256) {
+            throw 'materialized_input_digest_mismatch'
+        }
+        $inputByPath[$declaredPath] = $input
+    }
+
+    $queue = New-Object System.Collections.Generic.Queue[string]
+    $queue.Enqueue($root)
+    $actual = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    while ($queue.Count -gt 0) {
+        $directory = $queue.Dequeue()
+        foreach ($entry in Get-ChildItem -LiteralPath $directory -Force) {
+            if (($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw 'linked_materialization_entry'
+            }
+            if ($entry.PSIsContainer) {
+                $queue.Enqueue($entry.FullName)
+            } else {
+                [void]$actual.Add((Get-CanonicalPath $entry.FullName))
+            }
+        }
+    }
+    if (-not $actual.SetEquals($expected)) {
+        throw 'unexpected_materialization_entry'
+    }
+
+    foreach ($property in $script:AcceptedInputPaths.Keys) {
+        $path = Get-CanonicalPath $descriptor.$property
+        $expectedRelative = (
+            'accepted-dependencies/' + $script:AcceptedInputPaths[$property]
+        ).Replace('\', '/')
+        if (-not $inputByPath.ContainsKey($path) -or
+            [string]$inputByPath[$path].relative_path -cne $expectedRelative -or
+            [string]$inputByPath[$path].role -cne 'accepted-dependency' -or
+            [string]$inputByPath[$path].sha256 -cne
+                [string]$descriptor.($property.Replace('Path', 'Sha256'))) {
+            throw 'accepted_input_descriptor_mismatch'
+        }
+    }
+    return $descriptor
+}
+
+function Remove-SyntheticMaterialization {
+    param([string] $BasePath)
+    if (-not (Test-Path -LiteralPath $BasePath)) {
+        return
+    }
+    foreach ($file in Get-ChildItem -LiteralPath $BasePath -File -Recurse -Force) {
+        $file.IsReadOnly = $false
+    }
+    Remove-Item -LiteralPath $BasePath -Recurse -Force
+}
+
+function New-SyntheticMaterialization {
+    $base = Join-Path (
+        [System.IO.Path]::GetTempPath()
+    ) ('loopplane-verifier-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $base | Out-Null
+    $descriptorPath = Join-Path $base 'descriptor.json'
+    $root = Join-Path $base 'accepted-inputs'
+    $files = New-Object System.Collections.Generic.List[object]
+    $sourceBytes = [System.Text.UTF8Encoding]::new($false).GetBytes('source')
+    [void]$files.Add([pscustomobject]@{
+        relative_path = 'reviewed-source/apps/desktop/source.txt'
+        bytes = $sourceBytes
+        git_blob_sha = Get-GitBlobSha $sourceBytes
+        role = 'reviewed-source'
+    })
+    foreach ($property in $script:AcceptedInputPaths.Keys) {
+        $relative = $script:AcceptedInputPaths[$property]
+        $bytes = [System.Text.UTF8Encoding]::new($false).GetBytes(
+            'accepted:' + $relative
+        )
+        [void]$files.Add([pscustomobject]@{
+            relative_path = 'accepted-dependencies/' + $relative
+            bytes = $bytes
+            git_blob_sha = Get-GitBlobSha $bytes
+            role = 'accepted-dependency'
+        })
+    }
+    $authority = [ordered]@{
+        bootstrap_review_id = '1'
+        bootstrap_commit_sha = ('a' * 40)
+        bootstrap_tree_sha = ('b' * 40)
+        final_review_id = '2'
+        final_commit_sha = ('c' * 40)
+        final_tree_sha = ('d' * 40)
+        delivery_review_id = '3'
+        delivery_commit_sha = ('e' * 40)
+        delivery_tree_sha = ('f' * 40)
+    }
+    $identities = [ordered]@{
+        delivery_bundle_sha256 = ('0' * 64)
+    }
+    $descriptor = New-MaterializationDescriptor `
+        $descriptorPath $root $files.ToArray() $authority $identities
+    return [pscustomobject]@{
+        base = $base
+        root = $root
+        descriptor_path = $descriptorPath
+        descriptor = $descriptor
+    }
 }
 
 function Invoke-SelfTest {
@@ -397,6 +1146,109 @@ function Invoke-SelfTest {
             $hasDeliveryReview = $false
             $ok = -not $hasDeliveryReview  # freeze must not run without delivery review
         }
+        'delivery-cat-file-binds-git-blob' {
+            $git = (Get-Command git.exe -ErrorAction Stop).Source
+            $objectId = (& $git -C $script:RepositoryRoot rev-parse 'HEAD:package.json').Trim()
+            if ($LASTEXITCODE -ne 0) {
+                $ok = $false
+            } else {
+                $blobs = Get-GitBlobBatch @($objectId)
+                $bytes = [byte[]]$blobs[$objectId]
+                $ok = (Get-GitBlobSha $bytes) -ceq $objectId
+            }
+        }
+        'delivery-descriptor-binds-t002-t005-t090' {
+            $fixture = $null
+            try {
+                $fixture = New-SyntheticMaterialization
+                $authority = $fixture.descriptor.authority
+                $ok = Test-PairwiseDistinct @(
+                    [string]$authority.bootstrap_review_id,
+                    [string]$authority.final_review_id,
+                    [string]$authority.delivery_review_id
+                )
+                $ok = $ok -and
+                    ([string]$authority.bootstrap_commit_sha).Length -eq 40 -and
+                    ([string]$authority.final_commit_sha).Length -eq 40 -and
+                    ([string]$authority.delivery_commit_sha).Length -eq 40
+            } finally {
+                if ($null -ne $fixture) {
+                    Remove-SyntheticMaterialization $fixture.base
+                }
+            }
+        }
+        'delivery-materializes-reviewed-snapshots' {
+            $fixture = $null
+            try {
+                $fixture = New-SyntheticMaterialization
+                $checked = Assert-MaterializedInputs $fixture.descriptor_path
+                $ok = (Test-Path -LiteralPath $checked.reviewedSourceRoot -PathType Container) -and
+                    (Test-Path -LiteralPath $checked.rootPackageLockPath -PathType Leaf) -and
+                    ((Get-Item -LiteralPath $checked.rootPackageLockPath).IsReadOnly)
+            } finally {
+                if ($null -ne $fixture) {
+                    Remove-SyntheticMaterialization $fixture.base
+                }
+            }
+        }
+        'delivery-rejects-preexisting-materialization-root' {
+            $base = Join-Path (
+                [System.IO.Path]::GetTempPath()
+            ) ('loopplane-verifier-' + [guid]::NewGuid().ToString('N'))
+            try {
+                New-Item -ItemType Directory -Path $base | Out-Null
+                $root = Join-Path $base 'accepted-inputs'
+                New-Item -ItemType Directory -Path $root | Out-Null
+                try { New-FreshDirectory $root; $ok = $false }
+                catch { $ok = ($_.Exception.Message -ceq 'materialization_root_exists') }
+            } finally {
+                Remove-SyntheticMaterialization $base
+            }
+        }
+        'delivery-rejects-linked-materialization-entry' {
+            $fixture = $null
+            $target = $null
+            try {
+                $fixture = New-SyntheticMaterialization
+                $target = Join-Path (
+                    [System.IO.Path]::GetTempPath()
+                ) ('loopplane-link-target-' + [guid]::NewGuid().ToString('N'))
+                New-Item -ItemType Directory -Path $target | Out-Null
+                $link = Join-Path $fixture.root 'linked-entry'
+                if ($env:OS -eq 'Windows_NT') {
+                    New-Item -ItemType Junction -Path $link -Target $target | Out-Null
+                } else {
+                    New-Item -ItemType SymbolicLink -Path $link -Target $target | Out-Null
+                }
+                try { Assert-MaterializedInputs $fixture.descriptor_path; $ok = $false }
+                catch { $ok = ($_.Exception.Message -ceq 'linked_materialization_entry') }
+            } finally {
+                if ($null -ne $fixture) {
+                    Remove-SyntheticMaterialization $fixture.base
+                }
+                if ($null -ne $target -and (Test-Path -LiteralPath $target)) {
+                    Remove-Item -LiteralPath $target -Recurse -Force
+                }
+            }
+        }
+        'delivery-reassert-rejects-mutated-input' {
+            $fixture = $null
+            try {
+                $fixture = New-SyntheticMaterialization
+                $path = [string]$fixture.descriptor.rootPackageJsonPath
+                $info = Get-Item -LiteralPath $path -Force
+                $info.IsReadOnly = $false
+                [System.IO.File]::AppendAllText($path, 'mutated')
+                $info = Get-Item -LiteralPath $path -Force
+                $info.IsReadOnly = $true
+                try { Assert-MaterializedInputs $fixture.descriptor_path; $ok = $false }
+                catch { $ok = ($_.Exception.Message -ceq 'materialized_input_digest_mismatch') }
+            } finally {
+                if ($null -ne $fixture) {
+                    Remove-SyntheticMaterialization $fixture.base
+                }
+            }
+        }
         default {
             Write-PublicFail -Code 'unknown_selftest' -Detail $Case
             exit 2
@@ -417,6 +1269,134 @@ function Get-StageBToken {
         return $null
     }
     return $token
+}
+
+function New-DeliveryMaterialization {
+    param(
+        $FinalTree,
+        $DeliveryTree,
+        [string] $BootstrapTreeSha,
+        [string] $FinalTreeSha,
+        [string] $DeliveryTreeSha
+    )
+    if ([string]::IsNullOrWhiteSpace($DescriptorPath)) {
+        throw 'descriptor_path_required'
+    }
+    $descriptorFile = Get-CanonicalPath $DescriptorPath
+    if (Test-PathInside $descriptorFile $script:RepositoryRoot) {
+        throw 'descriptor_inside_checkout'
+    }
+    if (Test-Path -LiteralPath $descriptorFile) {
+        throw 'descriptor_path_exists'
+    }
+    $descriptorParent = Split-Path -Parent $descriptorFile
+    if (-not (Test-Path -LiteralPath $descriptorParent -PathType Container)) {
+        throw 'descriptor_parent_missing'
+    }
+    Assert-NoReparseChain $descriptorParent
+
+    $finalMap = Get-LeafTreeMap $FinalTree
+    $deliveryMap = Get-LeafTreeMap $DeliveryTree
+    foreach ($appLock in @(
+        'apps/web/package-lock.json',
+        'apps/desktop/package-lock.json'
+    )) {
+        if ($finalMap.ContainsKey($appLock) -or $deliveryMap.ContainsKey($appLock)) {
+            throw 'app_local_lock_reappeared'
+        }
+    }
+
+    $acceptedEntries = @{}
+    foreach ($property in $script:AcceptedInputPaths.Keys) {
+        $path = $script:AcceptedInputPaths[$property]
+        if (-not $finalMap.ContainsKey($path) -or
+            -not $deliveryMap.ContainsKey($path)) {
+            throw 'accepted_input_missing_from_tree'
+        }
+        $finalEntry = $finalMap[$path]
+        $deliveryEntry = $deliveryMap[$path]
+        if ($finalEntry.Type -cne 'blob' -or
+            $finalEntry.Mode -cne '100644' -or
+            $deliveryEntry.Type -cne 'blob' -or
+            $deliveryEntry.Mode -cne '100644' -or
+            $deliveryEntry.Sha -cne $finalEntry.Sha) {
+            throw 'accepted_input_drift'
+        }
+        $acceptedEntries[$property] = [pscustomobject]@{
+            path = $path
+            mode = $finalEntry.Mode
+            type = $finalEntry.Type
+            sha = $finalEntry.Sha
+        }
+    }
+
+    $deliveryEntries = @(Get-DeliveryEntries $DeliveryTree)
+    $objectIds = New-Object System.Collections.Generic.List[string]
+    foreach ($entry in $deliveryEntries) {
+        [void]$objectIds.Add([string]$entry.sha)
+    }
+    foreach ($property in $script:AcceptedInputPaths.Keys) {
+        [void]$objectIds.Add([string]$acceptedEntries[$property].sha)
+    }
+    $blobs = Get-GitBlobBatch ($objectIds.ToArray())
+
+    $files = New-Object System.Collections.Generic.List[object]
+    foreach ($entry in $deliveryEntries) {
+        $bytes = [byte[]]$blobs[[string]$entry.sha]
+        [void]$files.Add([pscustomobject]@{
+            relative_path = 'reviewed-source/' + [string]$entry.path
+            bytes = $bytes
+            git_blob_sha = [string]$entry.sha
+            role = 'reviewed-source'
+        })
+    }
+    foreach ($property in $script:AcceptedInputPaths.Keys) {
+        $entry = $acceptedEntries[$property]
+        $bytes = [byte[]]$blobs[[string]$entry.sha]
+        [void]$files.Add([pscustomobject]@{
+            relative_path = 'accepted-dependencies/' + [string]$entry.path
+            bytes = $bytes
+            git_blob_sha = [string]$entry.sha
+            role = 'accepted-dependency'
+        })
+    }
+
+    $authority = [ordered]@{
+        bootstrap_review_id = $BootstrapReviewId
+        bootstrap_commit_sha = $BootstrapCommitSha
+        bootstrap_tree_sha = $BootstrapTreeSha
+        final_review_id = $FinalReviewId
+        final_commit_sha = $FinalCommitSha
+        final_tree_sha = $FinalTreeSha
+        delivery_review_id = $DeliveryReviewId
+        delivery_commit_sha = $DeliveryCommitSha
+        delivery_tree_sha = $DeliveryTreeSha
+    }
+    $identities = [ordered]@{
+        delivery_bundle_sha256 = Get-TreeInventorySha256 $deliveryEntries
+        accepted_root_lock_sha256 = Get-Sha256Bytes (
+            [byte[]]$blobs[[string]$acceptedEntries['rootPackageLockPath'].sha]
+        )
+        accepted_pyinstaller_lock_sha256 = Get-Sha256Bytes (
+            [byte[]]$blobs[[string]$acceptedEntries['pyinstallerLockPath'].sha]
+        )
+    }
+    $materializationRoot = Join-Path $descriptorParent (
+        'accepted-inputs-' + [guid]::NewGuid().ToString('N')
+    )
+    try {
+        return New-MaterializationDescriptor `
+            $descriptorFile `
+            $materializationRoot `
+            $files.ToArray() `
+            $authority `
+            $identities
+    } catch {
+        if (Test-Path -LiteralPath $materializationRoot) {
+            Remove-SyntheticMaterialization $materializationRoot
+        }
+        throw
+    }
 }
 
 function Invoke-GitHubJson {
@@ -537,19 +1517,9 @@ function Invoke-LiveMode {
         exit 1
     }
 
-    # Build path maps for allowlist diff (blobs only for simplicity of inventory).
-    $before = @{}
-    foreach ($e in $bootTree.tree) {
-        if ($e.type -eq 'blob') {
-            $before[[string]$e.path] = @{ Mode = [string]$e.mode; Type = 'blob'; Sha = [string]$e.sha }
-        }
-    }
-    $after = @{}
-    foreach ($e in $finalTree.tree) {
-        if ($e.type -eq 'blob') {
-            $after[[string]$e.path] = @{ Mode = [string]$e.mode; Type = 'blob'; Sha = [string]$e.sha }
-        }
-    }
+    # Compare every non-tree leaf so symlink/gitlink/type/mode changes cannot hide.
+    $before = Get-LeafTreeMap $bootTree
+    $after = Get-LeafTreeMap $finalTree
     $viol = Test-TreeDiffAllowlist -Before $before -After $after
     if ($viol.Count -gt 0) {
         Write-PublicFail -Code 'tree_diff_violation'
@@ -573,20 +1543,42 @@ function Invoke-LiveMode {
         exit 1
     }
 
-    # Descriptor is non-secret identities only.
-    $descriptor = [ordered]@{
-        mode                 = 'delivery'
-        bootstrap_review_id  = $BootstrapReviewId
-        bootstrap_commit_sha = $BootstrapCommitSha
-        bootstrap_tree_sha   = $bootTreeSha
-        final_review_id      = $FinalReviewId
-        final_commit_sha     = $FinalCommitSha
-        final_tree_sha       = $finalTreeSha
-        delivery_review_id   = $DeliveryReviewId
-        delivery_commit_sha  = $DeliveryCommitSha
-        delivery_tree_sha    = $delTreeSha
+    if ($MaterializeAcceptedInputs) {
+        try {
+            $descriptor = New-DeliveryMaterialization `
+                $finalTree `
+                $delTree `
+                $bootTreeSha `
+                $finalTreeSha `
+                $delTreeSha
+            Write-Output (
+                'DELIVERY_MATERIALIZED descriptor_sha256=' +
+                (Get-Sha256File (Get-CanonicalPath $DescriptorPath))
+            )
+            exit 0
+        } catch {
+            Write-PublicFail -Code 'delivery_materialization_failed'
+            exit 1
+        }
     }
-    $descriptor | ConvertTo-Json -Compress | Write-Output
+
+    # Identity-only output is comparison data and cannot authorize a build.
+    $descriptor = [ordered]@{
+        schema_version = 1
+        mode = 'delivery-identity-only'
+        authority = [ordered]@{
+            bootstrap_review_id = $BootstrapReviewId
+            bootstrap_commit_sha = $BootstrapCommitSha
+            bootstrap_tree_sha = $bootTreeSha
+            final_review_id = $FinalReviewId
+            final_commit_sha = $FinalCommitSha
+            final_tree_sha = $finalTreeSha
+            delivery_review_id = $DeliveryReviewId
+            delivery_commit_sha = $DeliveryCommitSha
+            delivery_tree_sha = $delTreeSha
+        }
+    }
+    $descriptor | ConvertTo-Json -Depth 4 -Compress | Write-Output
     exit 0
 }
 
@@ -595,8 +1587,24 @@ if ($SelfTest) {
     Invoke-SelfTest -Case $SelfTest
 }
 
+if (-not [string]::IsNullOrWhiteSpace($AssertMaterializedInputs)) {
+    try {
+        Assert-MaterializedInputs $AssertMaterializedInputs | Out-Null
+        Write-Output 'MATERIALIZED_INPUTS_OK'
+        exit 0
+    } catch {
+        Write-PublicFail -Code 'materialized_inputs_invalid'
+        exit 1
+    }
+}
+
 if (-not $Mode) {
     Write-PublicFail -Code 'mode_required'
+    exit 2
+}
+if ($MaterializeAcceptedInputs -and
+    ($Mode -ne 'delivery' -or [string]::IsNullOrWhiteSpace($DescriptorPath))) {
+    Write-PublicFail -Code 'materialization_requires_delivery_descriptor'
     exit 2
 }
 

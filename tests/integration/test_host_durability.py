@@ -32,6 +32,34 @@ if str(EXAMPLES_DIR) not in sys.path:
 from host_quickstart import run_scenario  # noqa: E402
 
 
+class _RevocableStorageLease:
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.valid = True
+        self.closed = False
+        self.close_failures = 0
+
+    def validate(self) -> None:
+        if not self.valid:
+            raise RuntimeError("storage authority revoked")
+
+    def close(self) -> None:
+        if self.close_failures:
+            self.close_failures -= 1
+            raise OSError("injected storage authority close failure")
+        self.closed = True
+
+
+class _RevocableStorageAuthority:
+    def __init__(self) -> None:
+        self.leases: list[_RevocableStorageLease] = []
+
+    def acquire(self, root: Path) -> _RevocableStorageLease:
+        lease = _RevocableStorageLease(root)
+        self.leases.append(lease)
+        return lease
+
+
 async def test_same_scenario_twice_is_identical(tmp_path: Path) -> None:
     def make_host() -> LoopPlaneHost:
         return LoopPlaneHost(
@@ -95,6 +123,76 @@ def test_sqlite_backend_is_selected_when_requested(tmp_path: Path) -> None:
         )
     )
     assert isinstance(assembled.checkpoint_store, SqliteCheckpointStore)
+
+
+@pytest.mark.parametrize(
+    "operation", ["checkpoint", "artifact", "capability", "snapshot"]
+)
+async def test_retained_storage_authority_guards_each_store_use(
+    tmp_path: Path, operation: str
+) -> None:
+    authority = _RevocableStorageAuthority()
+    root = tmp_path / "data"
+    if operation == "snapshot":
+        SqliteCheckpointStore(root / "checkpoints.sqlite3").initialize()
+    host = LoopPlaneHost(
+        RuntimeConfig(
+            model=text_model("unused"),
+            storage=StorageConfig(
+                root=root,
+                checkpoint_backend="sqlite",
+                authority=authority,
+            ),
+        )
+    )
+    lease = authority.leases[-1]
+    if operation == "snapshot":
+        host.enable_desktop_portable_snapshot()
+    lease.valid = False
+    try:
+        if operation == "capability":
+            status = host.capability_settings_status(principal_id="principal")
+            assert status.storage_available is False
+        elif operation == "snapshot":
+            destination = tmp_path / "snapshot"
+            destination.mkdir()
+            result = host.export_portable_snapshot(destination)
+            assert result.ok is False
+        else:
+            with pytest.raises(RuntimeError, match="storage authority revoked"):
+                if operation == "checkpoint":
+                    host.list_sessions()
+                else:
+                    host.retrieve_artifact("session", "reference")
+    finally:
+        await host.aclose()
+
+    assert lease.closed is True
+
+
+async def test_storage_authority_close_failure_remains_retryable(
+    tmp_path: Path,
+) -> None:
+    authority = _RevocableStorageAuthority()
+    host = LoopPlaneHost(
+        RuntimeConfig(
+            model=text_model("unused"),
+            storage=StorageConfig(
+                root=tmp_path / "data",
+                checkpoint_backend="sqlite",
+                authority=authority,
+            ),
+        )
+    )
+    lease = authority.leases[-1]
+    lease.close_failures = 1
+
+    with pytest.raises(OSError, match="close failure"):
+        await host.aclose()
+    assert lease.closed is False
+
+    await host.aclose()
+    assert lease.closed is True
 
 
 async def test_sqlite_backend_records_are_durable_and_resumable(
@@ -187,3 +285,35 @@ def test_example_echo_tool_matches_the_test_fixture() -> None:
 
     assert _ECHO.name == ECHO_DESCRIPTOR.name
     assert _ECHO.input_schema == ECHO_DESCRIPTOR.input_schema
+
+
+async def test_sqlite_turn_audit_reopens_from_checkpoints_without_writing(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "audit-data"
+    host = LoopPlaneHost(
+        RuntimeConfig(
+            model=text_model("done"),
+            storage=StorageConfig(root=root, checkpoint_backend="sqlite"),
+        ),
+        working_scope=tmp_path,
+    )
+    outcome = await host.run("durable-private-audit-prompt", EventCollector())
+    checkpoint = root / "checkpoints.sqlite3"
+    bytes_before = checkpoint.read_bytes()
+    original = host.list_turn_audit(outcome.session_id)
+
+    reopened = LoopPlaneHost(
+        RuntimeConfig(
+            model=text_model("unused"),
+            storage=StorageConfig(root=root, checkpoint_backend="sqlite"),
+        ),
+        working_scope=tmp_path,
+    )
+    restored = reopened.list_turn_audit(outcome.session_id)
+
+    assert restored == original
+    assert restored[0].state == "completed"
+    assert restored[0].termination_reason == outcome.termination_reason
+    assert "durable-private-audit-prompt" not in repr(restored)
+    assert checkpoint.read_bytes() == bytes_before

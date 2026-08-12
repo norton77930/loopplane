@@ -370,6 +370,14 @@ The Host Application Interface that exposes the runtime to host applications.
 - `TextBlock` — a text input block (036).
 - `ImageBlock` — an image input block (036).
 - `DocumentBlock` — a document input block (069).
+- `TurnAuditEntry` — a public-safe record projected from a checkpointed turn.
+- `checkpoint_records_to_audit_entries` — project checkpoint records into audit entries.
+- `GenerationExpectation` — expected active-generation durable state for validation.
+- `GenerationValidationResult` — public-safe active-generation validation result.
+- `validate_active_generation` — validate active-generation proof data before Host startup.
+- `PortableSnapshotResult` — result of a portable snapshot export or validation.
+- `PortableSnapshotUnavailable` — raised when portable snapshots are not injected.
+- `UnavailablePortableSnapshotProvider` — default provider that declines portable snapshots.
 
 ## Loop-engineering & layers (units 003-013)
 

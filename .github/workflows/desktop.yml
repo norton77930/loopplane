@@ -1,34 +1,218 @@
 name: desktop
 
-# The isolated gate for the desktop app. It also runs on apps/web changes because
-# the desktop renderer imports current web source through @web/*.
 on:
   push:
     paths:
+      - "package.json"
+      - "package-lock.json"
+      - "pyproject.toml"
+      - "uv.lock"
       - "apps/desktop/**"
       - "apps/web/**"
+      - "packages/cowork-presentation/**"
+      - "src/**"
+      - "tests/**"
+      - "scripts/verify-desktop-stage-b.ps1"
+      - "scripts/build-desktop-sidecar.ps1"
+      - "scripts/build-desktop-package.ps1"
+      - "scripts/smoke-desktop-artifact.ps1"
+      - "docs/adr/0015-desktop-cowork-boundary.md"
+      - "specs/078-desktop-cowork-parity/**"
       - ".github/workflows/desktop.yml"
   pull_request:
     paths:
+      - "package.json"
+      - "package-lock.json"
+      - "pyproject.toml"
+      - "uv.lock"
       - "apps/desktop/**"
       - "apps/web/**"
+      - "packages/cowork-presentation/**"
+      - "src/**"
+      - "tests/**"
+      - "scripts/verify-desktop-stage-b.ps1"
+      - "scripts/build-desktop-sidecar.ps1"
+      - "scripts/build-desktop-package.ps1"
+      - "scripts/smoke-desktop-artifact.ps1"
+      - "docs/adr/0015-desktop-cowork-boundary.md"
+      - "specs/078-desktop-cowork-parity/**"
       - ".github/workflows/desktop.yml"
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
-  desktop:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/desktop
-    env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+  source-gates:
+    if: github.event_name != 'pull_request_review'
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: apps/desktop/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
+          cache-dependency-path: package-lock.json
+      - name: Python delivery contracts
+        shell: powershell
+        run: |
+          uv sync --locked
+          uv run pytest tests/contract/test_desktop_delivery_gate.py tests/integration/test_desktop_packaged_smoke.py -q
+      - name: JavaScript clean install
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        run: npm ci
+      - name: Shared, Web, and Desktop source gates
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        shell: powershell
+        run: |
+          npm run typecheck -w @loopplane/cowork-presentation
+          npm test -w @loopplane/cowork-presentation -- --run
+          npm run typecheck -w @loopplane/web
+          npm test -w @loopplane/web -- --run
+          npm run build -w @loopplane/web
+          npm run typecheck -w @loopplane/desktop
+          npm test -w @loopplane/desktop -- --run
+          npm run build -w @loopplane/desktop
+
+  delivery:
+    if: >-
+      github.event_name == 'pull_request_review' &&
+      github.event.review.state == 'approved'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.review.commit_id }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Recheck reviewed source before Stage C
+        shell: powershell
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+        run: |
+          $expected = '${{ github.event.review.commit_id }}'
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -cne $expected) {
+            throw 'reviewed_checkout_mismatch'
+          }
+          uv sync --locked
+          uv run ruff format --check .
+          uv run ruff check .
+          uv run mypy
+          uv run pytest
+          npm ci
+          npm run typecheck -w @loopplane/cowork-presentation
+          npm test -w @loopplane/cowork-presentation -- --run
+          npm run typecheck -w @loopplane/web
+          npm test -w @loopplane/web -- --run
+          npm run build -w @loopplane/web
+          npm run typecheck -w @loopplane/desktop
+          npm test -w @loopplane/desktop -- --run
+          npm run build -w @loopplane/desktop
+      - name: Verify Stage C and materialize accepted inputs
+        shell: powershell
+        env:
+          LOOPPLANE_STAGE_B_GITHUB_TOKEN: ${{ github.token }}
+          LOOPPLANE_DESKTOP_BOOTSTRAP_REVIEW_ID: ${{ vars.LOOPPLANE_DESKTOP_BOOTSTRAP_REVIEW_ID }}
+          LOOPPLANE_DESKTOP_BOOTSTRAP_COMMIT_SHA: ${{ vars.LOOPPLANE_DESKTOP_BOOTSTRAP_COMMIT_SHA }}
+          LOOPPLANE_DESKTOP_FINAL_REVIEW_ID: ${{ vars.LOOPPLANE_DESKTOP_FINAL_REVIEW_ID }}
+          LOOPPLANE_DESKTOP_FINAL_COMMIT_SHA: ${{ vars.LOOPPLANE_DESKTOP_FINAL_COMMIT_SHA }}
+          LOOPPLANE_DESKTOP_EXPECTED_APPROVER: ${{ vars.LOOPPLANE_DESKTOP_EXPECTED_APPROVER }}
+          LOOPPLANE_DESKTOP_ALLOW_SELF_APPROVAL: ${{ vars.LOOPPLANE_DESKTOP_ALLOW_SELF_APPROVAL }}
+        run: |
+          $runRoot = Join-Path $env:RUNNER_TEMP (
+            'loopplane-delivery-' + [guid]::NewGuid().ToString('N')
+          )
+          New-Item -ItemType Directory -Path $runRoot | Out-Null
+          $descriptor = Join-Path $runRoot 'delivery-descriptor.json'
+          $repositoryName = $env:GITHUB_REPOSITORY.Split('/', 2)[1]
+          & "$env:GITHUB_WORKSPACE/scripts/verify-desktop-stage-b.ps1" `
+            -Mode delivery `
+            -Owner $env:GITHUB_REPOSITORY_OWNER `
+            -Repository $repositoryName `
+            -PullNumber '${{ github.event.pull_request.number }}' `
+            -ExpectedApprover $env:LOOPPLANE_DESKTOP_EXPECTED_APPROVER `
+            -AllowSelfApproval $env:LOOPPLANE_DESKTOP_ALLOW_SELF_APPROVAL `
+            -BootstrapReviewId $env:LOOPPLANE_DESKTOP_BOOTSTRAP_REVIEW_ID `
+            -BootstrapCommitSha $env:LOOPPLANE_DESKTOP_BOOTSTRAP_COMMIT_SHA `
+            -FinalReviewId $env:LOOPPLANE_DESKTOP_FINAL_REVIEW_ID `
+            -FinalCommitSha $env:LOOPPLANE_DESKTOP_FINAL_COMMIT_SHA `
+            -DeliveryReviewId '${{ github.event.review.id }}' `
+            -DeliveryCommitSha '${{ github.event.review.commit_id }}' `
+            -MaterializeAcceptedInputs `
+            -DescriptorPath $descriptor
+          if ($LASTEXITCODE -ne 0) {
+            throw 'stage_c_verification_failed'
+          }
+          "LOOPPLANE_DELIVERY_ROOT=$runRoot" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "LOOPPLANE_DELIVERY_DESCRIPTOR=$descriptor" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Token-free package, freeze, and external UI Automation smoke
+        shell: powershell
+        run: |
+          foreach ($name in @(
+            'LOOPPLANE_STAGE_B_GITHUB_TOKEN',
+            'GH_TOKEN',
+            'GITHUB_TOKEN'
+          )) {
+            Remove-Item -LiteralPath ('Env:' + $name) -ErrorAction SilentlyContinue
+            if (-not [string]::IsNullOrEmpty(
+              [Environment]::GetEnvironmentVariable($name)
+            )) {
+              throw 'credential_environment_forbidden'
+            }
+          }
+
+          $runRoot = $env:LOOPPLANE_DELIVERY_ROOT
+          $descriptor = $env:LOOPPLANE_DELIVERY_DESCRIPTOR
+          $packageResult = Join-Path $runRoot 'package-result.json'
+          & "$env:GITHUB_WORKSPACE/scripts/build-desktop-package.ps1" `
+            -DescriptorPath $descriptor `
+            -ResultPath $packageResult
+          if ($LASTEXITCODE -ne 0) {
+            throw 'desktop_package_failed'
+          }
+
+          $package = Get-Content -LiteralPath $packageResult -Raw |
+            ConvertFrom-Json
+          $winUnpacked = Join-Path $package.release_output_path 'win-unpacked'
+          if (-not (Test-Path -LiteralPath $winUnpacked -PathType Container)) {
+            throw 'win_unpacked_missing'
+          }
+          $artifactRoot = Join-Path $runRoot 'artifact'
+          Copy-Item -LiteralPath $winUnpacked -Destination $artifactRoot -Recurse
+          $appExecutable = Join-Path $artifactRoot 'LoopPlane.exe'
+          $scratchRoot = Join-Path $runRoot 'smoke-scratch'
+          $evidencePath = Join-Path $runRoot 'smoke-evidence.json'
+
+          Push-Location $runRoot
+          try {
+            & "$env:GITHUB_WORKSPACE/scripts/smoke-desktop-artifact.ps1" `
+              -AppExecutable $appExecutable `
+              -ScratchRoot $scratchRoot `
+              -EvidencePath $evidencePath `
+              -Scenario all
+            if ($LASTEXITCODE -ne 0) {
+              throw 'desktop_smoke_failed'
+            }
+          } finally {
+            Pop-Location
+          }

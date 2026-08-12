@@ -18,7 +18,7 @@ from typing import Final
 # ---------------------------------------------------------------------------
 
 LOOPPLANE_SECRET_MARKER: Final[str] = "lp-synth-secret-TOKEN-9f3c2a1b"
-LOOPPLANE_PATH_MARKER: Final[str] = r"C:\Users\lp-synth\private\workspace\secret-dir"
+LOOPPLANE_PATH_MARKER: Final[str] = "<private-workspace>/secret-dir"
 LOOPPLANE_RULE_MARKER: Final[str] = "lp-synth-private-rule:deny-everything"
 LOOPPLANE_PID_MARKER: Final[str] = "lp-synth-pid=424242"
 LOOPPLANE_RAW_ERROR_MARKER: Final[str] = (
@@ -29,10 +29,10 @@ AUTHORIZED_USER_CONTENT_MARKER: Final[str] = (
     "user said: keep my API key sk-synth-user-content-ok"
 )
 AUTHORIZED_MODEL_CONTENT_MARKER: Final[str] = (
-    "model wrote: path excerpt /home/user/project/file.ts"
+    "model wrote: path excerpt <authorized-workspace>/project/file.ts"
 )
 AUTHORIZED_TOOL_CONTENT_MARKER: Final[str] = (
-    "tool output: wrote C:\\Users\\lp-synth\\private\\workspace\\out.txt"
+    "tool output: wrote <authorized-workspace>/out.txt"
 )
 AUTHORIZED_ARTIFACT_MARKER: Final[str] = "artifact-body:lp-synth-eligible-blob"
 

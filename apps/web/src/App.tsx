@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  ApiClient,
-  ApiError,
-  createRestSessionTransport,
-  type ApprovalDecision,
-} from "./api/client";
-import type { SessionTransport } from "./api/transport";
+import type { ApprovalDecision } from "./api/client";
 import type {
   AgentControlProjection,
   MonthlyCostView,
@@ -33,6 +27,11 @@ import {
   followUpSuggestionStaleKey,
 } from "./followUpSuggestions";
 import { useTranslation } from "./i18n/i18n";
+import {
+  createWebPresentationHost,
+  type WebPresentationHost,
+  type WebPresentationHostOptions,
+} from "./presentation-host";
 import { errored, initialState, reduce, userPrompt } from "./state/chat";
 import {
   chooseActiveAfterDelete,
@@ -41,12 +40,12 @@ import {
 } from "./state/sessions";
 
 export function App({
-  client = new ApiClient(),
-  transport: providedTransport,
+  host: injectedHost,
+  client,
+  transport,
   onUnauthorized,
-}: {
-  client?: ApiClient;
-  transport?: SessionTransport;
+}: WebPresentationHostOptions & {
+  host?: WebPresentationHost;
   onUnauthorized?: () => void;
 }) {
   const [state, setState] = useState(initialState);
@@ -78,44 +77,43 @@ export function App({
   const [monthlyCostFailed, setMonthlyCostFailed] = useState(false);
   const sessionId = useRef<string | null>(null);
   const reading = useRef(false);
+  const streamUnsubscribe = useRef<(() => void) | null>(null);
+  const [host] = useState(() => injectedHost ?? createWebPresentationHost({ client, transport }));
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const inspectButtonRef = useRef<HTMLButtonElement>(null);
   const { notify } = useToast();
   const { t, locale } = useTranslation();
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const [transport] = useState(
-    () => providedTransport ?? createRestSessionTransport(client),
-  );
 
   function fail(error: unknown) {
-    // An authorization failure logs the user out (back to login); any other error shows the
-    // non-blocking error banner (FR-010) while the conversation is preserved.
-    if (error instanceof ApiError && error.status === 401) {
-      onUnauthorized?.();
-    } else {
-      setState(errored);
-    }
+    // Web-only auth status remains classified by the host; the UI owns only its safe outcome.
+    if (host.isUnauthorized(error)) onUnauthorized?.();
+    else setState(errored);
   }
 
-  async function readEvents(id: string) {
+  function readEvents(id: string) {
     if (reading.current) return;
     reading.current = true;
-    try {
-      for await (const event of transport.streamSession(id)) {
-        setState((current) => reduce(current, event));
-      }
-    } catch (error) {
-      fail(error);
-    } finally {
-      reading.current = false;
-    }
+    streamUnsubscribe.current = host.subscribeProgress(
+      id,
+      (event) => setState((current) => reduce(current, event)),
+      (error) => {
+        reading.current = false;
+        streamUnsubscribe.current = null;
+        fail(error);
+      },
+      () => {
+        reading.current = false;
+        streamUnsubscribe.current = null;
+      },
+    );
   }
 
   async function ensureSession(): Promise<string> {
     if (sessionId.current) return sessionId.current;
     const model = selectedModel;
-    const { session_id } = await transport.openSession(model ?? undefined);
+    const { session_id } = await host.openSession(model ?? undefined);
     sessionId.current = session_id;
     setSessionModel(model);
     setActiveId(session_id);
@@ -131,7 +129,7 @@ export function App({
     }
     setAgentControlsLoading(true);
     try {
-      const projection = await client.getAgentControls(id);
+      const projection = await host.getAgentControls(id);
       if (sessionId.current === id) {
         setAgentControls(projection);
         setAgentControlsFailed(false);
@@ -154,7 +152,7 @@ export function App({
     }
     setSessionCostLoading(true);
     try {
-      const cost = await client.getSessionCost(id);
+      const cost = await host.getSessionCost(id);
       if (sessionId.current === id) {
         setSessionCost(cost);
         setSessionCostFailed(false);
@@ -172,7 +170,7 @@ export function App({
   async function refreshMonthlyCost() {
     setMonthlyCostLoading(true);
     try {
-      setMonthlyCost(await client.getMonthlyCost());
+      setMonthlyCost(await host.getMonthlyCost());
       setMonthlyCostFailed(false);
     } catch {
       setMonthlyCost(null);
@@ -203,7 +201,7 @@ export function App({
     try {
       const id = await ensureSession();
       if (includesNonImage) {
-        const projection = await client.getAgentControls(id);
+        const projection = await host.getAgentControls(id);
         if (sessionId.current === id) {
           setAgentControls(projection);
           setAgentControlsFailed(false);
@@ -214,14 +212,14 @@ export function App({
       }
 
       if (permissionModeDraft || uploads.length > 0) {
-        await transport.submit(id, prompt, {
+        await host.submit(id, prompt, {
           ...(permissionModeDraft
             ? { permissionMode: permissionModeDraft }
             : {}),
           ...(uploads.length > 0 ? { uploads } : {}),
         });
       } else {
-        await transport.submit(id, prompt);
+        await host.submit(id, prompt);
       }
       setAttachments([]);
       setPermissionModeDraft(null);
@@ -256,14 +254,14 @@ export function App({
 
   async function approve(requestId: string, decision: ApprovalDecision) {
     if (sessionId.current) {
-      await transport.answerApproval(sessionId.current, requestId, decision);
+      await host.answerApproval(sessionId.current, requestId, decision);
     }
     setState((current) => ({ ...current, pendingApproval: undefined }));
   }
 
   async function answer(requestId: string, answers: string[]) {
     if (sessionId.current) {
-      await transport.answerQuestion(sessionId.current, requestId, answers);
+      await host.answerQuestion(sessionId.current, requestId, answers);
     }
     setState((current) => ({ ...current, pendingQuestion: undefined }));
   }
@@ -271,7 +269,7 @@ export function App({
   async function stop() {
     if (!sessionId.current) return;
     try {
-      await transport.cancel(sessionId.current);
+      await host.cancel(sessionId.current);
     } catch (error) {
       fail(error);
     }
@@ -284,7 +282,7 @@ export function App({
 
   async function refreshSessions() {
     try {
-      setSessions(await client.listSessions());
+      setSessions(await host.listSessions());
     } catch {
       setSessions([]);
     } finally {
@@ -295,7 +293,7 @@ export function App({
   // 030 — session management: rename + delete, then refresh the list (with a 032 toast).
   async function renameSession(id: string, title: string) {
     try {
-      await client.renameSession(id, title);
+      await host.renameSession(id, title);
       notify(t("toast.renamed"));
       void refreshSessions();
     } catch (error) {
@@ -305,7 +303,7 @@ export function App({
 
   async function deleteSession(id: string) {
     try {
-      await client.deleteSession(id);
+      await host.deleteSession(id);
     } catch (error) {
       fail(error);
       return;
@@ -318,8 +316,7 @@ export function App({
 
   async function toggleStar(id: string, next: boolean) {
     try {
-      if (next) await client.starSession(id);
-      else await client.unstarSession(id);
+      await host.setSessionStarred(id, next);
       void refreshSessions();
     } catch (error) {
       fail(error);
@@ -329,7 +326,7 @@ export function App({
   async function searchSessions(query: string) {
     const trimmed = query.trim();
     try {
-      setSessions(trimmed ? await client.searchSessions(trimmed) : await client.listSessions());
+      setSessions(trimmed ? await host.searchSessions(trimmed) : await host.listSessions());
     } catch (error) {
       fail(error);
     }
@@ -337,7 +334,7 @@ export function App({
 
   async function bulkDeleteSessions(ids: string[]) {
     try {
-      const result = await client.bulkDeleteSessions(ids);
+      const result = await host.bulkDeleteSessions(ids);
       const deleted = new Set(result.deleted);
       if (activeId && deleted.has(activeId)) {
         const fallback = chooseActiveAfterDelete(activeId, sessions, deleted);
@@ -354,7 +351,7 @@ export function App({
   async function forkFrom(sequence: number) {
     if (!sessionId.current) return;
     try {
-      const forked = await client.forkSession(sessionId.current, { sequence });
+      const forked = await host.forkSession(sessionId.current, { sequence });
       void refreshSessions();
       void selectSession(forked.session_id);
     } catch (error) {
@@ -369,6 +366,8 @@ export function App({
   }
 
   function newChat() {
+    streamUnsubscribe.current?.();
+    streamUnsubscribe.current = null;
     sessionId.current = null;
     reading.current = false;
     setActiveId(null);
@@ -385,6 +384,8 @@ export function App({
 
   async function selectSession(id: string) {
     if (id === activeId) return;
+    streamUnsubscribe.current?.();
+    streamUnsubscribe.current = null;
     sessionId.current = id;
     setAgentControls(null);
     setAgentControlsFailed(false);
@@ -398,7 +399,7 @@ export function App({
     let next = initialState;
     setLoadingHistory(true);
     try {
-      const events = (await client.history(id)) as RawEvent[];
+      const events = (await host.history(id)) as RawEvent[];
       for (const event of events) next = reduce(next, event);
     } catch {
       next = initialState;
@@ -415,8 +416,8 @@ export function App({
   async function loadMentions(query: string): Promise<string[]> {
     try {
       const [skills, tools] = await Promise.all([
-        client.inspectSkills(),
-        client.inspectTools(),
+        host.inspectSkills(),
+        host.inspectTools(),
       ]);
       const names = [...skills.skills.map((s) => s.name), ...tools.map((tool) => tool.name)];
       const needle = query.toLowerCase();
@@ -428,7 +429,8 @@ export function App({
 
   useEffect(() => {
     void refreshSessions();
-  }, []);
+    return () => host.teardown();
+  }, [host]);
 
   const pendingApproval = state.pendingApproval;
   const pendingQuestion = state.pendingQuestion;
@@ -529,7 +531,7 @@ export function App({
         />
       }
       banner={state.status === "error" ? <ErrorBanner onRetry={retry} /> : undefined}
-      panel={showInspect ? <InspectionPanel client={client} /> : undefined}
+      panel={showInspect ? <InspectionPanel host={host} /> : undefined}
       onDismissPanel={() => setShowInspect(false)}
       panelReturnFocusRef={inspectButtonRef}
       composerHidden={showSettings}
@@ -561,12 +563,12 @@ export function App({
             extras={
               <>
                 <ModelSelector
-                  client={client}
+                  client={host.webClient}
                   value={selectedModel}
                   onChange={changeModel}
                   scope={activeId ? "next" : "current"}
                 />
-                <Attachments client={client} value={attachments} onChange={setAttachments} />
+                <Attachments client={host.webClient} value={attachments} onChange={setAttachments} />
               </>
             }
           />
@@ -586,7 +588,7 @@ export function App({
       </div>
       {showSettings ? (
         <CapabilitySettingsView
-          client={client}
+          host={host}
           sessionId={sessionId.current}
           sessionOwned={Boolean(
             activeSession && activeSession.session_id === sessionId.current,

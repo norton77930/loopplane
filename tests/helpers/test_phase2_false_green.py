@@ -6,6 +6,7 @@ import pytest
 from tests.helpers.desktop_profile import make_profile_root, ownership_lock_contention
 from tests.helpers.desktop_sidecar import ByteSplitStdio
 from tests.helpers.public_safety import (
+    LOOPPLANE_PATH_MARKER,
     LOOPPLANE_SECRET_MARKER,
     SurfacePayload,
     assert_secondary_surface_clean,
@@ -25,6 +26,13 @@ def test_false_green_scan_detects_pid_style_leak() -> None:
         [SurfacePayload(kind="log", text="pid leaked lp-synth-pid=424242")]
     )
     assert findings, "expected leak detection"
+
+
+def test_false_green_scan_detects_private_path_marker() -> None:
+    findings = scan_secondary_surfaces(
+        [SurfacePayload(kind="log", text=f"path leaked {LOOPPLANE_PATH_MARKER}")]
+    )
+    assert findings, "expected private-path leak detection"
 
 
 def test_false_green_byte_split_does_not_return_full_line_when_chunked() -> None:

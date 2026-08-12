@@ -40,8 +40,10 @@ from tests.helpers.desktop_stage_b_policy import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER_PS1 = REPO_ROOT / "scripts" / "verify-desktop-stage-b.ps1"
+PACKAGE_WRAPPER_PS1 = REPO_ROOT / "scripts" / "build-desktop-package.ps1"
+SIDECAR_WRAPPER_PS1 = REPO_ROOT / "scripts" / "build-desktop-sidecar.ps1"
 
-# Cases T004's -SelfTest harness must implement (name → expect success).
+# Cases T004/T085/T086 SelfTest harnesses must implement (name → expect success).
 SELFTEST_CASES: dict[str, bool] = {
     "modes-declared": True,
     "bootstrap-locators-required": True,
@@ -72,7 +74,39 @@ SELFTEST_CASES: dict[str, bool] = {
     "reject-token-leak-in-stderr": True,
     "delivery-child-env-must-scrub-tokens": True,
     "reject-freeze-before-delivery-review": True,
+    "delivery-cat-file-binds-git-blob": True,
+    "delivery-descriptor-binds-t002-t005-t090": True,
+    "delivery-materializes-reviewed-snapshots": True,
+    "delivery-rejects-preexisting-materialization-root": True,
+    "delivery-rejects-linked-materialization-entry": True,
+    "delivery-reassert-rejects-mutated-input": True,
 }
+
+PACKAGE_WRAPPER_SELFTEST_CASES: tuple[str, ...] = (
+    "reject-missing-descriptor",
+    "reject-before-distinct-delivery-review",
+    "reject-future-descriptor",
+    "reject-stage-b-token",
+    "reject-gh-token",
+    "reject-github-token",
+    "descriptor-snapshots-only",
+    "checkout-source-lock-sentinels-uncalled",
+    "child-env-must-scrub-tokens",
+    "delegates-only-sidecar-wrapper",
+)
+
+SIDECAR_WRAPPER_SELFTEST_CASES: tuple[str, ...] = (
+    "reject-missing-descriptor",
+    "reject-before-distinct-delivery-review",
+    "reject-future-descriptor",
+    "reject-stage-b-token",
+    "reject-gh-token",
+    "reject-github-token",
+    "descriptor-snapshots-only",
+    "checkout-source-sentinel-uncalled",
+    "path-global-bare-pyinstaller-sentinels-uncalled",
+    "child-env-must-scrub-tokens",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -244,8 +278,7 @@ def _run_selftest(
 ) -> subprocess.CompletedProcess[str]:
     if not VERIFIER_PS1.is_file():
         pytest.fail(
-            f"T004 missing {VERIFIER_PS1.as_posix()}; "
-            f"cannot run SelfTest case {case!r}"
+            f"T004 missing {VERIFIER_PS1.as_posix()}; cannot run SelfTest case {case!r}"
         )
     env = os.environ.copy()
     # Scrub ambient GitHub tokens so cases control the credential seam.
@@ -299,6 +332,119 @@ def test_verifier_selftest_case(case: str, expect_ok: bool) -> None:
         )
     else:
         assert result.returncode != 0
+
+
+@pytest.mark.parametrize(
+    "script",
+    [PACKAGE_WRAPPER_PS1, SIDECAR_WRAPPER_PS1],
+    ids=["package", "sidecar"],
+)
+def test_build_wrapper_exists_at_canonical_path(script: Path) -> None:
+    assert script.is_file(), f"missing canonical delivery wrapper: {script.as_posix()}"
+
+
+def _run_wrapper_selftest(
+    script: Path,
+    case: str,
+    *,
+    cwd: Path,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    if not script.is_file():
+        pytest.fail(f"T082 missing {script.as_posix()}; cannot run {case!r}")
+    env = os.environ.copy()
+    for name in TOKEN_ENV_NAMES:
+        env.pop(name, None)
+    if extra_env:
+        env.update(extra_env)
+    shell = "pwsh" if sys.platform != "win32" else "powershell"
+    return subprocess.run(
+        [
+            shell,
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            str(script),
+            "-SelfTest",
+            case,
+        ],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "script,case",
+    [
+        *((PACKAGE_WRAPPER_PS1, case) for case in PACKAGE_WRAPPER_SELFTEST_CASES),
+        *((SIDECAR_WRAPPER_PS1, case) for case in SIDECAR_WRAPPER_SELFTEST_CASES),
+    ],
+    ids=lambda value: value.stem if isinstance(value, Path) else value,
+)
+def test_build_wrapper_delivery_boundary_selftest(
+    script: Path,
+    case: str,
+    tmp_path: Path,
+) -> None:
+    """Sentinel cases run from outside the checkout and must fail closed safely."""
+
+    result = _run_wrapper_selftest(script, case, cwd=tmp_path)
+    _assert_no_secret_leak(result)
+    assert result.returncode == 0, (
+        f"SelfTest {case!r} for {script.name} failed with {result.returncode}\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+
+
+@pytest.mark.parametrize(
+    "script",
+    [PACKAGE_WRAPPER_PS1, SIDECAR_WRAPPER_PS1],
+    ids=["package", "sidecar"],
+)
+@pytest.mark.parametrize("token_name", TOKEN_ENV_NAMES)
+def test_build_wrapper_rejects_forbidden_token_before_descriptor_access(
+    script: Path,
+    token_name: str,
+    tmp_path: Path,
+) -> None:
+    """A credential-bearing wrapper process stops before reading mutable inputs."""
+
+    if not script.is_file():
+        pytest.fail(f"T082 missing {script.as_posix()}")
+    missing_descriptor = tmp_path / "must-not-be-read.json"
+    env = os.environ.copy()
+    for name in TOKEN_ENV_NAMES:
+        env.pop(name, None)
+    env[token_name] = "TEST_STAGE_B_TOKEN_VALUE_DO_NOT_LEAK"
+    shell = "pwsh" if sys.platform != "win32" else "powershell"
+    result = subprocess.run(
+        [
+            shell,
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            str(script),
+            "-DescriptorPath",
+            str(missing_descriptor),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+        check=False,
+    )
+    _assert_no_secret_leak(result)
+    assert result.returncode != 0
+    assert "credential_environment_forbidden" in (
+        (result.stdout or "") + (result.stderr or "")
+    )
 
 
 def test_verifier_live_invocation_rejects_missing_token() -> None:

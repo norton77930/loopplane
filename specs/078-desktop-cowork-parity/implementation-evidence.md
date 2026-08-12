@@ -230,3 +230,496 @@ Accepted Root package-lock SHA-256: c1808e1b4b13bd191d9538d5dbed34a47eaefe3e4864
 Phase 2 harnesses/guards pass on baseline and fail on representative negative mutations. User-story implementation (US1 T016+) may begin.
 
 <!-- PHASE2-EVIDENCE END -->
+
+## User Story 1 — functional local interaction (T016–T033)
+
+<!-- US1-EVIDENCE START -->
+
+**Recorded (local, 2026-08-06)**. This is focused-suite evidence for the US1 Python/Electron/Desktop slice. It is **not** 078 Verified completion (US2–6 and final gates remain). Packaged Electron UI Automation smoke (delivery §6) was **not** re-run in this slice; credential-free coverage is unit/integration/contract level.
+
+### Delivered surfaces
+- Host: `working_scope` resume seam; `resume_session`; public `validate_active_generation`
+- Sidecar: protocol/dispatcher; Profile Ownership Lock; generation publish; InteractionLease; Host-only `methods/interaction.py`; bridge bootstrap gate + shutdown teardown
+- Electron main: `sidecar-rpc.ts` supervisor (byte frames, handshake, no-retry, drain/kill); security guards; typed IPC; lifecycle teardown
+- Preload/renderer: frozen `loopplaneDesktop`; typed `SidecarTransport`; single-session `App` (start/progress/approval/question/cancel/outcome/unavailable)
+
+### Focused commands / results
+
+| Suite | Command | Result |
+|-------|---------|--------|
+| Desktop vitest | `npm run test -w @loopplane/desktop` / `npx vitest run` in `apps/desktop` | **41 passed** (7 files) |
+| Python US1 focused | `pytest` on boundary, rpc_v1, generation_validation, profile_lock, runtime_bootstrap, interaction_methods, desktop_sidecar, host_resume_session | **33 passed** |
+| Protocol matrix | `test_serialized_writer_and_100_malformed_matrix` | **100** deterministic malformed/stale cases exercised; failures counted without model-call side effects; unknown fallback `messageKey=desktop.error.internal_failure` |
+| Boundary | `test_desktop_boundary.py` | **PASS** — sidecar has no live-store reach-through; generation validation only via `validate_active_generation` |
+
+### Containment / public-safety notes (this slice)
+- No local network listener in Electron main or sidecar entry (stdio only)
+- No mutation auto-retry after child failure (`SidecarRpcClient`)
+- Renderer never supplies request/mutation IDs or raw JSON-RPC
+- Profile lock released only after Host `aclose` on process exit path; kernel release on crash
+- Secondary-surface disclosure: contract boundary + public_safety harnesses still apply; this run did not inject secret fixtures beyond existing helpers
+
+### Gaps vs full T033 / MVP claim
+- Full packaged Windows UI Automation smoke (`happy` / missing / corrupt / incompatible sidecar) **not** executed here
+- US2–US6 (multi-pane, projects, workspace, backup/restore, delivery packaging gates) **not** complete
+- 078 must not be marked Verified from this evidence alone
+
+<!-- US1-EVIDENCE END -->
+
+## User Story 2 — profile / sessions / workspaces (T034–T047)
+
+<!-- US2-EVIDENCE START -->
+
+**Recorded (local, 2026-08-07)**. Focused durability + adapter evidence for US2. Not 078 Verified.
+
+### Surfaces
+- `ProfileState` / `ProjectStore` / `WorkspaceStore` / `ProfileMutationLease`
+- Host-backed `session.*` + profile `project.*` + `workspace.*` RPC methods
+- create/resume **workspace revalidate gate** (`methods/interaction.py` T046)
+- Electron typed IPC + native directory chooser (paths stay main-private)
+- Renderer `SidecarTransport` session/project/workspace adapters; `SessionSidebar` + App navigation
+- Renderer-transient drafts only (`setDraft` / never in `profile.json`)
+
+### Focused results
+| Suite | Result |
+|-------|--------|
+| `test_desktop_profile.py` + workspace + interaction workspace gate + interaction methods + boundary | **25 passed** (representative US2 Python slice) |
+| Desktop vitest (sessions sidebar + adapter + App) | **16 passed** in focused files; full desktop suite previously **41+** with US1 |
+| Path non-disclosure | Sidebar/UI tests assert no `C:\` / `/Users/` in projections |
+| Relink gate | `create_interactive` with `relink_required` → `workspace_relink_required` RpcError |
+| Project remove safety | Removes grouping only; sessions not deleted by `ProjectStore.remove` |
+
+### T036 / T037 follow-up (2026-08-07)
+| Suite | Result |
+|-------|--------|
+| `tests/integration/test_desktop_sidecar.py` (legacy + RPC session/project/workspace) | **4 passed** |
+| `electron/__tests__/sessions.test.ts` | **4 passed** |
+| `electron/__tests__/workspace.test.ts` | **4 passed** (chooser cancel = no RPC; path not in result) |
+| `electron/__tests__/preload.test.ts` | **2 passed** |
+
+### Remaining honesty
+- Full multi-process restart/fork/moved-workspace matrix still not exhaustive beyond unit/integration samples
+- US3–US6 incomplete; 078 not Verified
+
+<!-- US2-EVIDENCE END -->
+
+## User Story 3 — multi-pane single-active lease (T048–T056)
+
+<!-- US3-EVIDENCE START -->
+
+**Refreshed (local, 2026-08-09)**. T048–T056 focused multi-pane, lease, keyboard, reflow, and Chromium evidence. Not 078 Verified.
+
+### Surfaces
+- `InteractionLease.require_owner` + busy `owner_pane_id` / `owner_session_id` correlation (T048/T052)
+- `packages/cowork-presentation` pane state (`open/focus/claim/release/close`, draft local, session dedup)
+- `CoworkShell` roving tab focus + `InspectionSidebar` Escape/focus return
+- Shared `ApprovalDialog` / `QuestionDialog` safe Escape behavior and opener/fallback focus restoration
+- Shared reflow, visible-focus, reduced-motion, and forced-colors CSS contracts
+- Desktop `App` composes CoworkShell + SessionSidebar; second interactive claim fails at presentation and sidecar layers
+
+### T050 focused RED inventory
+The behavior seams were observed failing before their minimal T055 implementation:
+
+| Seam | RED observation |
+|------|-----------------|
+| Pane keyboard navigation | `ArrowRight` expected `onFocusPane("two")`; received zero calls |
+| Inspection dismissal | Escape expected one `onClose` call; received zero calls |
+| Shared dismissal helper | package/module export was `undefined` |
+| Public package surface | `ApprovalDialog`, `QuestionDialog`, and `dismissOnEscape` were absent from the entrypoint |
+
+The first four browser attempts were **invalid harness failures**, not product RED: the harness inspected `BODY` focus, left the Settings view open, checked `aria-expanded` instead of `aria-pressed`, and used the wrong English label (`Back to conversation` instead of `Back to chat`). They are excluded from product evidence. The first valid exact matrix was v5 and was GREEN; no Chromium product failure is claimed retroactively.
+
+### Fresh focused results
+| Suite | Result |
+|-------|--------|
+| `tests/unit/test_desktop_interaction_lease.py` | **5 passed** (busy before second open; owner-only submit; release then re-acquire; outer profile lock) |
+| shared panes + accessibility Vitest | **14 passed** (4 pane-state + 10 accessibility) |
+| Desktop panes Vitest | **2 passed** |
+| Web `AccessibilityStyles` Vitest | **1 passed** |
+
+### Three-pane race (logic)
+1. Open panes A/B/C via `openPane` — session dedup focuses existing.
+2. `claimLease(A)` succeeds; `claimLease(B)` returns `ok:false` with `ownerPaneId=A` **before** any Host submit.
+3. Sidecar second `session.createInteractive` → `busy` + `owner_pane_id`.
+4. Drafts remain pane-local via `setPaneDraft`.
+5. `releaseLease(A)` then `claimLease(B)` succeeds.
+6. Fresh state/UI tests preserve pane-local drafts, owner correlation, read-only posture, deterministic roving focus, and lease release/re-acquisition.
+
+### T050/T055 Chromium matrix — valid v5
+- Runtime: Chromium `151.0.7922.108`
+- Fixture: `spec078-empty-profile-ui-keyboard-v5`; synthetic authenticated empty-profile UI
+- Determinism: `**/v1/**` was intercepted with a fixed HTTP 503 response; this empty path issued **0** API requests
+- Cases: **18 / 18 passed**
+- Assertions: **234 passed**, **0 failures**, **0 captured console errors**
+- Light: all six viewports (`1440×900`, `1024×768`, `768×1024`, `375×812`, `640×900`, `320×800`) in `en` and `zh-TW`
+- Dark + reduced motion: `1440×900` and `375×812` in both locales
+- Forced colors: `375×812` light in both locales
+- Per-case checks: locale, body/document zero horizontal overflow, keyboard composer input, visible focus outline, keyboard Settings open/close with focus return, theme, reduced-motion media, and forced-colors media
+- Ignored local evidence only: `.playwright-mcp/spec078-desktop-cowork/results.json` plus screenshots; these paths are not delivery candidates
+
+### Gaps
+- Packaged three-pane GUI smoke remains blocked until the T090-reviewed delivery candidate
+- US4–US6 incomplete
+
+<!-- US3-EVIDENCE END -->
+
+## User Story 4 — presentation host + inspection (T057–T067 partial)
+
+<!-- US4-EVIDENCE START -->
+
+**Refreshed (local, 2026-08-10)**. Transport-neutral host interfaces, shared Web presentation extraction, Web/Desktop adapters, T066 host-owned projection integration, and T067 fresh shared/Web/Desktop convergence are current.
+
+### Delivered
+| Item | Path |
+|------|------|
+| T061 models/host | `packages/cowork-presentation/src/{models,host}.ts` |
+| T057 conformance | `packages/cowork-presentation/src/__tests__/host.test.ts` |
+| T058 Web baseline | `apps/web/src/__tests__/presentation-host.test.tsx` plus the eight named component/i18n regression files |
+| T062 shared extraction | chat state, shell, messages, dialogs, inspection, settings shell, agent controls, i18n, and full Web CSS now live under `packages/cowork-presentation/src`; Web keeps thin wrappers/adapters |
+| T063 Web adapter | `apps/web/src/presentation-host.ts` owns `ApiClient + SessionTransport`; `apps/web/src/App.tsx` delegates session, stream, interaction, inspection, settings, cost, and upload operations through the stable host |
+| T064 sidecar | `apps/desktop/sidecar/methods/inspection.py` (`inspection.get`, `agentControls.get`, `capabilities.list/invokeAction` allowlist) |
+| T064 IPC/preload | channels + handlers + `loopplaneDesktop.inspection/agentControls/capabilities` |
+| T065 adapter | `apps/desktop/src/presentation-host.ts` (`DesktopPresentationHost`) |
+| T066 integration | shared capability/settings/inspection projections, honest status labels, Desktop one-run permission draft, and typed `permission_mode` submit mapping |
+| App wiring | Inspection sidebar, settings, capability actions, accepted posture, and one-run draft remain separated through Host projections |
+
+### T058 pre-extraction contract
+- The current Web composition root is exercised with injected `ApiClient + SessionTransport` seams before T062/T063.
+- Session listing, session creation, submit, normalized progress, approval identity/decision, question identity/answers, and cancellation identity are locked at observable Web behavior.
+- Dialog safety now explicitly locks backdrop→deny, Escape/backdrop question dismissal with zero answer, and zero-option-selection no-submit.
+- The extraction key-space used by AppShell/InspectionPanel is checked as nonblank and translated in both `en` and `zh-TW`.
+- Existing named suites retain shell overlay/focus behavior, message rendering/actions, inspection public fields, capability ownership/disclosure boundaries, and authoritative-vs-draft agent-control states.
+- Fixture correction during the first focused run: the new session-list fixture initially used the wrong field shape and crashed `SessionRow`; it was corrected to the existing generated `session_id`/`label` contract and is not counted as product RED.
+
+### T062 extraction and containment
+- Shared source imports no `apps/web`, `ApiClient`, HTTP `/v1`, Electron, or sidecar RPC modules.
+- Web-only `ApiClient` ownership remains in `apps/web` wrappers; the package receives transport-neutral loader/service/render props.
+- Existing Web imports remain stable through thin wrappers; T063 `WebPresentationHost` was not implemented early.
+- T055 focus APIs and dialog behavior were merged with existing Web modal/backdrop semantics; package entrypoint exports remain current.
+- Main-agent inspection caught a blocking CSS extraction defect after the first build: the package stylesheet self-imported and had dropped the original Web CSS, producing only **1.30 kB**. A focused selector test was RED, then the full original Web stylesheet plus T055 additions was restored. The repaired production CSS is **30.05 kB** (gzip **6.15 kB**).
+
+### T063 Web host boundary
+- `WebPresentationHost` preserves exact session/request identity and transport error identity for submit, approval, question, cancel, history, and live progress.
+- Renderer-owned subscriptions stop forwarding after unsubscribe; `teardown()` invalidates every remaining subscription without mutating server state.
+- `App.tsx` contains no direct `ApiClient`, `ApiError`, `SessionTransport`, `client.*`, `transport.*`, or `host.webClient` product calls. Web-only wrappers receive the host and keep Web transport ownership outside shared presentation.
+- Shared package source remains free of `apps/web`, `ApiClient`, `fetch`, `EventSource`, Electron, and sidecar imports.
+
+### T066 projection and one-run draft
+- Shared status rendering centrally preserves `available`, `read_only`, `priced`, `unpriced`, `partially_unpriced`, `unavailable`, and unknown values without inventing zero/allowed/configured states.
+- Desktop cost/context/upload/artifact facets report explicit unavailable projections where V1 provides no authority; missing capability projection is an error rather than an empty success.
+- Desktop permission selection remains a renderer-local draft, does not alter active/last-accepted posture, is mapped through the typed preload/main boundary to RPC `permission_mode` only on the next submit, and clears only after the accepted run completes. No-draft submit retains the original `{prompt}` shape.
+- Electron main rejects a non-string permission draft before RPC dispatch; capability actions remain Host-allowlisted.
+
+### Focused results
+| Suite | Result |
+|-------|--------|
+| T066 shared projection RED→GREEN | initial `Unpriced` missing; final **3 passed** |
+| T066 Desktop App/preload/IPC/host focused | **4 files / 17 tests passed** |
+| T066 Web agent-control/settings focused | **3 files / 20 tests passed** |
+| T063 direct host tests | **6 passed** |
+| T058 exact 9-file Web regression set after T063 | **9 files / 56 tests passed** |
+| Web full Vitest after T063 | **58 files / 202 tests passed** |
+| cowork-presentation full Vitest after CSS repair | **5 files / 23 tests passed** |
+| cowork-presentation typecheck | **PASS** |
+| Web typecheck | **PASS** |
+| Web production build | **PASS** (549 modules; CSS 30.05 kB) |
+| `test_desktop_inspection_methods.py` + interaction + boundary | **14 passed** |
+| Desktop inspection IPC + App | **17 passed** (focused) |
+
+### T067 fresh convergence
+| Gate | Fresh result |
+|------|--------------|
+| cowork-presentation typecheck | **PASS** |
+| cowork-presentation full Vitest | **6 files / 26 tests passed** |
+| Web typecheck | **PASS** |
+| Web full Vitest | **58 files / 202 tests passed** |
+| Web production build | **PASS** (551 modules; CSS 30.05 kB, gzip 6.15 kB) |
+| Desktop typecheck | **PASS** after resolving strict IPC/process/state diagnostics without suppressions |
+| Desktop full Vitest | **14 files / 63 tests passed**; two pre-existing React `act(...)` warnings remain visible |
+| Desktop renderer production build | **PASS** (515 modules; JS 539.83 kB, gzip 164.80 kB; chunk-size warning only) |
+| Chromium accessibility/regression | **18/18 cases; 234 assertions; 0 failures; 0 fresh console errors** on Chromium 151.0.0.0 |
+| Diff hygiene | `git diff --check` **PASS**; CRLF normalization notices only |
+
+- Chromium fixture: `spec078-empty-profile-ui-keyboard-t067-v2`; screenshots/results stay ignored under `.playwright-mcp/spec078-desktop-cowork-t067/`.
+- The first attempted rerun was invalid harness evidence: the old Vite process exited and the locale locator was case-sensitive. It is excluded from product evidence. A fresh Vite server plus corrected locale/theme locators produced the matrix above.
+- Full Desktop `npm run build` reaches and passes renderer `vite build`, then intentionally stops because `tsconfig.main.json` and `tsconfig.preload.json` do not exist yet. The approved plan assigns those emitted main/preload build configs to T085; T067 does not create them early or weaken the build script.
+
+### Honesty
+- Capability invoke allowlist is refresh-only for memory/skills/inspection
+- No generic tool/MCP dispatch from Desktop presentation
+- 078 still not Verified; US5–US6 open
+
+<!-- US4-EVIDENCE END -->
+
+## User Story 5 — audit + backup/restore (T073–T081)
+
+<!-- US5-EVIDENCE START -->
+
+**Refreshed (local, 2026-08-12)**. T068–T081 are PASS-current: checkpoint-derived audit, Host-owned backup/snapshot provenance, restore publication/handover, retained runtime/storage authority, the Electron and presentation facades, and the explicit Windows/POSIX convergence replay are complete. US6, Stage-C, final convergence, and maintainer completion approval remain open.
+
+### Delivered
+| Item | Notes |
+|------|--------|
+| T068/T073 | checkpoint-derived `host.list_turn_audit` / exact metadata-only `TurnAuditEntry`; no runtime-history projection |
+| T068/T074 | cursor-based `audit.list` RPC + sender-validated IPC/preload/global typing |
+| T069/T075 | Host-owned consistent SQLite backup plus read-only staged validation and checkpoint-referenced Gateway-artifact provenance; checkpoint/artifact payloads use bounded no-follow streaming |
+| T069/T076 | acknowledged unencrypted disclosure; canonical ZIP/manifest/hash/path/type/depth/size/count/ratio checks; Project/safe-preference inclusion, draft/private-state exclusion, and atomic destination publication |
+| T069/T076–T077 | `(owner, mutation identity)` Profile Mutation Lease gates every exposed session/interaction/Project/workspace/capability writer and competing backup/restore before dispatch; owning teardown starts no durable work |
+| T069/T077 | validation-token ownership is bound to the exact restore lease identity; staged profile/Project/artifact inputs are revalidated before commit and reservations are released only by owning completion/cancel/expiry or teardown |
+| T070 | public Host-validator, RestoreManager/BackupMethods, DesktopRuntimeOwner, and JSON-RPC seams carry focused contracts for streamed staging, token ownership/expiry/TOCTOU/teardown, named platform and transaction fault boundaries, dual-slot recovery, proof ambiguity, candidate-only post-commit I/O, and relink timing |
+| T078 | dual full-preimage COW journals, pointer/proof publication, startup-only ambiguity adjudication, mutable runtime storage, active-profile principal ownership, Project/artifact consistency, no retained-generation guessing, and retryable candidate/previous Host cleanup are implemented through public restore/dispatcher seams |
+| T071 | Electron handler/preload/global-typing RED contracts cover main-owned backup-save and restore-file choosers, disclosure/cancellation/sender/schema/token/path privacy, all five methods, exact fixed error rows, and sole-fallback rejection of malformed wire combinations |
+| T079 | Shared sender authorization now protects every privileged IPC; the five backup/restore operations use exact plain-object inputs, path-free exact projections, structured-clone-safe envelopes, one unknown fallback, bounded opaque tokens, exact restore preview metadata, and a `Promise<void>` cancel facade. Runtime ownership cannot release the profile lock with a live Host; mapping construction preserves retained storage authority; Windows/POSIX cleanup uses retained deletion authority and fail-locks if the stale binding name is replaced or reappears. |
+| T072 | Shared audit and Desktop backup/restore UI RED contracts cover metadata-only rendering, honest audit states, exact unencrypted-content disclosure, draft exclusion, acknowledgement, restore counts/reservation/confirmation/relink, and public-safe errors without renderer-visible archive paths |
+| T080 | Shared metadata-only AuditView plus the Desktop backup/restore presentation and typed host adapter provide the exact disclosure, acknowledgement, restore preview/reservation/confirmation/progress/relink states, and fixed public-safe error projection. |
+| T081 | Native Windows and Linux/WSL Python 3.12 matrices replay publication, COW/proof, rollback/fail-lock, Host handover, relink/draft/public-safety, and retained-storage boundaries. POSIX snapshot descendants are descriptor-anchored with first-acceptance-to-copy identity continuity. |
+
+### T068 checkpoint audit contract
+- Audit is derived only from durable `UserInputRecord`/`TerminationRecord` checkpoint records. It exposes deterministic opaque ID, session, ordinal, stable sequence, durable timestamp, completed/interrupted state, safe reason, and recorded turn count through an exact eight-field allowlist.
+- Missing termination remains `interrupted` with reason/count `null`; no runtime event, prompt/model/tool/approval/question/principal/path/config/error payload is copied or inferred.
+- Ordering is checkpoint sequence then deterministic ID. Cursor pagination is bounded to 1–100 and bound by current session/principal ownership; malformed, unknown, or cross-session cursors are rejected without enumeration.
+- Reads are byte-stable/no-write across SQLite reopen. Fork audit belongs to the fork and does not mutate source audit.
+
+### T069 backup/snapshot contract
+- Backup owns the mutation lease before Host snapshot/profile serialization and through archive flush/publication; session create/rename/star/fork/delete, interactive open/submit/approval/question, Project mutation, Workspace bind/relink/remove/persisted revalidation, capability refresh, and competing backup/restore all return public-safe `busy` before Host/Profile/Store dispatch.
+- The Host uses SQLite's backup API, validates snapshots through a dedicated read-only connection, and fails closed on missing, unreferenced, metadata-mismatched, replaced-call, linked/reparse, or identity-changing artifacts. Artifact metadata is bounded; checkpoint/artifact payloads are streamed rather than accumulated in memory.
+- Archive validation requires canonical bounded JSON, one declared regular-file member per entry, central/local metadata parity, NFC/case-fold-safe paths, 2 GiB single-entry, 8 GiB aggregate, 10,000-entry, 8 MiB manifest, and 200:1 expansion limits. Pre-publication failure preserves an existing destination; a post-replace directory-flush failure is reported honestly as post-publication.
+- The round trip independently reopens staged checkpoint records and proves matching principal, final starred metadata, user/model/tool/termination records, exact Project membership, safe preferences, draft exclusion, and byte-identical eligible artifact content. Host read-only validation leaves staged SQLite bytes unchanged.
+
+### T070 restore RED contract
+- The T025 public non-instance validator is kept narrowly responsible for injected pristine/initialized current-state probes. Both modes pass while monkeypatched Host, SQLite store, and ArtifactStore constructors remain unused and a sentinel generation tree remains byte/entry stable; pointer/proof/journal adjudication stays with `DesktopRuntimeOwner` startup tests.
+- Validation RED cases now fail on missing product behavior rather than collection/fixture/platform setup: `extractall()` is forbidden; manifest ordering, duplicate/path/collision/type/compression/hash/short-read/exclusive staging, exact owning mutation, 15-minute expiry, archive-content TOCTOU, shutdown/restart cleanup, and all-writer pre-dispatch reservation are exercised through public manager/method/RPC seams.
+- The test-owned named fault seam is attached without requiring a not-yet-existing constructor signature. Every POSIX, Windows, pre-proof rollback, post-proof cleanup, and proof-effect/pre-ack case asserts that its exact boundary was observed; failures therefore cannot all pass through one indistinguishable adapter call. Pre-authority faults require the exact prior pointer/proof pair, post-proof faults forbid candidate rollback, and the ambiguity case snapshots recovery/binding files at effect time and requires zero later mutation.
+- Public RPC handover uses distinct source and destination Hosts/sessions. A successful commit must list only the restored source session and not the old destination session, so proof-file existence alone cannot satisfy candidate-only I/O.
+
+### T078 restore publication and Host handover GREEN
+- Restore publishes a canonical candidate generation, dual full-preimage journals, candidate pointer, serving Host swap, and independently matching proof in that order. Definitive pre-proof failures restore the exact prior pointer/proof pair; proof post-effect/pre-ack ambiguity freezes recovery/binding bytes for startup-only adjudication; post-proof cleanup failure never rolls back the authoritative candidate.
+- Startup accepts only independently valid pointer/proof/journal authority. Missing authority with retained `restore-*` generations fails locked rather than guessing; pristine bootstrap remains available only when no restore authority or retained restore generation exists.
+- Restored runtime storage is mutable and is the authority used for subsequent Project/session validation. Desktop create/resume binds to the active profile principal, rejects foreign-principal resume before replay, and preserves legacy `None` principal compatibility.
+- Session deletion detaches the validated artifact tree before checkpoint deletion, keeps Project membership fail-safe, and uses anchored no-follow cleanup. Pre-effect checkpoint failure may roll back only while records prove survival; post-effect or indeterminate failure keeps deleted authorities consistent.
+- Candidate readiness and pre-proof rollback retain a failed-to-close candidate Host and its storage for retry. Teardown attempts candidate, previous, and current Hosts, remains incomplete on any close/cleanup failure, and permits Profile Ownership Lock release only after a successful retry.
+- The fresh R1 review over `runtime.py` → `durability.py` → `bridge.py` exception paths returned **PASS** with no blocking finding or blocking test gap.
+
+### T071 Electron backup/restore RED contract
+- `backup.describe`, acknowledged native `chooseAndCreate`, native `chooseAndValidateRestore`, `restore.commit`, and `restore.cancel` are exercised through trusted-sender handlers. Picker cancellation must return `null` with zero RPC; disclosure/input rejection and untrusted senders must occur before any picker or dispatch.
+- Save/open paths exist only in main-owned chooser results and private sidecar params. Success projections deliberately include hostile `path`/`destination_path`/`source_path` fields from the test sidecar and require Electron main to remove them before renderer resolution.
+- The complete backup/restore cause table is injected as wire errors and checked against exact Desktop category, retryability, required-or-absent recovery, and fixed `messageKey`. Internal-cause categories, unknown or mismatched code/category pairs, missing/extra/combined recovery, wrong retryability, and wrong/missing keys must collapse only to `internal_failure`/`desktop.error.internal_failure`/`true`/`restart_runtime` without raw message/path leakage.
+- Preload/global source contracts require operation-specific `chooseAndCreate`/`chooseAndValidateRestore` methods and forbid renderer-facing `destinationPath`/`sourcePath` or Electron dialog APIs.
+
+### T079 Electron facade and retained runtime authority GREEN
+- One shared sender guard covers every privileged IPC. The five backup/restore handlers additionally require exact plain-object renderer inputs, exact success validation/projection, a bounded path-free `[A-Za-z0-9_-]{1,128}` restore token, and a structured-clone-safe `{ok,value}` / `{ok,error}` envelope.
+- Restore validation exposes only `format`, exact `{major:1,minor:0}` version, canonical creation time, Project/session/artifact counts, required draft exclusion, and relink requirement. Internal entry/manifest/profile fields and all chooser/archive paths are removed. `cancelRestore` validates the sidecar success but resolves only `void` through main, preload, and global typing.
+- Unknown or malformed success/error combinations collapse only to `-32603 internal_failure` / retryable / `restart_runtime` / `desktop.error.internal_failure`; fixed known rows retain exact category, retryability, required-or-absent recovery, and `messageKey` without raw cause labels.
+- `DesktopRuntimeOwner.release()` refuses to release Profile Ownership Lock while a current Host remains. Direct attachment closes through `close_host()`; dispatcher handover updates the same owner authority and clears it only after successful Host teardown.
+- `RuntimeConfig.from_mapping()` preserves the programmatic `StorageAuthorityFactory`. Windows retains shared profile/collection plus per-generation handles with retryable partial close; POSIX storage operations remain rooted in retained descriptors.
+- Stale workspace binding cleanup no longer performs path-only deletion. Windows deletes the exact validated file HANDLE; POSIX unlinks relative to retained root/private descriptors. Both paths verify parent identity and exact-child absence after deletion, fail-lock if the parent is replaced or the name reappears, and preserve an external sentinel in both adversarial regressions.
+- Final fresh code review and final fresh architecture review both returned **PASS — no blocking findings**.
+
+### T072 audit/backup/restore presentation RED contract
+- `AuditView` is resolved through the shared package's public entrypoint so the missing export is an intentional product RED rather than a module-resolution or TypeScript failure. The contract renders only the eight allowlisted logical-turn fields and injects prompt/model/tool/private-path fields that must remain absent from the audit region.
+- Audit loading, empty, and unavailable states require honest `status`/empty/`alert` projections instead of silent blank content.
+- Desktop tests enter backup/restore only through the public `App` composition seam and a typed `window.loopplaneDesktop.backup` facade. Backup creation remains disabled until the explicit unencrypted acknowledgement and must disclose user/model/tool conversation content, eligible artifacts, and unsent-draft exclusion before invoking the native chooser operation.
+- Restore validation must project only opaque token-derived summary data: Project/session/artifact counts, active reservation, draft exclusion, explicit replacement confirmation, and relink-required state. Fixed Desktop error metadata may drive the UI, while raw error text and private archive paths must never render.
+
+### T080 audit/backup/restore presentation GREEN
+- Shared `AuditView` is exported through the transport-neutral package entrypoint and renders only the eight allowlisted logical-turn metadata fields. Prompt, model output, tool output, and private path extras remain absent; loading, empty, and unavailable states are explicit.
+- `DesktopPresentationHost` adapts typed audit and backup/restore facade operations without exposing Electron channels, RPC envelopes, mutation IDs, chooser paths, or archive paths to presentation components. The public App loads audit pages only for the active session.
+- `BackupRestoreView` blocks backup creation until the exact V1 unencrypted-content acknowledgement is checked. The disclosure states lossless user/model/tool conversation and eligible-artifact retention, sensitive-content risk, unsent-draft exclusion, LoopPlane-private exclusions, destination responsibility, and integrity-hash limitations.
+- Restore validation presents only Project/session/artifact counts, reservation ownership, draft exclusion, replacement confirmation, and relink-required state. Validation/backup/commit/cancel progress is explicit; rollback/busy/retry/restart/contact-support outcomes come only from a fixed `messageKey` allowlist, while raw `Error.message` and private paths are never rendered.
+
+### T081 Windows/POSIX convergence and retained-snapshot closure
+- The final native Windows matrix exercises the Desktop RPC/public-safety, audit, backup, restore, profile/workspace, generation publication, runtime bootstrap, profile ownership, ArtifactStore, SQLite checkpoint, and Host-config seams: **370 passed, 11 skipped**. The skips are explicit POSIX-only descriptor tests plus symlink creation unavailable on this Windows configuration.
+- The final Linux matrix ran under WSL with Python 3.12 on a true Linux `/tmp` base and the same source checkout: **363 passed, 19 skipped**. Every skip is an explicit Windows-only case-alias, junction, retained-handle, or retained-directory boundary.
+- The snapshot-focused replay is **9 passed, 9 skipped** on Windows and **18 passed** on Linux. Arbitrary callback-authorized symlink roots remain rejected; exact retained `/proc/self/fd/<fd>` roots are accepted only as prevalidated capabilities.
+- Reviewer-driven adversarial RED/GREEN slices closed five replacement windows across seven cases: checkpoint replacement before descriptor open and during SQLite backup; artifacts-ancestor replacement after open; legal session/artifacts replacement between inventory and copy; and legal session/artifacts replacement between first descriptor-relative `lstat` and no-follow open.
+- Retained checkpoint backup now duplicates the exact root descriptor, performs descriptor-relative `lstat` plus `O_NOFOLLOW` open/`fstat` identity binding, reads SQLite through the exact opened descriptor, and rechecks the pathname identity after backup. Retained artifact inventory saves session, artifacts-directory, payload, and metadata identities; copy reopens every descendant relative to retained parent descriptors, compares against the inventory identities, streams bounded no-follow files, and rechecks ancestors before success.
+- The final fresh C3 code review returned **PASS — no blocking findings** after two earlier fresh reviews identified and drove closure of the identity-reacquisition gaps.
+- T081 power-loss/process-crash evidence is deterministic injection at the named POSIX fsync/rename and Windows flush/write-through/move/reopen/API boundaries. It is not claimed as a physical power-cut, kernel-crash, or hardware fault experiment. Windows process-crash behavior remains bounded by the documented API/reopen test seam.
+- The temporary WSL uv/Python/venv/cache/install files and all `/tmp/loopplane-t081*` directories created solely for this replay were removed after the final matrix and review passed.
+
+### Focused results
+| Suite | Result |
+|-------|--------|
+| T068 Host/durability/sidecar Python | **18 passed** |
+| T068 Electron audit IPC/preload/typing | **3 passed** |
+| T068 selected Ruff format/check | **PASS** |
+| T068 selected Host mypy | **PASS** |
+| Desktop typecheck after audit facade | **PASS** |
+| T069 final Host/sidecar/round-trip/public-safety set | **76 passed, 1 skipped** (symlink creation unavailable on this Windows configuration) |
+| T069 changed-file Ruff format/check | **PASS** |
+| T069 `mypy src/loopplane/host/snapshot.py` | **PASS** |
+| T069 `git diff --check` | **PASS**; CRLF normalization notices only |
+| T070 Host/restore unit + public RPC RED matrix | **50 failed, 13 passed**; zero collection/fixture failures and no platform skips |
+| T070 selected Ruff format/check | **PASS** |
+| T070 `git diff --check` | **PASS**; existing CRLF normalization notices only |
+| T078 candidate cleanup lifecycle RED | **2 failed** at the public restore/teardown assertions: readiness failure removed storage while losing the Host reference; pre-proof rollback close failure allowed teardown to succeed |
+| T078 candidate cleanup lifecycle GREEN | **2 passed**; adjacent candidate/previous/rollback lifecycle matrix **6 passed** |
+| T078 Host/restore unit + public RPC matrix | **103 passed** |
+| T078 ArtifactStore + Desktop sidecar matrix | **12 passed** |
+| T078 focused Host/Desktop matrix | **193 passed, 1 skipped** (existing platform-dependent skip) |
+| T078 changed-file Ruff format/check | **PASS** |
+| T078 runtime scoped mypy | **PASS** with imports skipped and the file's existing fallback-import `unused-ignore` diagnostics excluded; direct standalone sidecar-graph invocation remains non-green on existing sibling/fallback import diagnostics and is not claimed as T093 broad mypy evidence |
+| T078 `git diff --check` | **PASS**; existing CRLF normalization notices only |
+| T078 fresh R1 lifecycle review | **PASS**; no blocking finding or blocking test gap |
+| T071 Desktop typecheck with new tests | **PASS** |
+| T071 Electron handler/preload RED matrix | **19 failed, 17 passed**; failures are native chooser, path-free facade, exact-row absence/category normalization, and malformed-wire containment gaps |
+| T071 `git diff --check` | **PASS**; existing CRLF normalization notices only |
+| T079 Electron audit/backup/restore IPC + preload | **56 passed** |
+| T079 Desktop typecheck | **PASS** |
+| T079 config/runtime/restore/backup/durability/sidecar/artifact/checkpoint Python matrix | **284 passed, 3 skipped** (current Windows platform; T081 owns the explicit cross-platform replay) |
+| T079 selected Ruff format/check | **PASS** |
+| T079 `mypy src` | **PASS — 205 source files** |
+| T079 task-scoped `git diff --check` | **PASS** |
+| T079 final fresh code review | **PASS — no blocking findings** |
+| T079 final fresh architecture review | **PASS — no blocking findings** |
+| T072 shared/Desktop typecheck | **PASS** |
+| T072 shared `AuditView` RED contract | **2 failed**; both fail on the absent public `AuditView` export, with no compile or fixture failure |
+| T072 Desktop `App` backup/restore RED contract | **3 failed**; all reach the public App seam and fail on the absent accessible Backup and restore entry point, with no compile or fixture failure |
+| T072 `git diff --check` | **PASS** |
+| T080 shared `AuditView` GREEN contract | **2 passed** |
+| T080 Desktop backup/restore GREEN contract | **3 passed** |
+| T080 Desktop App/presentation regression | **14 passed** (3 files) |
+| T080 shared + Desktop typecheck | **PASS** |
+| T080 task-scoped `git diff --check` | **PASS** |
+| T081 retained replacement RED history | **7 failing cases observed at their owning race windows**; no collection, fixture, or environment failure |
+| T081 retained replacement focused GREEN | **7 passed** |
+| T081 snapshot replay — Windows | **9 passed, 9 skipped** |
+| T081 snapshot replay — Linux/WSL Python 3.12 | **18 passed** |
+| T081 full Python matrix — Windows | **370 passed, 11 skipped** |
+| T081 full Python matrix — Linux/WSL Python 3.12 | **363 passed, 19 skipped** |
+| T081 selected Ruff format/check | **PASS** |
+| T081 `mypy src/loopplane/host/snapshot.py` | **PASS** |
+| T081 final fresh C3 code review | **PASS — no blocking findings** |
+| T081 temporary WSL environment cleanup | **PASS**; exact approved uv/Python/venv/cache/install and `/tmp/loopplane-t081*` paths absent after cleanup |
+
+### Deferred
+- T093's final broad gate has not run. The T079-scoped `uv run mypy src` is green; direct standalone sidecar-graph invocation still has existing sibling/fallback-import diagnostics and is not claimed as T093 evidence.
+
+### Honesty
+- T070's original **50 failed, 13 passed** result is retained as test-first history. T078 supersedes its assigned Python publication/handover failures; T079 supersedes T071's native chooser/path-free facade/exact error-row RED evidence; T080 supersedes T072's shared/Desktop presentation RED evidence.
+- The T080 focused Desktop regression still emits the existing asynchronous App initialization `act(...)` warnings in one run-lifecycle test; all 14 product assertions pass, and the warning is not claimed as a T080 failure or as resolved test hygiene.
+- T081 supersedes the earlier Windows-only T079 platform note. The final replay used native Windows plus temporary WSL Python 3.12 on Linux `/tmp`; platform-specific skips are listed explicitly above. The temporary WSL test environment was removed after the final PASS.
+- Named fsync/flush/rename/write-through/reopen/API fault injection is the recorded power-loss/process-crash evidence; no physical power interruption or kernel crash was performed or claimed.
+- The default Host snapshot provider remains unavailable; Desktop explicitly opts into the Host-owned SQLite provider.
+- T078–T081 are PASS-current only for their declared restore/publication/handover/facade/storage-authority/presentation/platform-convergence scopes. US6, Stage-C, final convergence, and maintainer completion approval remain open; 078 is not Verified.
+
+<!-- US5-EVIDENCE END -->
+
+## User Story 6 — independent Desktop delivery (T082–T090)
+
+<!-- US6-EVIDENCE START -->
+
+**Refreshed (local, 2026-08-12)**. T082–T089 are complete through the RED contracts, packaged driver, failure-scenario extension, token-free wrappers, explicit renderer/main/preload source emits, delivery materialization/reassertion, isolated sidecar freeze route, Electron-builder alignment, fail-closed Windows delivery workflow, and packaged-only smoke source composition. Stage-C review and every first freeze/package/smoke remain open.
+
+### T082 delivery-route RED contract
+
+- `apps/desktop/electron/__tests__/packaging.test.ts` fixes the accepted Desktop manifest/sole-root-lock baseline, renderer/main/preload emitted-output paths, electron-builder resource alignment, descriptor-only package and sidecar routes, Windows delivery-step ordering, immutable T002/T005/T090 locators, tokenized-verifier/token-free-build separation, complete artifact-determinant path filters, and the external-CWD/checkout-path smoke boundary.
+- `tests/contract/test_desktop_delivery_gate.py` extends the public PowerShell `-SelfTest` seam with delivery-descriptor materialization/reassertion cases plus package/sidecar sentinel cases for missing or stale authority, all three forbidden credential variables, reviewed dependency/source snapshots, checkout source/lock replacement, PATH/global/bare PyInstaller, sole sidecar delegation, and descendant environment scrubbing.
+- Both wrapper live-entry contracts require `credential_environment_forbidden` before descriptor access whenever `LOOPPLANE_STAGE_B_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN` exists, while retaining the existing no-token/header/raw-body disclosure assertions.
+- RED is at the owned product boundaries: the verifier does not yet implement the five delivery materialization/reassertion cases; both canonical wrappers and the smoke driver were absent at the T082 observation; main/preload emit configs and builder alignment are absent; and `.github/workflows/desktop.yml` remains the legacy Linux/apps-only source gate. There were no TypeScript collection, Python fixture, parser, or typecheck failures.
+
+### T083 packaged UI Automation driver RED
+
+- `scripts/smoke-desktop-artifact.ps1` now owns the exact external-path CLI, canonical checkout app/scratch/evidence/generated-profile/CWD rejection, ambient Python/Node and authority-token clearing, Windows built-in `UIAutomationClient`/`UIAutomationTypes`, unique Name/ControlType preflight, ordinary Value/Invoke/Window patterns, bounded happy-path submit/marker/close/relaunch flow, and create-new bounded non-secret evidence. It contains no Playwright/Appium/WinAppDriver, AutomationId, remote-debugging/DevTools, or raw hidden-control route.
+- Seven public `-SelfTest` cases execute from the OS temporary directory without launching an application. They prove accepted external CWD, each checkout-contained path/CWD rejection, and `PYTHONPATH`/`NODE_PATH` clearing without disclosing checkout paths.
+- The only remaining focused RED is the public application composition seam: Electron main does not yet expose the packaged-only bounded scenario, packaged-only accessibility enablement, or external smoke profile; the sidecar packaged entry point does not yet compose `ScriptedModel`; and the seven ordinary visible presentation controls/terminal marker are not yet present. Those behaviors belong to T089, so no source-mode substitute or fake packaged success is introduced.
+
+### T084 failure-scenario driver extension
+
+- The driver now accepts exactly `happy`, `missing-sidecar`, `corrupt-sidecar`, `incompatible-sidecar`, or `all`. `all` runs the four concrete scenarios serially with distinct `profile-<scenario>` directories below the validated external scratch root.
+- Missing/corrupt/incompatible variants alter only the copied external `resources/sidecar/loopplane-sidecar.exe`. The accepted bytes are moved to a unique sibling backup, and a `finally` path removes the variant and restores the exact accepted file; focused self-tests verify byte restoration for all three variants. The incompatible case compiles a bounded built-in C# console helper that answers the handshake with an unsupported protocol version.
+- Each failure variant waits at most 10 seconds for text below the unique `LoopPlane smoke runtime diagnostic`/Group, rejects executable/scratch/profile disclosure, closes through WindowPattern, preserves the fresh scenario profile, and records only bounded result enums/timing/pair inventory/orphan-listener booleans. Diagnostic text and exception details are not written to evidence.
+- The extended Python driver contracts are GREEN except for the same intentional T089 application-composition RED. The Desktop packaging contract's failure-scenario route is also GREEN; the latest replay has four failures owned by T086/T087/T088.
+
+### T085 token-free complete package route and Electron emits
+
+- `scripts/build-desktop-package.ps1` is the sole complete package wrapper. Before reading a descriptor it rejects non-empty `LOOPPLANE_STAGE_B_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`; all child processes inherit a process environment from which those names were explicitly removed.
+- The wrapper accepts only a versioned `delivery` descriptor with pairwise-distinct T002/T005/T090 review IDs, a timestamp no older than 15 minutes and not in the future, descriptor paths below one materialization root, and the verifier's offline materialized-input assertion. It copies only reviewed Desktop/Web/shared source into a fresh GUID root, rejects reparse inputs, excludes local locks and mutable/generated state, hash-checks and create-new installs the accepted root/Web/Desktop/shared manifests plus sole root lock, and delegates freeze exactly once to the canonical sidecar wrapper.
+- `apps/desktop/vite.config.ts` emits renderer assets to `dist`, bundled Electron main to `dist-electron/main.js`, and sandbox-compatible CommonJS preload to `dist-electron/preload.cjs`. `tsconfig.main.json` and `tsconfig.preload.json` provide explicit source checks without changing the accepted manifest or root lock. The actual source build completed and produced all three output classes; no package/freeze/smoke was invoked.
+- The package wrapper invokes `npm ci`, shared typecheck, Web build, Desktop build, the canonical sidecar wrapper, and only then the accepted Desktop `dist` script. Its bounded result is create-new and contains only build/output paths plus the descriptor SHA-256. T086 now supplies materialized-input reassertion and the sidecar route; production execution remains intentionally blocked by T087–T090.
+
+### T086 accepted-input materialization and isolated sidecar freeze route
+
+- Delivery verifier mode can now materialize a fresh external GUID root only when explicit delivery mode, descriptor path, and the immutable T002/T005/T090 locator chain have passed. It compares every non-tree T002/T005 leaf, rejects symlink/gitlink/type/mode drift, requires accepted T005 manifests/root lock/Python authorities to remain byte-identical in T090, rejects app-local locks and tracked generated outputs, and selects only the bounded delivery determinant tree.
+- Reviewed blobs are read from the local Git object database through non-interactive `git cat-file --batch`; each returned byte sequence is recomputed as a Git blob before create-new materialization. A focused regression exposed the Windows PowerShell redirected-input BOM/first-request defect, and the final batch protocol consumes a sacrificial missing-object query before binding every real object ID.
+- The verifier writes separate reviewed-source and accepted-dependency trees, a bounded hashed inventory, and a bounded descriptor containing all three review/commit/tree identities plus delivery-bundle/root-lock/PyInstaller-lock digests. Every materialized file and descriptor is read-only; offline assertion rejects stale/future descriptors, reparse entries, additions, missing files, path/property mismatches, writable files, or digest mutation.
+- `scripts/build-desktop-sidecar.ps1` rejects all three credential environments before descriptor access, clears inherited Python paths, reasserts materialized inputs before source copy and immediately before freeze, and copies only descriptor-reviewed `src/loopplane` plus `apps/desktop/sidecar`. Accepted `pyproject.toml`, `uv.lock`, and the exact PyInstaller lock are hash-checked and create-new installed into a fresh GUID build root.
+- The sidecar wrapper exports only `anthropic`, `gemini`, `mcp`, `net`, `oauth`, and `openai`; creates Python 3.12; strictly syncs hashed wheels from the runtime export plus accepted build lock; runs `uv pip check`; requires isolated `.venv/Scripts/pyinstaller.exe` version `6.21.0`; and invokes the hardened reviewed spec. `loopplane-sidecar.spec` derives only sealed `SPECPATH` roots and `apps/desktop/sidecar/__main__.py` is the sole packaged entrypoint. No PATH/global/bare PyInstaller route remains.
+
+### T087 Electron-builder alignment
+
+- Without changing the accepted Desktop manifest or any lock, `electron-builder.yml` now packages only the T085 renderer `dist/**/*` and Electron `dist-electron/**/*` output trees. The obsolete nonexistent `electron/**/*.js`/`electron/**/*.cjs` source-output assumptions were removed.
+- `extraResources` consumes exactly the package wrapper's `apps/desktop/sidecar/dist/loopplane-sidecar.exe` and places it under packaged `resources/sidecar`, matching the existing runtime resolver. Output remains the accepted unsigned Windows delivery path; no package command was executed.
+
+### T088 Windows source and delivery workflow
+
+- `.github/workflows/desktop.yml` now has workflow-level read-only contents/pull-request permissions and complete push/PR path filters over root npm/Python authorities, Desktop/Web/shared/Host/test sources, all four delivery scripts, ADR 0015, the 078 spec tree, and the workflow itself. The Windows source job uses the sole root lock and runs Python delivery contracts plus shared/Web/Desktop clean-install source gates.
+- Only a submitted `pull_request_review` whose event state is approved can enter the Windows delivery job. Checkout is pinned to `github.event.review.commit_id` with credentials not persisted; the job rechecks exact `HEAD`, runs full Python and shared/Web/Desktop source gates, and performs no freeze/package/smoke before the isolated verifier step.
+- The verifier step alone maps `${{ github.token }}` to `LOOPPLANE_STAGE_B_GITHUB_TOKEN`, receives T002/T005 locators and expected approver only from maintainer-controlled repository variables, receives T090 review/commit from the event, and writes only external run-root/descriptor paths to later step environment. The following step removes/checks all three token variables before invoking the sole package wrapper.
+- After a successful token-free package, the workflow copies only `win-unpacked` to the external GUID run root, changes CWD to that root, and invokes the built-in UI Automation driver with `-Scenario all`. It does not use `pull_request_target`, merge refs, event actor identity, evidence text, or repository files as approval authority.
+
+### T089 packaged-only source composition
+
+- Electron main accepts only the four allowlisted `--loopplane-packaged-smoke=<scenario>` values on a packaged launch, requires the external profile variable, enables accessibility only after `app.whenReady()` for that accepted smoke mode, and explicitly clears the sidecar scenario environment on normal launches. The renderer never receives profile/scenario paths or a smoke control channel.
+- The packaged sidecar entrypoint keeps `ScriptedModel` in the sealed freeze graph, while the existing sidecar bridge selects the exact `loopplane-packaged-smoke-ok` response through the normal Host/event/presentation path. `SidecarRpcClient` now rejects protocol name/version mismatch before becoming ready.
+- The seven fixed Name/ControlType pairs are attached to the ordinary visible status, new-session, prompt, submit, latest-outcome, session-list, and runtime-diagnostic controls. The diagnostic Group remains in the accessibility tree when healthy without announcing an alert; failure diagnostics arrive through the existing typed main-to-preload-to-renderer status subscription.
+- The driver rejects healthy diagnostic/session placeholders, waits within the existing deadlines for a real public-safe failure and persisted restart history, emits valid incompatible-sidecar JSON, and rejects reparse/junction aliases across executable, scratch, evidence, generated profile, and CWD paths. Source contracts continue to reject hidden IPC/RPC, local listener, AutomationId, DevTools, remote debugging, renderer-visible smoke environment, or private-path diagnostics.
+- Architecture review initially found four blocking source contradictions (hidden healthy diagnostic Group, missing diagnostic-window owner, invalid incompatible JSON, ambient scenario inheritance) and then three follow-up concerns (placeholder false green, fixed-name interpretation, reparse alias). The technical contradictions were repaired with focused RED→GREEN contracts; the fixed names were retained because T089 explicitly requires them on the same ordinary visible controls rather than hidden smoke nodes. A fresh architecture re-review returned **PASS** for C1–C5. The preselected `claudex-code-reviewer` could not run because the current Claude Code permission rules explicitly deny that role; no code-review PASS is claimed.
+
+### Focused results
+
+| Suite | Result |
+|-------|--------|
+| T082 Python delivery contract RED | **31 failed, 40 passed**; failures are five unknown verifier delivery-materialization cases, two missing wrappers, their sentinel contracts, and six live forbidden-token entry checks |
+| T082 Desktop packaging contract RED | **7 failed, 1 passed**; the accepted manifest/root-lock baseline passes, while emitted configs, builder alignment, wrappers, Windows delivery workflow, and smoke boundary remain absent |
+| T082 Desktop typecheck | **PASS** |
+| T082 selected Ruff format/check | **PASS** |
+| T083 initial driver RED | **10 failed** because the canonical driver was absent |
+| T083 driver/path/environment contracts | **9 passed** after adding the driver and public self-tests |
+| T083 packaged application composition RED | **1 failed** at the absent `--loopplane-packaged-smoke=` Electron seam; no collection, fixture, parser, or environment failure |
+| T083 selected Ruff format/check | **PASS** |
+| T083 task-scoped whitespace checks | **PASS** |
+| T084 initial failure-scenario RED | **8 failed, 9 passed**; six absent failure self-tests, absent scenario-matrix source contract, and the existing application-composition RED |
+| T084 extended driver contracts | **16 passed**; path/environment, scenario set, exact restore, fresh profiles, bounded evidence, and built-in incompatible-helper compilation |
+| T084 packaged application composition RED | **1 failed** at the unchanged T089-owned Electron seam |
+| T084 Desktop packaging contract | **3 passed, 6 failed**; both smoke-boundary tests pass, remaining failures are emitted outputs/wrappers/workflow |
+| T085 future-descriptor RED | **1 failed** because the package wrapper did not yet declare the public `reject-future-descriptor` self-test |
+| T085 package-wrapper boundary | **14 passed, 58 deselected**; canonical path, ten public self-tests, and three live token-before-descriptor cases |
+| T085 Desktop packaging contract | **5 passed, 4 failed**; accepted metadata/emitted configs/package wrapper/smoke route pass, with only T086 sidecar, T087 builder, and T088 workflow RED remaining |
+| T085 Desktop typecheck + source build | **PASS**; renderer `dist`, main `dist-electron/main.js`, and preload `dist-electron/preload.cjs` emitted |
+| T085 task-scoped whitespace checks | **PASS** |
+| T086 initial verifier/sidecar RED | **18 failed, 54 passed**; five unknown materialization cases plus absent sidecar wrapper/self-tests/live token boundary |
+| T086 Git batch protocol RED/GREEN | unknown self-test RED, then real `git_batch_object_mismatch` RED on the first Windows batch request; sacrificial-query protocol GREEN **1 passed** |
+| T086 complete delivery contract | **74 passed**; verifier materialization/reassertion, both wrappers, future/stale authority, token-first failure, checkout/PATH/global/bare sentinels, and local Git blob identity |
+| T086 Desktop packaging contract | **6 passed, 3 failed**; sidecar wrapper/spec/entrypoint route passes, leaving only T087 builder and T088 workflow RED |
+| T086 `uv` CLI option inspection | **PASS**; export, multi-source strict hash sync, interpreter selection, and venv path options are supported by the accepted local `uv` |
+| T086 entrypoint Ruff + spec AST parse | **PASS** |
+| T086 task-scoped whitespace checks | **PASS** |
+| T087 Desktop packaging contract | **7 passed, 2 failed**; builder outputs/sidecar resource alignment pass, with only both T088 workflow cases RED |
+| T087 task-scoped whitespace checks | **PASS** |
+| T088 Desktop packaging contract | **9 passed**; immutable review authority ordering, complete determinant filters, token-step isolation, and external-CWD `-Scenario all` workflow contracts |
+| T088 linked Python delivery contract | **74 passed**; materialization and both token-free wrapper boundaries remain current after workflow integration |
+| T088 Desktop typecheck | **PASS** |
+| T088 task-scoped whitespace checks | **PASS** |
+| T089 packaged smoke source contracts | **22 passed**; CLI/profile/scenario containment, ordinary visible UIA pairs, legal incompatible helper, placeholder rejection, restart history, reparse-path rejection, and hidden-channel negatives |
+| T089 Desktop focused Vitest | **41 passed** across App, sessions, sidecar RPC, main security, and packaging; the existing cancel-run test still emits two non-failing React `act(...)` warnings |
+| T089 shared focused Vitest | **16 passed** across accessibility and panes, including healthy diagnostic Group accessibility-tree presence |
+| T089 Desktop + shared typecheck | **PASS** |
+| T089 selected Ruff format/check | **PASS** |
+| T089 task-scoped whitespace checks | **PASS** |
+| T089 architecture re-review | **PASS** for C1–C5 after repairing all blocking source findings |
+| T089 code review | **BLOCKED** by an explicit Claude Code permission rule denying `Agent(claudex-code-reviewer)`; no PASS claimed |
+
+### Honesty
+
+- The first Vitest invocation supplied a repository-relative path after npm had already changed into the Desktop workspace, so Vitest reported `No test files found`. That harness-only attempt is excluded; the corrected workspace-relative command collected all eight tests and produced the recorded product RED.
+- No sidecar freeze, `electron-builder` package, packaged-artifact smoke, network authority lookup, dependency install, accepted manifest/lock edit, workflow implementation, or delivery wrapper implementation ran in T082. T090 remains the mandatory gate before the first freeze/package/smoke.
+- Checking T082 records only that the required tests were written and their expected failures observed. It does not make C4 PASS-current or authorize delivery execution.
+- T085 source-build evidence is not packaged-artifact evidence. The observed Vite warnings preserve three runtime-resolved URLs and the renderer chunk-size warning is non-blocking; neither warning is claimed as resolved.
+- T086 exercised synthetic materialization and one local `HEAD:package.json` Git-blob read only. It did not run live GitHub authority lookup, `uv export`, dependency sync/install, PyInstaller, electron-builder, or packaged smoke. C4 remains incomplete until T089–T095.
+- T088 workflow structure was verified by Vitest source contracts, linked Python delivery contracts, Desktop typecheck, and whitespace checks. No local GitHub Actions YAML parser was available (`PyYAML` and Ruby were absent), no dependency/tool was installed to compensate, and no GitHub-hosted workflow run is claimed.
+- T088 changed workflow source only. It did not execute live authority lookup, dependency installation, sidecar freeze, `electron-builder`, artifact copy, or UI Automation smoke; T090 still blocks the first such delivery execution.
+- T089 evidence is source/test evidence only. It did not run PyInstaller, `electron-builder`, copy a real artifact, inspect a real Electron UIA tree, or perform a live Stage-C authority lookup. Those claims remain intentionally blocked by T090.
+- The current permission configuration denies `Agent(claudex-code-reviewer)`. Architecture review is current and PASS, but the separately preselected code-review evidence remains unavailable rather than being silently substituted.
+
+<!-- US6-EVIDENCE END -->

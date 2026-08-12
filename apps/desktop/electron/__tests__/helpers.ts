@@ -2,16 +2,33 @@
  * Electron IPC / window / child-process / native-dialog test doubles (078 T012).
  */
 
+export const TRUSTED_RENDERER_ID = 1;
+export const TRUSTED_RENDERER_URL = "file:///app/dist/index.html";
+export const TRUSTED_HANDLER_OPTIONS = {
+  expectedSenderId: TRUSTED_RENDERER_ID,
+  expectedSenderUrl: TRUSTED_RENDERER_URL,
+} as const;
+
+export type FrameDouble = { url: string };
+
 export type IpcSender = {
   id: number;
   url: string;
   isDestroyed: () => boolean;
+  sender: {
+    id: number;
+    getURL: () => string;
+    isDestroyed: () => boolean;
+    mainFrame: FrameDouble;
+  };
+  senderFrame: FrameDouble;
 };
 
 export type WebContentsDouble = {
   id: number;
   getURL: () => string;
   isDestroyed: () => boolean;
+  mainFrame: FrameDouble;
   send: (channel: string, ...args: unknown[]) => void;
   sent: Array<{ channel: string; args: unknown[] }>;
 };
@@ -21,10 +38,13 @@ export function createWebContentsDouble(
 ): WebContentsDouble {
   const sent: Array<{ channel: string; args: unknown[] }> = [];
   let destroyed = opts.destroyed ?? false;
+  const url = opts.url ?? TRUSTED_RENDERER_URL;
+  const mainFrame = { url };
   return {
-    id: opts.id ?? 1,
-    getURL: () => opts.url ?? "file:///app/dist/index.html",
+    id: opts.id ?? TRUSTED_RENDERER_ID,
+    getURL: () => url,
     isDestroyed: () => destroyed,
+    mainFrame,
     send(channel: string, ...args: unknown[]) {
       if (destroyed) throw new Error("webContents destroyed");
       sent.push({ channel, args });
@@ -35,12 +55,18 @@ export function createWebContentsDouble(
 
 export function createIpcSenderFrom(
   contents: WebContentsDouble,
-): IpcSender & { senderFrame?: { url: string } } {
+): IpcSender {
   return {
     id: contents.id,
     url: contents.getURL(),
     isDestroyed: () => contents.isDestroyed(),
-    senderFrame: { url: contents.getURL() },
+    sender: {
+      id: contents.id,
+      getURL: () => contents.getURL(),
+      isDestroyed: () => contents.isDestroyed(),
+      mainFrame: contents.mainFrame,
+    },
+    senderFrame: contents.mainFrame,
   };
 }
 

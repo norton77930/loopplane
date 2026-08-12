@@ -45,6 +45,29 @@ describe("i18n", () => {
     expect(screen.getByTestId("locale").textContent).toBe("zh-TW"); // restored from storage
   });
 
+  it("keeps extracted shell and inspection keys translated in both locales", () => {
+    const keys = [
+      "navigation.close",
+      "navigation.label",
+      "inspection.dismiss",
+      "inspection.panel",
+      "inspection.close",
+      "inspection.categories",
+      "inspection.approval",
+      "inspection.readOnly",
+      "inspection.searchMemory",
+      "inspection.searchMemoryPlaceholder",
+    ] as const;
+
+    for (const locale of ["en", "zh-TW"] as const) {
+      for (const key of keys) {
+        const value = t(key, locale);
+        expect(value.trim(), `${locale}:${key}`).not.toBe("");
+        expect(value, `${locale}:${key}`).not.toBe(key);
+      }
+    }
+  });
+
   it("synchronizes the document language with the selected locale", () => {
     function Probe() {
       const { setLocale } = useTranslation();

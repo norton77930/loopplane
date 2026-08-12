@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "noEmit": true,
+    "outDir": "dist-electron",
+    "rootDir": "electron",
+    "types": ["node"]
+  },
+  "include": [
+    "electron/preload.ts",
+    "electron/backup-restore-ipc.ts",
+    "electron/ipc-channels.ts"
+  ]
+}

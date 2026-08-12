@@ -31,6 +31,7 @@ from loopplane.budget import BudgetChecker, BudgetPostureSnapshot, UsdBudgetCaps
 from loopplane.checkpoint.base import CheckpointStore, SessionSummary
 from loopplane.checkpoint.rebuild import rebuild_session
 from loopplane.checkpoint.recorder import RecordingSink, SessionRecorder
+from loopplane.checkpoint.records import CheckpointRecord
 from loopplane.context import (
     BackgroundSupervisor,
     BackgroundSupervisorFactory,
@@ -289,10 +290,18 @@ class RuntimeController:
         )
         return session_id
 
-    async def resume(self, session_id: str) -> None:
+    async def resume(
+        self,
+        session_id: str,
+        *,
+        working_scope: Path | None = None,
+    ) -> None:
         """Reconstruct conversation state from durable records alone
         (FR-081); repairs and skipped records surface as diagnostics
         (FR-082, FR-083).
+
+        ``working_scope`` is additive and default-preserving (078 T021):
+        ``None`` keeps today's ``Path.cwd()`` behaviour exactly.
         """
         if self._checkpoint is None:
             raise RuntimeError("resume requires a checkpoint store")
@@ -311,7 +320,7 @@ class RuntimeController:
         )
         session = self._assemble(
             session_id=session_id,
-            working_scope=Path.cwd(),
+            working_scope=Path.cwd() if working_scope is None else working_scope,
             label=rebuilt.label,
             turn_budget=None,
             created_at=rebuilt.created_at or datetime.now(UTC),
@@ -982,11 +991,31 @@ class RuntimeController:
         return deleted
 
     def delete_session(self, session_id: str) -> None:
-        """Delete a session (030): drop the in-memory session and durably
-        remove its records when a checkpoint store is configured."""
+        """Delete a session (030): drop its durable records and owned artifacts."""
+        artifact_deletion = (
+            self._artifacts.prepare_session_deletion(session_id)
+            if self._artifacts is not None
+            else None
+        )
+        try:
+            if self._checkpoint is not None:
+                self._checkpoint.delete_session(session_id)
+        except Exception:
+            records: list[CheckpointRecord] = []
+            try:
+                if self._checkpoint is not None:
+                    records, _problems = self._checkpoint.load(session_id)
+            except Exception:
+                # The effect cannot be disproved. Keep every other authority in
+                # the deleted state rather than restoring dangling references.
+                pass
+            if records:
+                if self._artifacts is not None and artifact_deletion is not None:
+                    self._artifacts.rollback_session_deletion(artifact_deletion)
+                raise
+        if self._artifacts is not None and artifact_deletion is not None:
+            self._artifacts.commit_session_deletion(artifact_deletion)
         self._sessions.pop(session_id, None)
-        if self._checkpoint is not None:
-            self._checkpoint.delete_session(session_id)
 
     def cancel(self, session_id: str) -> None:
         """Request cancellation: takes effect pre-turn and mid-stream and

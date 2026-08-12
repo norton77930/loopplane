@@ -65,6 +65,56 @@ def _user(
     )
 
 
+def test_sqlite_initialize_rejects_incompatible_existing_schema(
+    tmp_path: Path,
+) -> None:
+    """Initialization validates rather than silently accepting an old table."""
+
+    db_path = tmp_path / "checkpoints.sqlite3"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("CREATE TABLE records (session_id TEXT, data TEXT)")
+    before = db_path.read_bytes()
+
+    with pytest.raises(sqlite3.DatabaseError, match="incompatible checkpoint schema"):
+        SqliteCheckpointStore(db_path).initialize()
+
+    assert db_path.read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    "extra_sql",
+    [
+        "CREATE TABLE unexpected (value TEXT)",
+        "CREATE VIEW unexpected AS SELECT session_id FROM records",
+        "CREATE INDEX unexpected ON records(recorded_at)",
+        (
+            "CREATE TRIGGER unexpected_insert AFTER INSERT ON records "
+            "BEGIN SELECT 1; END"
+        ),
+        (
+            "CREATE TRIGGER unexpected_delete AFTER DELETE ON records "
+            "BEGIN SELECT 1; END"
+        ),
+    ],
+)
+def test_sqlite_initialize_rejects_extra_schema_objects(
+    tmp_path: Path,
+    extra_sql: str,
+) -> None:
+    """Serving storage owns one table and no executable schema extensions."""
+
+    db_path = tmp_path / "checkpoints.sqlite3"
+    SqliteCheckpointStore(db_path).initialize()
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(extra_sql)
+    before = db_path.read_bytes()
+
+    with pytest.raises(sqlite3.DatabaseError, match="incompatible checkpoint schema"):
+        SqliteCheckpointStore(db_path).initialize()
+
+    assert db_path.read_bytes() == before
+
+
 @dataclass
 class _Backend:
     """A backend under test: a factory for a fresh store on the same backing, plus a

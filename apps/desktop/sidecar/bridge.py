@@ -1,20 +1,31 @@
-"""Serverless stdio NDJSON bridge over ``loopplane.host`` (feature 019).
+"""Desktop stdio sidecar entry (feature 019 + 078 T024/T025/T026).
 
-The desktop app spawns this as a local sidecar: it drives a ``LoopPlaneHost`` and
-writes each normalized event as one JSON line (the unit-011 ``serialize_event``),
-followed by an ``outcome`` line — with no HTTP server and no port. It runs no tool
-itself and re-emits no bus; it is a streaming consumer of the normalized stream
-(Constitution V/VI). It reuses only ``loopplane.host`` + ``loopplane.events`` and is
-loaded by file path in tests, so it adds no package and is not shipped in the wheel.
+Legacy ``{op: run}`` helpers remain for integration tests. The launchable
+``main`` path acquires the Profile Ownership Lock, bootstraps generation via
+``validate_active_generation``, then serves JSON-RPC V1 through the pure
+dispatcher with Host-only interaction methods — never constructing Host before
+that gate.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from loopplane.events import RuntimeEvent, serialize_event
-from loopplane.host import LoopPlaneHost
+from loopplane.host import (
+    DesktopStorageAuthorityFactory,
+    LoopPlaneHost,
+    RuntimeConfig,
+    StorageConfig,
+)
+
+if TYPE_CHECKING:
+    from profile import ProfileState
+
+    from runtime import DesktopRuntimeOwner
 
 ReadLine = Callable[[], Awaitable[str | None]]
 WriteLine = Callable[[str], None]
@@ -47,11 +58,8 @@ async def collect_events(host: LoopPlaneHost, prompt: str) -> list[str]:
 async def serve(
     host: LoopPlaneHost, read_line: ReadLine, write_line: WriteLine
 ) -> None:
-    """The stdio loop: read request lines, drive runs, write event + outcome lines.
+    """Legacy NDJSON ``{op: run}`` loop (tests/smoke). Prefer ``serve_rpc``."""
 
-    ``read_line`` returns ``None`` at end-of-input. Injectable I/O keeps the loop
-    testable; ``main`` wires it to real stdio.
-    """
     while True:
         line = await read_line()
         if line is None:
@@ -88,22 +96,316 @@ async def _run(host: LoopPlaneHost, prompt: str, write_line: WriteLine) -> None:
     )
 
 
-def main() -> None:  # pragma: no cover - the real stdio entry point (manual smoke)
+async def serve_rpc(
+    dispatcher: object,
+    read_line: ReadLine,
+    write_line: WriteLine,
+) -> None:
+    """JSON-RPC V1 loop over an injected dispatcher (no Host construction here)."""
+
+    handle_frame = dispatcher.handle_frame  # type: ignore[attr-defined]
+    try:
+        while True:
+            line = await read_line()
+            if line is None:
+                break
+            raw = line if isinstance(line, (bytes, bytearray)) else line
+            if isinstance(raw, str) and not raw.strip():
+                continue
+            responses = await handle_frame(raw)
+            for msg in responses:
+                write_line(json.dumps(msg, separators=(",", ":")))
+    finally:
+        teardown = getattr(dispatcher, "aclose", None)
+        if callable(teardown):
+            result = teardown()
+            if result is not None:
+                await result
+
+
+def bootstrap_desktop_owner(profile_root: Path) -> DesktopRuntimeOwner:
+    """Acquire and adjudicate restore authority before any Host composition."""
+
+    from runtime import DesktopRuntimeOwner
+
+    owner = DesktopRuntimeOwner(profile_root=profile_root)
+    owner.acquire()
+    try:
+        owner.bootstrap_generation()
+    except Exception:
+        owner.release()
+        raise
+    return owner
+
+
+def desktop_runtime_config(
+    *, model: Any, profile_root: Path, generation_id: str
+) -> RuntimeConfig:
+    """Compose Desktop's required SQLite storage below one active generation id."""
+
+    try:
+        from .durability import initialize_runtime_storage
+    except ImportError:  # pragma: no cover
+        from durability import initialize_runtime_storage
+
+    storage_root = initialize_runtime_storage(profile_root, generation_id)
+    return RuntimeConfig(
+        model=model,
+        storage=StorageConfig(
+            authority=DesktopStorageAuthorityFactory(profile_root),
+            checkpoint_backend="sqlite",
+            root=storage_root,
+        ),
+    )
+
+
+def build_rpc_dispatcher(
+    host: LoopPlaneHost,
+    *,
+    working_scope: Path | None = None,
+    write_line: WriteLine | None = None,
+    on_shutdown: Callable[[], Awaitable[None] | None] | None = None,
+    profile_state: ProfileState | None = None,
+    mutation_lease: object | None = None,
+    principal_id: str | None = None,
+    runtime_config: RuntimeConfig | None = None,
+    runtime_owner: DesktopRuntimeOwner | None = None,
+) -> object:
+    """Compose dispatcher + Host-only methods after bootstrap."""
+
+    from dispatcher import Dispatcher
+    from interaction import InteractionLease
+    from methods.audit import AuditMethods
+    from methods.backup import BackupMethods
+    from methods.inspection import InspectionMethods
+    from methods.interaction import InteractionMethods
+    from methods.projects import ProjectMethods
+    from methods.sessions import SessionMethods
+    from methods.workspace import WorkspaceMethods
+    from mutation_lease import ProfileMutationLease
+    from restore import RestoreManager
+    from runtime import RuntimeHostHandover
+
+    lease = InteractionLease()
+    mut_lease = (
+        mutation_lease
+        if isinstance(mutation_lease, ProfileMutationLease)
+        else ProfileMutationLease()
+    )
+    notifications: list[dict] = []
+    shutting_down = {"value": False}
+
+    async def emit_event(payload: dict) -> None:
+        if shutting_down["value"] or write_line is None:
+            if write_line is None:
+                notifications.append(payload)
+            return
+        frame = {
+            "jsonrpc": "2.0",
+            "method": "runtime.event",
+            "params": payload,
+        }
+        write_line(json.dumps(frame, separators=(",", ":")))
+
+    async def emit_outcome(payload: dict) -> None:
+        if shutting_down["value"] or write_line is None:
+            if write_line is None:
+                notifications.append(payload)
+            return
+        frame = {
+            "jsonrpc": "2.0",
+            "method": "runtime.outcome",
+            "params": payload,
+        }
+        write_line(json.dumps(frame, separators=(",", ":")))
+
+    workspace_store = None
+    project_store = None
+    host_for_methods: object = host
+    handover: RuntimeHostHandover | None = None
+    if profile_state is not None:
+        if runtime_owner is not None and runtime_owner.host is not host:
+            raise RuntimeError("runtime owner Host does not match dispatcher Host")
+        from projects import ProjectStore
+        from workspace import WorkspaceStore
+
+        workspace_store = WorkspaceStore(profile_state)  # type: ignore[arg-type]
+        project_store = ProjectStore(profile_state)  # type: ignore[arg-type]
+        handover = RuntimeHostHandover(
+            host,
+            profile_root=profile_state.root,  # type: ignore[attr-defined]
+            config=runtime_config,
+            host_changed=(
+                runtime_owner.adopt_handover_host if runtime_owner is not None else None
+            ),
+        )
+        host_for_methods = handover
+
+    follow_profile_principal = profile_state is not None and (
+        principal_id is None or principal_id == profile_state.principal_id
+    )
+
+    def current_principal() -> str | None:
+        if follow_profile_principal and profile_state is not None:
+            return profile_state.principal_id
+        return principal_id
+
+    methods = InteractionMethods(
+        host_for_methods,  # type: ignore[arg-type]
+        lease,
+        working_scope=working_scope,
+        emit_event=emit_event,
+        emit_outcome=emit_outcome,
+        workspace_store=workspace_store,
+        mutation_lease=mut_lease,
+        principal_id=principal_id,
+        principal_provider=current_principal,
+    )
+    handlers = methods.handlers()
+    backup_methods: BackupMethods | None = None
+    handlers.update(
+        SessionMethods(
+            host_for_methods,  # type: ignore[arg-type]
+            mut_lease,
+            principal_id=principal_id,
+            principal_provider=current_principal,
+            project_store=project_store,
+        ).handlers()
+    )
+    handlers.update(
+        InspectionMethods(
+            host_for_methods,  # type: ignore[arg-type]
+            principal_id=principal_id,
+            principal_provider=current_principal,
+            mutation_lease=mut_lease,
+        ).handlers()
+    )
+    handlers.update(
+        AuditMethods(
+            host_for_methods,  # type: ignore[arg-type]
+            principal_id=principal_id,
+            principal_provider=current_principal,
+        ).handlers()
+    )
+    if profile_state is not None:
+        # Backup/restore uses the existing Desktop-only Host snapshot facade.
+        # This direct dispatcher composition is also used by integration tests.
+        host.enable_desktop_portable_snapshot()
+        handlers.update(ProjectMethods(profile_state, mut_lease).handlers())  # type: ignore[arg-type]
+        handlers.update(WorkspaceMethods(profile_state, mut_lease).handlers())  # type: ignore[arg-type]
+        backup_methods = BackupMethods(
+            host_for_methods,  # type: ignore[arg-type]
+            profile_state,  # type: ignore[arg-type]
+            mut_lease,
+            interaction_lease=lease,
+            restore_manager=RestoreManager(profile_state.root),  # type: ignore[attr-defined]
+            candidate_ready=handover.candidate_ready if handover is not None else None,
+            close_previous=handover.close_previous if handover is not None else None,
+            install_candidate=handover.install_candidate
+            if handover is not None
+            else None,
+            commit_candidate=handover.commit_candidate
+            if handover is not None
+            else None,
+            rollback_candidate=handover.rollback_candidate
+            if handover is not None
+            else None,
+            lock_dispatch=handover.lock_dispatch if handover is not None else None,
+            unlock_dispatch_after_rollback=(
+                handover.unlock_dispatch_after_rollback
+                if handover is not None
+                else None
+            ),
+        )
+        handlers.update(backup_methods.handlers())
+
+    torn_down = {"value": False}
+
+    async def teardown() -> None:
+        if torn_down["value"]:
+            return
+        shutting_down["value"] = True
+        await lease.shutdown()
+        if backup_methods is not None:
+            backup_methods.shutdown()
+        if handover is not None:
+            await handover.aclose()
+        elif on_shutdown is not None:
+            result = on_shutdown()
+            if result is not None:
+                await result
+        torn_down["value"] = True
+
+    async def system_shutdown(_params: dict) -> dict:
+        # Bounded teardown only: it starts no durable work.
+        await teardown()
+        return {"ok": True}
+
+    handlers["system.shutdown"] = system_shutdown
+    handlers["shutdown"] = system_shutdown
+
+    dispatcher = Dispatcher(
+        methods=handlers,
+        capabilities={
+            "sessions": "available",
+            "interaction": "available",
+            "inspection": "available",
+            "backup": "available" if profile_state is not None else "unavailable",
+            "projects": "available" if profile_state is not None else "unavailable",
+            "workspace": "available" if profile_state is not None else "unavailable",
+        },
+    )
+    dispatcher.aclose = teardown
+    return dispatcher
+
+
+def main() -> None:  # pragma: no cover - real stdio entry (manual smoke)
+    import os
     import sys
 
     import anyio
 
-    from loopplane.host import RuntimeConfig
     from loopplane.model import ScriptedModel, ScriptedTurn, TextIncrement
 
-    # A credential-free default host; a real model is wired by the shell/operator.
+    smoke_scenario = os.environ.get("LOOPPLANE_PACKAGED_SMOKE_SCENARIO")
+    smoke_responses = {
+        "happy": "loopplane-packaged-smoke-ok",
+        "missing-sidecar": "runtime missing",
+        "corrupt-sidecar": "runtime corrupt",
+        "incompatible-sidecar": "runtime incompatible",
+    }
+    if smoke_scenario is not None and smoke_scenario not in smoke_responses:
+        sys.stderr.write("sidecar smoke configuration failed\n")
+        sys.exit(2)
+
+    profile = Path(
+        os.environ.get("LOOPPLANE_PROFILE_ROOT")
+        or (Path.home() / ".loopplane" / "desktop-profile")
+    )
+
+    try:
+        owner = bootstrap_desktop_owner(profile)
+    except Exception as exc:
+        # Fail closed before Host: public-safe one-line error then exit.
+        sys.stderr.write(f"sidecar bootstrap failed: {type(exc).__name__}\n")
+        sys.exit(2)
+
+    response = (
+        smoke_responses[smoke_scenario]
+        if smoke_scenario is not None
+        else "LoopPlane desktop demo"
+    )
     model = ScriptedModel(
-        script=[
-            ScriptedTurn(increments=[TextIncrement(text="LoopPlane desktop demo")])
-        ],
+        script=[ScriptedTurn(increments=[TextIncrement(text=response)])],
         context_capacity=100_000,
     )
-    host = LoopPlaneHost(RuntimeConfig(model=model))
+    config = desktop_runtime_config(
+        model=model,
+        profile_root=profile,
+        generation_id=owner.generation_id,
+    )
+    host = owner.attach_host(config)
+    profile_state = owner.ensure_profile_state()
 
     async def read_line() -> str | None:
         return await anyio.to_thread.run_sync(sys.stdin.readline) or None
@@ -112,7 +414,26 @@ def main() -> None:  # pragma: no cover - the real stdio entry point (manual smo
         sys.stdout.write(text + "\n")
         sys.stdout.flush()
 
-    anyio.run(serve, host, read_line, write_line)
+    dispatcher = build_rpc_dispatcher(
+        host,
+        working_scope=profile,
+        write_line=write_line,
+        profile_state=profile_state,
+        mutation_lease=owner.mutation_lease,
+        principal_id=profile_state.principal_id,
+        runtime_config=config,
+        runtime_owner=owner,
+    )
+
+    async def _run_rpc() -> None:
+        try:
+            await serve_rpc(dispatcher, read_line, write_line)
+        finally:
+            # Release profile ownership only after every retained Host closes.
+            await dispatcher.aclose()  # type: ignore[attr-defined]
+            owner.release()
+
+    anyio.run(_run_rpc)
 
 
 if __name__ == "__main__":  # pragma: no cover
