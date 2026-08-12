@@ -391,6 +391,9 @@ function Get-DeliveryEntries {
     )
     $result = New-Object System.Collections.Generic.List[object]
     foreach ($entry in $Tree.tree) {
+        if ([string]$entry.type -eq 'tree') {
+            continue
+        }
         $path = [string]$entry.path
         if (-not (Test-DeliveryDeterminantPath $path)) {
             continue
@@ -1178,6 +1181,12 @@ function Invoke-SelfTest {
         'delivery-entries-remain-flat' {
             $tree = [pscustomobject]@{
                 tree = @(
+                    [pscustomobject]@{
+                        path = 'apps/desktop/src'
+                        mode = '040000'
+                        type = 'tree'
+                        sha = ('0' * 40)
+                    },
                     [pscustomobject]@{
                         path = 'apps/desktop/first.ts'
                         mode = '100644'
