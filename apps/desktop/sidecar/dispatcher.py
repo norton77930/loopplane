@@ -5,6 +5,7 @@ Zero Host/store/profile construction. Method providers are injected.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -12,10 +13,16 @@ from typing import Any
 try:
     from .protocol import (
         INTERNAL_FAILURE,
+        INVALID_PARAMS,
         INVALID_REQUEST,
         METHOD_NOT_FOUND,
+        PARSE_ERROR,
+        PROTOCOL_MAJOR,
+        PROTOCOL_MINOR,
         PROTOCOL_NAME,
-        PROTOCOL_VERSION,
+        RUNTIME_EVENT_SCHEMA,
+        SERVER_NAME,
+        SERVER_VERSION,
         RpcError,
         decode_frame,
         make_error,
@@ -25,10 +32,16 @@ try:
 except ImportError:  # pragma: no cover - script-path load
     from protocol import (  # type: ignore[no-redef]
         INTERNAL_FAILURE,
+        INVALID_PARAMS,
         INVALID_REQUEST,
         METHOD_NOT_FOUND,
+        PARSE_ERROR,
+        PROTOCOL_MAJOR,
+        PROTOCOL_MINOR,
         PROTOCOL_NAME,
-        PROTOCOL_VERSION,
+        RUNTIME_EVENT_SCHEMA,
+        SERVER_NAME,
+        SERVER_VERSION,
         RpcError,
         decode_frame,
         make_error,
@@ -37,6 +50,38 @@ except ImportError:  # pragma: no cover - script-path load
     )
 
 MethodHandler = Callable[[dict[str, Any]], Awaitable[Any]]
+RequestId = str
+RequestIdentity = tuple[str, str]
+MAX_CACHED_REQUESTS = 64
+_REQUEST_FIELDS = frozenset({"jsonrpc", "id", "method", "params"})
+
+REQUESTED_CAPABILITIES = (
+    "sessions",
+    "interaction",
+    "projects",
+    "inspection",
+    "workspace",
+    "backup",
+)
+NOTIFICATIONS = (
+    "runtime.event",
+    "runtime.outcome",
+    "runtime.state",
+    "runtime.subscriptionClosed",
+)
+LIMITS = {
+    "control_frame_bytes": 1_048_576,
+    "runtime_event_frame_bytes": 8_388_608,
+    "prompt_bytes": 65_536,
+    "pending_requests": 64,
+    "subscriptions": 8,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class CachedResponse:
+    identity: RequestIdentity
+    response: dict[str, Any]
 
 
 @dataclass
@@ -44,8 +89,7 @@ class DispatcherState:
     initialized: bool = False
     shutdown: bool = False
     notification_seq: int = 0
-    pending_results: dict[str | int, Any] = field(default_factory=dict)
-    seen_ids: set[str | int] = field(default_factory=set)
+    cached_responses: dict[RequestId, CachedResponse] = field(default_factory=dict)
 
 
 class Dispatcher:
@@ -59,8 +103,7 @@ class Dispatcher:
     ) -> None:
         self._methods = methods or {}
         self._capabilities = capabilities or {
-            "protocol": PROTOCOL_NAME,
-            "version": PROTOCOL_VERSION,
+            capability: "unavailable" for capability in REQUESTED_CAPABILITIES
         }
         self.state = DispatcherState()
 
@@ -68,62 +111,89 @@ class Dispatcher:
         self._methods[name] = handler
 
     async def handle_frame(self, line: bytes | str) -> list[dict[str, Any]]:
-        """Return zero or more response/notification objects for one input frame."""
+        """Return one terminal response for one exact client request frame."""
 
         try:
             msg = decode_frame(line)
         except Exception:
-            return [make_error(None, INVALID_REQUEST)]
+            return [make_error(None, PARSE_ERROR)]
 
-        if msg.get("jsonrpc") != "2.0":
-            return [make_error(msg.get("id"), INVALID_REQUEST)]
-
-        # Notification (no id)
-        if "method" in msg and "id" not in msg:
-            return []
-
-        if "method" not in msg:
-            return [make_error(msg.get("id"), INVALID_REQUEST)]
-
-        method = str(msg["method"])
-        req_id = msg.get("id")
-        params = msg.get("params") or {}
-        if not isinstance(params, dict):
+        req_id = self._safe_error_id(msg.get("id"))
+        if (
+            set(msg) != _REQUEST_FIELDS
+            or msg.get("jsonrpc") != "2.0"
+            or not self._valid_request_id(msg.get("id"))
+            or not isinstance(msg.get("method"), str)
+            or not msg["method"]
+        ):
             return [make_error(req_id, INVALID_REQUEST)]
 
-        if self.state.shutdown:
+        method = msg["method"]
+        req_id = msg["id"]
+        params = msg["params"]
+        if not isinstance(params, dict):
+            return [make_error(req_id, INVALID_PARAMS)]
+
+        identity = self._request_identity(method, params)
+        if method == "initialize" and self.state.initialized:
+            return [await self._initialize(req_id, params)]
+
+        cached = self.state.cached_responses.get(req_id)
+        if cached is not None:
+            if cached.identity == identity:
+                return [cached.response]
             return [
                 make_error(
                     req_id,
                     RpcError(
-                        code=-32000,
-                        message="Shutting down",
-                        category="state",
+                        code=-32003,
+                        message="Conflict",
+                        category="conflict",
                         retryable=False,
-                        message_key="desktop.error.shutting_down",
+                        message_key="desktop.error.conflict",
+                    ),
+                )
+            ]
+        cached_requests = sum(
+            cached.identity[0] != "initialize"
+            for cached in self.state.cached_responses.values()
+        )
+        if method != "initialize" and cached_requests >= MAX_CACHED_REQUESTS:
+            return [
+                make_error(
+                    req_id,
+                    RpcError(
+                        code=-32004,
+                        message="Busy",
+                        category="busy",
+                        retryable=False,
+                        message_key="desktop.error.busy",
                     ),
                 )
             ]
 
+        if self.state.shutdown:
+            response = make_error(
+                req_id,
+                RpcError(
+                    code=-32005,
+                    message="Shutting down",
+                    category="invalid_state",
+                    retryable=False,
+                    message_key="desktop.error.shutting_down",
+                ),
+            )
+            return [self._cache(req_id, identity, response)]
+
         if method == "initialize":
-            return [await self._initialize(req_id, params)]
+            response = await self._initialize(req_id, params)
+            return [self._cache(req_id, identity, response)]
 
         if method == "system.status":
             if not self.state.initialized:
-                return [
-                    make_error(
-                        req_id,
-                        RpcError(
-                            code=-32001,
-                            message="Not initialized",
-                            category="state",
-                            retryable=False,
-                            message_key="desktop.error.not_initialized",
-                        ),
-                    )
-                ]
-            return [
-                make_result(
+                response = self._not_initialized(req_id)
+            else:
+                response = make_result(
                     req_id,
                     {
                         "ready": not self.state.shutdown,
@@ -131,98 +201,158 @@ class Dispatcher:
                         "shutdown": self.state.shutdown,
                     },
                 )
-            ]
+            return [self._cache(req_id, identity, response)]
 
         if not self.state.initialized:
-            return [
-                make_error(
-                    req_id,
-                    RpcError(
-                        code=-32001,
-                        message="Not initialized",
-                        category="state",
-                        retryable=False,
-                        message_key="desktop.error.not_initialized",
-                    ),
-                )
-            ]
+            return [self._cache(req_id, identity, self._not_initialized(req_id))]
 
-        # Idempotent replay for mutation ids
-        if req_id is not None and req_id in self.state.pending_results:
-            return [make_result(req_id, self.state.pending_results[req_id])]
-
-        if method in ("shutdown", "system.shutdown"):
-            handler = self._methods.get(method) or self._methods.get("system.shutdown")
+        if method == "system.shutdown":
+            handler = self._methods.get(method)
             if handler is not None:
-                try:
-                    result = await handler(params)
-                except RpcError as err:
-                    return [make_error(req_id, err)]
-                except Exception:
-                    return [make_error(req_id, INTERNAL_FAILURE)]
+                response = await self._invoke(handler, req_id, params)
             else:
-                result = {"ok": True}
-            self.state.shutdown = True
-            if req_id is not None:
-                self.state.pending_results[req_id] = result
-                self.state.seen_ids.add(req_id)
-            return [make_result(req_id, result)]
+                response = make_result(req_id, {"ok": True})
+            if "result" in response:
+                self.state.shutdown = True
+            return [self._cache(req_id, identity, response)]
 
         handler = self._methods.get(method)
         if handler is None:
-            return [make_error(req_id, METHOD_NOT_FOUND)]
+            response = make_error(req_id, METHOD_NOT_FOUND)
+        else:
+            response = await self._invoke(handler, req_id, params)
+        return [self._cache(req_id, identity, response)]
 
+    @staticmethod
+    def _valid_request_id(value: Any) -> bool:
+        return (
+            isinstance(value, str) and bool(value) and len(value.encode("utf-8")) <= 128
+        )
+
+    @classmethod
+    def _safe_error_id(cls, value: Any) -> RequestId | None:
+        return value if cls._valid_request_id(value) else None
+
+    @staticmethod
+    def _request_identity(method: str, params: dict[str, Any]) -> RequestIdentity:
+        canonical_params = json.dumps(
+            params,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return method, canonical_params
+
+    def _cache(
+        self,
+        req_id: RequestId,
+        identity: RequestIdentity,
+        response: dict[str, Any],
+    ) -> dict[str, Any]:
+        self.state.cached_responses[req_id] = CachedResponse(identity, response)
+        return response
+
+    @staticmethod
+    async def _invoke(
+        handler: MethodHandler,
+        req_id: RequestId,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
         try:
-            result = await handler(params)
+            return make_result(req_id, await handler(params))
         except RpcError as err:
-            return [make_error(req_id, err)]
+            return make_error(req_id, err)
         except Exception:
-            return [make_error(req_id, INTERNAL_FAILURE)]
+            return make_error(req_id, INTERNAL_FAILURE)
 
-        if req_id is not None:
-            self.state.pending_results[req_id] = result
-            self.state.seen_ids.add(req_id)
-        return [make_result(req_id, result)]
+    @staticmethod
+    def _not_initialized(req_id: RequestId) -> dict[str, Any]:
+        return make_error(
+            req_id,
+            RpcError(
+                code=-32005,
+                message="Not initialized",
+                category="invalid_state",
+                retryable=False,
+                message_key="desktop.error.not_initialized",
+            ),
+        )
 
-    async def _initialize(self, req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
+    async def _initialize(
+        self, req_id: RequestId, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        if self.state.initialized:
+            return make_error(
+                req_id,
+                RpcError(
+                    code=-32005,
+                    message="Already initialized",
+                    category="invalid_state",
+                    retryable=False,
+                    message_key="desktop.error.already_initialized",
+                ),
+            )
+
         client_proto = params.get("protocol")
-        client_ver = params.get("version")
-        if client_proto not in (None, PROTOCOL_NAME):
+        client = params.get("client")
+        requested = params.get("requested_capabilities")
+        if (
+            not isinstance(client_proto, dict)
+            or client_proto.get("name") != PROTOCOL_NAME
+            or client_proto.get("major") != PROTOCOL_MAJOR
+            or not isinstance(client_proto.get("minor"), int)
+            or client_proto["minor"] > PROTOCOL_MINOR
+            or params.get("runtime_event_schema") != RUNTIME_EVENT_SCHEMA
+            or not isinstance(client, dict)
+            or not isinstance(client.get("name"), str)
+            or not isinstance(client.get("version"), str)
+            or not isinstance(requested, list)
+            or any(
+                not isinstance(capability, str)
+                or capability not in REQUESTED_CAPABILITIES
+                for capability in requested
+            )
+            or len(set(requested)) != len(requested)
+        ):
             return make_error(
                 req_id,
                 RpcError(
-                    code=-32002,
+                    code=-32001,
                     message="Incompatible protocol",
-                    category="protocol",
+                    category="incompatible_protocol",
                     retryable=False,
-                    message_key="desktop.error.incompatible_protocol",
+                    recovery="contact_support",
+                    message_key="desktop.error.incompatible_runtime",
                 ),
             )
-        if client_ver not in (None, PROTOCOL_VERSION):
-            return make_error(
-                req_id,
-                RpcError(
-                    code=-32003,
-                    message="Incompatible version",
-                    category="protocol",
-                    retryable=False,
-                    message_key="desktop.error.incompatible_version",
-                ),
-            )
+
+        methods = sorted(
+            set(self._methods.keys())
+            | {"initialize", "system.shutdown", "system.status"}
+        )
         self.state.initialized = True
         return make_result(
             req_id,
             {
-                "protocol": PROTOCOL_NAME,
-                "version": PROTOCOL_VERSION,
-                "capabilities": self._capabilities,
-                "methods": sorted(self._methods.keys())
-                + ["initialize", "shutdown", "system.shutdown", "system.status"],
+                "protocol": {
+                    "name": PROTOCOL_NAME,
+                    "major": PROTOCOL_MAJOR,
+                    "minor": PROTOCOL_MINOR,
+                },
+                "runtime_event_schema": RUNTIME_EVENT_SCHEMA,
+                "server": {"name": SERVER_NAME, "version": SERVER_VERSION},
+                "methods": methods,
+                "notifications": list(NOTIFICATIONS),
+                "capabilities": {
+                    capability: self._capabilities.get(capability, "unavailable")
+                    for capability in REQUESTED_CAPABILITIES
+                },
+                "limits": dict(LIMITS),
             },
         )
 
     def next_notification(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         self.state.notification_seq += 1
         payload = dict(params)
-        payload["sequence"] = self.state.notification_seq
+        payload["notification_seq"] = self.state.notification_seq
         return make_notification(method, payload)

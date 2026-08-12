@@ -8,6 +8,7 @@ import {
   createChildProcessDouble,
   createIpcSenderFrom,
   createWebContentsDouble,
+  desktopInitializeResult,
   TRUSTED_HANDLER_OPTIONS,
 } from "./helpers";
 import { IPC } from "../ipc-channels";
@@ -24,17 +25,7 @@ async function readyRpc(child: ReturnType<typeof createChildProcessDouble>) {
     JSON.stringify({
       jsonrpc: "2.0",
       id: initReq.id,
-      result: {
-        protocol: "loopplane.desktop.stdio",
-        version: 1,
-        methods: [
-          "inspection.get",
-          "agentControls.get",
-          "capabilities.list",
-          "capabilities.invokeAction",
-        ],
-        capabilities: {},
-      },
+      result: desktopInitializeResult(),
     }),
   );
   await startP;

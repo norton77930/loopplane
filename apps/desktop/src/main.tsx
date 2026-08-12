@@ -11,7 +11,7 @@ if (root) {
     <StrictMode>
       <App
         transport={transport}
-        initialPhase={transport ? "ready" : "unavailable"}
+        initialPhase={transport ? "starting" : "unavailable"}
       />
     </StrictMode>,
   );

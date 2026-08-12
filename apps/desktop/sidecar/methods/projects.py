@@ -30,7 +30,7 @@ _BUSY = RpcError(
     message_key="desktop.error.busy",
 )
 _NOT_FOUND = RpcError(
-    code=-32005,
+    code=-32002,
     message="Not found",
     category="not_found",
     retryable=False,
@@ -39,7 +39,7 @@ _NOT_FOUND = RpcError(
 _INVALID = RpcError(
     code=-32602,
     message="Invalid params",
-    category="protocol",
+    category="invalid_params",
     retryable=False,
     message_key="desktop.error.invalid_params",
 )

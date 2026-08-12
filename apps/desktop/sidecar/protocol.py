@@ -3,21 +3,30 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from typing import Any, Final, Literal
 
 PROTOCOL_NAME: Final[str] = "loopplane.desktop.stdio"
-PROTOCOL_VERSION: Final[int] = 1
+PROTOCOL_MAJOR: Final[int] = 1
+PROTOCOL_MINOR: Final[int] = 0
+# Legacy test import; wire negotiation uses the major/minor object above.
+PROTOCOL_VERSION: Final[int] = PROTOCOL_MAJOR
+RUNTIME_EVENT_SCHEMA: Final[int] = 1
+SERVER_NAME: Final[str] = "loopplane-desktop-sidecar"
+SERVER_VERSION: Final[str] = "0.4.0"
 MAX_FRAME_BYTES: Final[int] = 1_048_576
+MAX_RUNTIME_EVENT_FRAME_BYTES: Final[int] = 8_388_608
 MAX_JSON_DEPTH: Final[int] = 32
-MAX_KEYS: Final[int] = 256
+MAX_KEYS: Final[int] = 128
 
 ErrorCategory = Literal[
-    "protocol",
-    "state",
+    "parse_error",
+    "invalid_request",
+    "method_not_found",
+    "invalid_params",
     "not_found",
     "busy",
-    "permission",
     "internal_failure",
     "incompatible_protocol",
     "conflict",
@@ -74,7 +83,7 @@ INTERNAL_FAILURE = RpcError(
 PARSE_ERROR = RpcError(
     code=-32700,
     message="Parse error",
-    category="protocol",
+    category="parse_error",
     retryable=False,
     message_key="desktop.error.parse_error",
 )
@@ -82,7 +91,7 @@ PARSE_ERROR = RpcError(
 INVALID_REQUEST = RpcError(
     code=-32600,
     message="Invalid request",
-    category="protocol",
+    category="invalid_request",
     retryable=False,
     message_key="desktop.error.invalid_request",
 )
@@ -90,14 +99,26 @@ INVALID_REQUEST = RpcError(
 METHOD_NOT_FOUND = RpcError(
     code=-32601,
     message="Method not found",
-    category="protocol",
+    category="method_not_found",
     retryable=False,
     message_key="desktop.error.method_not_found",
+)
+
+INVALID_PARAMS = RpcError(
+    code=-32602,
+    message="Invalid params",
+    category="invalid_params",
+    retryable=False,
+    message_key="desktop.error.invalid_params",
 )
 
 
 class FrameDecodeError(ValueError):
     """Raised when a frame is not valid UTF-8 LF JSON-RPC."""
+
+
+def _reject_nonfinite(_value: str) -> Any:
+    raise FrameDecodeError("non-finite number")
 
 
 def _json_depth(obj: Any, depth: int = 0) -> int:
@@ -114,12 +135,24 @@ def _json_depth(obj: Any, depth: int = 0) -> int:
     return depth
 
 
-def _count_keys(obj: Any) -> int:
+def _validate_json_value(obj: Any) -> None:
     if isinstance(obj, dict):
-        return len(obj) + sum(_count_keys(v) for v in obj.values())
+        if len(obj) > MAX_KEYS:
+            raise FrameDecodeError("too many keys")
+        for value in obj.values():
+            _validate_json_value(value)
+        return
     if isinstance(obj, list):
-        return sum(_count_keys(v) for v in obj)
-    return 0
+        for value in obj:
+            _validate_json_value(value)
+        return
+    if isinstance(obj, float) and not math.isfinite(obj):
+        raise FrameDecodeError("non-finite number")
+    if isinstance(obj, str):
+        try:
+            obj.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise FrameDecodeError("unpaired surrogate") from exc
 
 
 def decode_frame(line: bytes | str) -> dict[str, Any]:
@@ -151,7 +184,11 @@ def decode_frame(line: bytes | str) -> dict[str, Any]:
                 out[k] = v
             return out
 
-        obj = json.loads(text, object_pairs_hook=_no_dupes)
+        obj = json.loads(
+            text,
+            object_pairs_hook=_no_dupes,
+            parse_constant=_reject_nonfinite,
+        )
     except FrameDecodeError:
         raise
     except (ValueError, TypeError) as exc:
@@ -161,16 +198,17 @@ def decode_frame(line: bytes | str) -> dict[str, Any]:
         raise FrameDecodeError("root must be object")
     if _json_depth(obj) > MAX_JSON_DEPTH:
         raise FrameDecodeError("json too deep")
-    if _count_keys(obj) > MAX_KEYS:
-        raise FrameDecodeError("too many keys")
+    _validate_json_value(obj)
     return obj
 
 
-def encode_frame(obj: dict[str, Any]) -> bytes:
-    """Encode one JSON object as a single UTF-8 LF-terminated frame."""
+def encode_frame(
+    obj: dict[str, Any], *, max_frame_bytes: int = MAX_FRAME_BYTES
+) -> bytes:
+    """Encode one JSON object as a single bounded UTF-8 LF frame."""
 
     raw = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    if len(raw) > MAX_FRAME_BYTES:
+    if len(raw) > max_frame_bytes:
         raise FrameDecodeError("frame too large")
     return raw + b"\n"
 
@@ -188,17 +226,60 @@ def make_notification(method: str, params: dict[str, Any]) -> dict[str, Any]:
 
 
 class SerializedWriter:
-    """Single-threaded writer that emits one frame at a time."""
+    """Serialize stdout frames with a bounded reentrant notification queue."""
 
-    def __init__(self, write_bytes: Any) -> None:
+    def __init__(
+        self,
+        write_bytes: Any,
+        *,
+        max_notification_frames: int = 128,
+        max_notification_bytes: int = 16_777_216,
+    ) -> None:
         self._write = write_bytes
         self._busy = False
+        self.failed = False
+        self._max_notification_frames = max_notification_frames
+        self._max_notification_bytes = max_notification_bytes
+        self._notifications: list[bytes] = []
+        self._notification_bytes = 0
 
     def write_obj(self, obj: dict[str, Any]) -> None:
+        if self.failed:
+            raise RuntimeError("writer failed")
+        frame_limit = (
+            MAX_RUNTIME_EVENT_FRAME_BYTES
+            if obj.get("method") == "runtime.event" and "id" not in obj
+            else MAX_FRAME_BYTES
+        )
+        frame = encode_frame(obj, max_frame_bytes=frame_limit)
         if self._busy:
-            raise RuntimeError("writer re-entered")
+            if "method" not in obj or "id" in obj:
+                raise RuntimeError("writer re-entered")
+            if (
+                len(self._notifications) >= self._max_notification_frames
+                or self._notification_bytes + len(frame) > self._max_notification_bytes
+            ):
+                self.failed = True
+                self._notifications.clear()
+                self._notification_bytes = 0
+                raise RuntimeError("notification queue overflow")
+            self._notifications.append(frame)
+            self._notification_bytes += len(frame)
+            return
+
         self._busy = True
         try:
-            self._write(encode_frame(obj))
+            current = frame
+            while True:
+                self._write(current)
+                if not self._notifications:
+                    break
+                current = self._notifications.pop(0)
+                self._notification_bytes -= len(current)
+        except BaseException:
+            self.failed = True
+            self._notifications.clear()
+            self._notification_bytes = 0
+            raise
         finally:
             self._busy = False

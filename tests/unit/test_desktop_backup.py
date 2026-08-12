@@ -38,6 +38,13 @@ from methods.sessions import SessionMethods  # noqa: E402
 from methods.workspace import WorkspaceMethods  # noqa: E402
 from mutation_lease import MutationLeaseBusy, ProfileMutationLease  # noqa: E402
 from protocol import RpcError  # noqa: E402
+
+INITIALIZE_PARAMS = {
+    "protocol": {"name": "loopplane.desktop.stdio", "major": 1, "minor": 0},
+    "runtime_event_schema": 1,
+    "client": {"name": "test-client", "version": "0"},
+    "requested_capabilities": [],
+}
 from restore import RestoreManager  # noqa: E402
 
 pytestmark = pytest.mark.anyio
@@ -123,14 +130,21 @@ async def test_snapshot_failure_uses_the_sole_fallback_without_replacing_destina
         principal_id=state.principal_id,
     )
     await dispatcher.handle_frame(  # type: ignore[attr-defined]
-        json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": "init",
+                "method": "initialize",
+                "params": INITIALIZE_PARAMS,
+            }
+        )
     )
 
     response = await dispatcher.handle_frame(  # type: ignore[attr-defined]
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 2,
+                "id": "backup-create",
                 "method": "backup.create",
                 "params": {
                     "mutation_id": "backup",
@@ -744,14 +758,16 @@ async def test_restore_commit_publishes_relinked_profile_and_releases_reservatio
 async def test_restore_transition_rejects_token_without_exact_lease_mapping(
     tmp_path: Path,
 ) -> None:
+    reservation_id = "restore-reservation-id"
+
     class Reservation:
-        token = "restore-token"
+        token = reservation_id
 
     class TrackingRestore:
         cancelled = False
 
         def get(self, token: str) -> Reservation | None:
-            return Reservation() if token == "restore-token" else None
+            return Reservation() if token == reservation_id else None
 
         def cancel(self, _token: str) -> bool:
             self.cancelled = True
@@ -773,7 +789,7 @@ async def test_restore_transition_rejects_token_without_exact_lease_mapping(
         await methods.restore_commit(
             {
                 "mutation_id": "restore-commit",
-                "restore_token": "restore-token",
+                "restore_token": reservation_id,
                 "confirmation": True,
             }
         )

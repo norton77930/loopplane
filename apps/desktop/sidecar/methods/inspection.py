@@ -26,7 +26,7 @@ MethodHandler = Callable[[dict[str, Any]], Awaitable[Any]]
 _INVALID = RpcError(
     code=-32602,
     message="Invalid params",
-    category="protocol",
+    category="invalid_params",
     retryable=False,
     message_key="desktop.error.invalid_params",
 )

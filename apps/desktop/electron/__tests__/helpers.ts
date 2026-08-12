@@ -9,6 +9,75 @@ export const TRUSTED_HANDLER_OPTIONS = {
   expectedSenderUrl: TRUSTED_RENDERER_URL,
 } as const;
 
+export const DESKTOP_RPC_METHODS = [
+  "initialize",
+  "system.status",
+  "system.shutdown",
+  "session.list",
+  "session.history",
+  "session.rename",
+  "session.setStarred",
+  "session.delete",
+  "session.fork",
+  "session.createInteractive",
+  "session.resumeInteractive",
+  "session.releaseInteractive",
+  "interaction.submit",
+  "interaction.cancel",
+  "interaction.answerApproval",
+  "interaction.answerQuestion",
+  "project.list",
+  "project.create",
+  "project.rename",
+  "project.remove",
+  "project.assignSession",
+  "inspection.get",
+  "agentControls.get",
+  "capabilities.list",
+  "capabilities.invokeAction",
+  "audit.list",
+  "workspace.list",
+  "workspace.bind",
+  "workspace.relink",
+  "workspace.remove",
+  "workspace.revalidate",
+  "backup.describe",
+  "backup.create",
+  "restore.validate",
+  "restore.commit",
+  "restore.cancel",
+] as const;
+
+export function desktopInitializeResult() {
+  return {
+    protocol: { name: "loopplane.desktop.stdio", major: 1, minor: 0 },
+    runtime_event_schema: 1,
+    server: { name: "loopplane-desktop-sidecar", version: "0.4.0" },
+    methods: [...DESKTOP_RPC_METHODS],
+    notifications: [
+      "runtime.event",
+      "runtime.outcome",
+      "runtime.state",
+      "runtime.subscriptionClosed",
+    ],
+    capabilities: {
+      sessions: "available",
+      interaction: "available",
+      projects: "available",
+      inspection: "available",
+      workspace: "available",
+      backup: "available",
+    },
+    limits: {
+      control_frame_bytes: 1_048_576,
+      runtime_event_frame_bytes: 8_388_608,
+      prompt_bytes: 65_536,
+      pending_requests: 64,
+      subscriptions: 8,
+    },
+  };
+}
+
 export type FrameDouble = { url: string };
 
 export type IpcSender = {

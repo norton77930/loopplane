@@ -46,6 +46,8 @@ describe("preload session/project/workspace surface", () => {
     expect(src).not.toContain("fs.");
     expect(src).not.toContain("mutation_id");
     expect(src).not.toContain("jsonrpc");
+    expect(src).toContain("payloadSubscriptionId !== subscriptionId");
+    expect(src).not.toContain("_subscriptionId");
   });
 
   it("types sessions projects and workspaces on the global facade", () => {

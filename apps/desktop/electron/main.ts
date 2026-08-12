@@ -1,6 +1,7 @@
 // Electron main: secure window + SidecarRpcClient supervisor + typed IPC (078 T027–T032).
 
 import { spawn, type ChildProcessByStdio } from "node:child_process";
+import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -23,6 +24,7 @@ type WindowRuntime = {
   disposeHandlers: (() => void) | null;
   started: boolean;
   shuttingDown: boolean;
+  shutdownPromise: Promise<void> | null;
 };
 
 type PackagedSmokeScenario =
@@ -73,27 +75,29 @@ async function teardownRuntime(
   runtime: WindowRuntime,
   { force = false }: { force?: boolean } = {},
 ): Promise<void> {
-  if (runtime.shuttingDown) return;
-  runtime.shuttingDown = true;
-  runtime.disposeHandlers?.();
-  runtime.disposeHandlers = null;
-  try {
-    if (runtime.started && !force) {
-      await runtime.rpc.shutdown();
-    } else {
+  runtime.shutdownPromise ??= (async () => {
+    runtime.shuttingDown = true;
+    runtime.disposeHandlers?.();
+    runtime.disposeHandlers = null;
+    try {
+      if (runtime.started && !force) {
+        await runtime.rpc.shutdown();
+      } else {
+        try {
+          runtime.child.kill();
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
       try {
         runtime.child.kill();
       } catch {
         /* ignore */
       }
     }
-  } catch {
-    try {
-      runtime.child.kill();
-    } catch {
-      /* ignore */
-    }
-  }
+  })();
+  await runtime.shutdownPromise;
 }
 
 function createWindow(smoke: PackagedSmokeOptions | null): void {
@@ -168,8 +172,10 @@ function createWindow(smoke: PackagedSmokeOptions | null): void {
       ...process.env,
       LOOPPLANE_PROFILE_ROOT:
         smoke?.profileRoot ??
-        process.env.LOOPPLANE_PROFILE_ROOT ??
-        fileURLToPath(new URL("../.desktop-profile", import.meta.url)),
+        (app.isPackaged
+          ? join(app.getPath("userData"), "profile")
+          : process.env.LOOPPLANE_PROFILE_ROOT ??
+            join(app.getPath("userData"), "profile")),
       LOOPPLANE_PACKAGED_SMOKE_SCENARIO: smoke?.scenario,
     },
   });
@@ -242,6 +248,7 @@ function createWindow(smoke: PackagedSmokeOptions | null): void {
     disposeHandlers: null,
     started: false,
     shuttingDown: false,
+    shutdownPromise: null,
   };
 
   const rpc = new SidecarRpcClient({
@@ -260,10 +267,16 @@ function createWindow(smoke: PackagedSmokeOptions | null): void {
     },
     onNotification: (method, params) => {
       if (window.isDestroyed() || runtime.shuttingDown) return;
-      // Never start new durable work during shutdown.
-      if (method.startsWith("runtime.")) {
+      // Never start new durable work during shutdown; route only exact V1 methods.
+      if (
+        method === "runtime.event" ||
+        method === "runtime.outcome" ||
+        method === "runtime.subscriptionClosed"
+      ) {
         window.webContents.send("lp:interaction:event", { method, params });
-      } else {
+        return;
+      }
+      if (method === "runtime.state") {
         window.webContents.send("lp:app:statusEvent", { method, params });
       }
     },
@@ -279,24 +292,36 @@ function createWindow(smoke: PackagedSmokeOptions | null): void {
   runtime.rpc = rpc;
   active = runtime;
 
+  const bindHandlers = (): (() => void) =>
+    registerDesktopIpcHandlers({
+      ipcMain,
+      rpc,
+      expectedSenderId: window.webContents.id,
+      expectedSenderUrl: entryUrl,
+      status: async () => ({ ready: rpc.connectionState === "ready" }),
+      onShutdown: async () => {
+        await teardownRuntime(runtime);
+        app.quit();
+      },
+      chooseDirectory,
+      chooseBackupDestination,
+      chooseRestoreSource,
+    });
+
+  runtime.disposeHandlers = bindHandlers();
+
   void (async () => {
     try {
       await rpc.start();
       if (runtime.shuttingDown) return;
       runtime.started = true;
-      runtime.disposeHandlers = registerDesktopIpcHandlers({
-        ipcMain,
-        rpc,
-        expectedSenderId: window.webContents.id,
-        expectedSenderUrl: entryUrl,
-        onShutdown: async () => {
-          await teardownRuntime(runtime);
-          app.quit();
-        },
-        chooseDirectory,
-        chooseBackupDestination,
-        chooseRestoreSource,
-      });
+      runtime.disposeHandlers = bindHandlers();
+      if (!window.isDestroyed()) {
+        window.webContents.send("lp:app:statusEvent", {
+          method: "runtime.state",
+          params: { state: "ready" },
+        });
+      }
     } catch (error) {
       const diagnostic =
         error instanceof Error &&
@@ -333,26 +358,22 @@ function createWindow(smoke: PackagedSmokeOptions | null): void {
     runtime.disposeHandlers = null;
   });
   window.webContents.on("did-finish-load", () => {
-    if (runtime.shuttingDown || !runtime.started || window.isDestroyed()) return;
-    if (rpc.connectionState !== "ready") return;
-    runtime.disposeHandlers = registerDesktopIpcHandlers({
-      ipcMain,
-      rpc,
-      expectedSenderId: window.webContents.id,
-      expectedSenderUrl: entryUrl,
-      onShutdown: async () => {
-        await teardownRuntime(runtime);
-        app.quit();
-      },
-      chooseDirectory,
-      chooseBackupDestination,
-      chooseRestoreSource,
-    });
+    if (runtime.shuttingDown || window.isDestroyed()) return;
+    runtime.disposeHandlers = bindHandlers();
+    if (rpc.connectionState === "ready") {
+      window.webContents.send("lp:app:statusEvent", {
+        method: "runtime.state",
+        params: { state: "ready" },
+      });
+    }
   });
 
   window.on("closed", () => {
-    void teardownRuntime(runtime);
-    if (active === runtime) active = null;
+    void (async () => {
+      await teardownRuntime(runtime);
+      if (active === runtime) active = null;
+      app.quit();
+    })();
   });
 
   void window.loadFile(entryPath);
@@ -374,17 +395,17 @@ void app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  app.quit();
+  if (!active) app.quit();
 });
 
 // Last-chance: no orphan sidecar after app quit.
 app.on("before-quit", (event) => {
-  if (active && !active.shuttingDown) {
-    event.preventDefault();
-    void (async () => {
-      await teardownRuntime(active!);
-      active = null;
-      app.quit();
-    })();
-  }
+  if (!active) return;
+  event.preventDefault();
+  const runtime = active;
+  void (async () => {
+    await teardownRuntime(runtime);
+    if (active === runtime) active = null;
+    app.quit();
+  })();
 });

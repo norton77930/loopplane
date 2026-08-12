@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import type { AcceptedRun } from "../global";
 import type { DesktopApi } from "../sidecar";
 import { SidecarTransport } from "../sidecar";
 
@@ -95,10 +96,10 @@ function fakeApi(): {
         pushHandler?.({
           method: "runtime.event",
           params: {
-            event: JSON.stringify({
+            event: {
               type: "assistant-output-increment",
               payload: { text: "hi", turn_index: 0 },
-            }),
+            },
           },
         });
         return {
@@ -147,6 +148,58 @@ describe("SidecarTransport (typed Desktop API)", () => {
     expect(types).toContain("run-terminated");
     expect(transport.activeSubscriptionId).toBe("sub-1");
     expect(transport.activeSessionId).toBe("sess-1");
+  });
+
+  it("does not synthesize a duplicate terminal event after the real one was yielded", async () => {
+    const { api, push } = fakeApi();
+    let resolveSubmit!: (
+      value: AcceptedRun | PromiseLike<AcceptedRun>
+    ) => void;
+    api.interaction.submit = () =>
+      new Promise<AcceptedRun>((resolve) => {
+        resolveSubmit = resolve;
+      });
+    const transport = new SidecarTransport(api);
+    const run = transport.run("hello");
+    const first = run.next();
+    await Promise.resolve();
+
+    push({
+      method: "runtime.event",
+      params: {
+        event: {
+          type: "run-terminated",
+          payload: { reason: "natural-completion", turns_taken: 1 },
+        },
+      },
+    });
+    await expect(first).resolves.toMatchObject({
+      done: false,
+      value: { type: "run-terminated" },
+    });
+
+    const completion = run.next();
+    push({ method: "runtime.outcome", params: {} });
+    resolveSubmit({
+      termination_reason: "natural-completion",
+      turns_taken: 1,
+    });
+
+    await expect(completion).resolves.toEqual({ done: true, value: undefined });
+  });
+
+  it("rejects and unsubscribes when submit fails without an outcome", async () => {
+    const { api } = fakeApi();
+    const unsubscribe = vi.fn();
+    api.interaction.subscribe = () => unsubscribe;
+    api.interaction.submit = async () => {
+      throw new Error("runtime unavailable");
+    };
+    const transport = new SidecarTransport(api);
+    const run = transport.run("hello");
+
+    await expect(run.next()).rejects.toThrow("runtime unavailable");
+    expect(unsubscribe).toHaveBeenCalledOnce();
   });
 
   it("lists sessions/projects/workspaces through typed methods", async () => {

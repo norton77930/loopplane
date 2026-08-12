@@ -11,6 +11,7 @@ import {
   createChildProcessDouble,
   createIpcSenderFrom,
   createWebContentsDouble,
+  desktopInitializeResult,
   TRUSTED_HANDLER_OPTIONS,
 } from "../../electron/__tests__/helpers";
 import { IPC } from "../../electron/ipc-channels";
@@ -56,11 +57,27 @@ describe("bundled CSP and main composition", () => {
     expect(main).toContain("installDenyByDefaultPermissions");
     expect(main).not.toContain("function createDiagnosticWindow");
     expect(main).toContain("registerDesktopIpcHandlers");
+    expect(main.indexOf("registerDesktopIpcHandlers({")).toBeLessThan(
+      main.indexOf("await rpc.start()"),
+    );
+    expect(main).toContain("status: async () => ({ ready: rpc.connectionState === \"ready\" })");
+    expect(main).toContain('method: "runtime.state"');
+    expect(main).toContain('state: "ready"');
+    expect(main).toContain("shutdownPromise: Promise<void> | null");
+    expect(main).toContain("runtime.shutdownPromise ??=");
+    expect(main).toContain("await runtime.shutdownPromise");
+    expect(main).not.toContain("void teardownRuntime(runtime)");
+    expect(main).not.toContain("active && !active.shuttingDown");
     expect(main).toContain("SidecarRpcClient");
     expect(main).toContain("pathToFileURL(entryPath).href");
     // Raw line tunnel must not remain as the privileged path.
     expect(main).not.toContain("sidecar:send");
     expect(main).not.toContain("sidecar:line");
+    expect(main).toContain('method === "runtime.event"');
+    expect(main).toContain('method === "runtime.outcome"');
+    expect(main).toContain('method === "runtime.subscriptionClosed"');
+    expect(main).toContain('method === "runtime.state"');
+    expect(main).not.toContain('method.startsWith("runtime.")');
   });
 });
 
@@ -143,12 +160,7 @@ describe("typed IPC handlers", () => {
       JSON.stringify({
         jsonrpc: "2.0",
         id: initReq.id,
-        result: {
-          protocol: "loopplane.desktop.stdio",
-          version: 1,
-          methods: ["session.createInteractive"],
-          capabilities: {},
-        },
+        result: desktopInitializeResult(),
       }),
     );
     await startP;

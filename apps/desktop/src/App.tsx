@@ -112,14 +112,14 @@ export function App({
       setSessions(s);
       setProjects(p);
       setWorkspaces(w);
-      if (!selectedWorkspaceId) {
-        const available = w.find((x) => x.availability === "available");
-        if (available) setSelectedWorkspaceId(available.id);
+      const available = w.find((x) => x.availability === "available");
+      if (available) {
+        setSelectedWorkspaceId((current) => current ?? available.id);
       }
     } catch {
       /* lists are best-effort */
     }
-  }, [transport, selectedWorkspaceId]);
+  }, [transport]);
 
   useEffect(() => {
     mounted.current = true;
@@ -142,10 +142,18 @@ export function App({
         method?: unknown;
         params?: { diagnostic?: unknown; state?: unknown };
       };
-      if (value.method !== "runtime.state" || value.params?.state !== "failed") {
+      if (value.method !== "runtime.state" || !mounted.current) {
         return;
       }
-      if (!mounted.current) return;
+      if (value.params?.state === "ready") {
+        setPhase("ready");
+        setRuntimeDiagnostic(null);
+        void refreshLists();
+        return;
+      }
+      if (value.params?.state !== "failed") {
+        return;
+      }
       const publicDiagnostic = value.params.diagnostic;
       const diagnostic =
         typeof publicDiagnostic === "string" && publicDiagnostic.trim()
@@ -158,10 +166,14 @@ export function App({
       );
       setRuntimeDiagnostic(diagnostic);
     });
-  }, [transport]);
+  }, [transport, refreshLists]);
 
   useEffect(() => {
-    if (!transport || phase === "unavailable" || phase === "incompatible") {
+    if (
+      !transport ||
+      initialPhase === "unavailable" ||
+      initialPhase === "incompatible"
+    ) {
       return;
     }
     let cancelled = false;
@@ -170,9 +182,11 @@ export function App({
         const status = await transport.status?.();
         if (cancelled || !mounted.current) return;
         if (status && status.ready === false) {
-          setPhase("unavailable");
+          setPhase("starting");
           return;
         }
+        setPhase((current) => (current === "starting" ? "ready" : current));
+        setRuntimeDiagnostic(null);
         await refreshLists();
       } catch {
         if (!cancelled && mounted.current) setPhase("unavailable");
@@ -181,7 +195,7 @@ export function App({
     return () => {
       cancelled = true;
     };
-  }, [transport, phase, refreshLists]);
+  }, [initialPhase, transport, refreshLists]);
 
   // Keep renderer draft pane-local and on transport only (never durable).
   useEffect(() => {

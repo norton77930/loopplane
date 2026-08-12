@@ -10,7 +10,7 @@ that gate.
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 ReadLine = Callable[[], Awaitable[str | None]]
 WriteLine = Callable[[str], None]
+WriteFrame = Callable[[dict[str, Any]], None]
 
 
 async def collect_events(host: LoopPlaneHost, prompt: str) -> list[str]:
@@ -99,9 +100,21 @@ async def _run(host: LoopPlaneHost, prompt: str, write_line: WriteLine) -> None:
 async def serve_rpc(
     dispatcher: object,
     read_line: ReadLine,
-    write_line: WriteLine,
+    write_line: WriteLine | None = None,
+    *,
+    write_frame: WriteFrame | None = None,
 ) -> None:
     """JSON-RPC V1 loop over an injected dispatcher (no Host construction here)."""
+
+    if (write_line is None) == (write_frame is None):
+        raise ValueError("exactly one RPC writer is required")
+
+    def emit(frame: dict[str, Any]) -> None:
+        if write_frame is not None:
+            write_frame(frame)
+            return
+        assert write_line is not None
+        write_line(json.dumps(frame, separators=(",", ":")))
 
     handle_frame = dispatcher.handle_frame  # type: ignore[attr-defined]
     try:
@@ -114,7 +127,7 @@ async def serve_rpc(
                 continue
             responses = await handle_frame(raw)
             for msg in responses:
-                write_line(json.dumps(msg, separators=(",", ":")))
+                emit(msg)
     finally:
         teardown = getattr(dispatcher, "aclose", None)
         if callable(teardown):
@@ -164,6 +177,7 @@ def build_rpc_dispatcher(
     *,
     working_scope: Path | None = None,
     write_line: WriteLine | None = None,
+    write_frame: WriteFrame | None = None,
     on_shutdown: Callable[[], Awaitable[None] | None] | None = None,
     profile_state: ProfileState | None = None,
     mutation_lease: object | None = None,
@@ -194,30 +208,33 @@ def build_rpc_dispatcher(
     )
     notifications: list[dict] = []
     shutting_down = {"value": False}
+    dispatcher: Dispatcher | None = None
+
+    async def emit_notification(method: str, payload: dict) -> None:
+        if shutting_down["value"]:
+            return
+        if dispatcher is None:
+            raise RuntimeError("dispatcher notification before composition")
+        frame = dispatcher.next_notification(method, payload)
+        if write_frame is not None:
+            write_frame(frame)
+            return
+        if write_line is not None:
+            write_line(json.dumps(frame, separators=(",", ":")))
+            return
+        notifications.append(frame)
 
     async def emit_event(payload: dict) -> None:
-        if shutting_down["value"] or write_line is None:
-            if write_line is None:
-                notifications.append(payload)
-            return
-        frame = {
-            "jsonrpc": "2.0",
-            "method": "runtime.event",
-            "params": payload,
-        }
-        write_line(json.dumps(frame, separators=(",", ":")))
+        await emit_notification("runtime.event", payload)
 
     async def emit_outcome(payload: dict) -> None:
-        if shutting_down["value"] or write_line is None:
-            if write_line is None:
-                notifications.append(payload)
-            return
-        frame = {
-            "jsonrpc": "2.0",
-            "method": "runtime.outcome",
-            "params": payload,
-        }
-        write_line(json.dumps(frame, separators=(",", ":")))
+        await emit_notification("runtime.outcome", payload)
+
+    async def emit_state(payload: dict) -> None:
+        await emit_notification("runtime.state", payload)
+
+    async def emit_closed(payload: dict) -> None:
+        await emit_notification("runtime.subscriptionClosed", payload)
 
     workspace_store = None
     project_store = None
@@ -256,6 +273,8 @@ def build_rpc_dispatcher(
         working_scope=working_scope,
         emit_event=emit_event,
         emit_outcome=emit_outcome,
+        emit_state=emit_state,
+        emit_closed=emit_closed,
         workspace_store=workspace_store,
         mutation_lease=mut_lease,
         principal_id=principal_id,
@@ -324,17 +343,21 @@ def build_rpc_dispatcher(
     async def teardown() -> None:
         if torn_down["value"]:
             return
-        shutting_down["value"] = True
-        await lease.shutdown()
-        if backup_methods is not None:
-            backup_methods.shutdown()
-        if handover is not None:
-            await handover.aclose()
-        elif on_shutdown is not None:
-            result = on_shutdown()
-            if result is not None:
-                await result
-        torn_down["value"] = True
+        try:
+            await lease.shutdown()
+        finally:
+            shutting_down["value"] = True
+            try:
+                if backup_methods is not None:
+                    backup_methods.shutdown()
+                if handover is not None:
+                    await handover.aclose()
+                elif on_shutdown is not None:
+                    result = on_shutdown()
+                    if result is not None:
+                        await result
+            finally:
+                torn_down["value"] = True
 
     async def system_shutdown(_params: dict) -> dict:
         # Bounded teardown only: it starts no durable work.
@@ -342,7 +365,6 @@ def build_rpc_dispatcher(
         return {"ok": True}
 
     handlers["system.shutdown"] = system_shutdown
-    handlers["shutdown"] = system_shutdown
 
     dispatcher = Dispatcher(
         methods=handlers,
@@ -359,22 +381,46 @@ def build_rpc_dispatcher(
     return dispatcher
 
 
+_SMOKE_RESPONSES = {
+    "happy": "loopplane-packaged-smoke-ok",
+    "missing-sidecar": "runtime missing",
+    "corrupt-sidecar": "runtime corrupt",
+    "incompatible-sidecar": "runtime incompatible",
+}
+
+
+def select_desktop_model(env: Mapping[str, str]) -> Any:
+    """Use a bounded scripted model only for an accepted packaged-smoke scenario."""
+
+    smoke_scenario = env.get("LOOPPLANE_PACKAGED_SMOKE_SCENARIO")
+    if smoke_scenario is None:
+        from loopplane.cli.providers import select_model
+
+        return select_model(env)
+    if smoke_scenario not in _SMOKE_RESPONSES:
+        raise ValueError("sidecar_smoke_scenario_invalid")
+
+    from loopplane.model import ScriptedModel, ScriptedTurn, TextIncrement
+
+    return ScriptedModel(
+        script=[
+            ScriptedTurn(
+                increments=[TextIncrement(text=_SMOKE_RESPONSES[smoke_scenario])]
+            )
+        ],
+        context_capacity=100_000,
+    )
+
+
 def main() -> None:  # pragma: no cover - real stdio entry (manual smoke)
     import os
     import sys
 
     import anyio
 
-    from loopplane.model import ScriptedModel, ScriptedTurn, TextIncrement
-
-    smoke_scenario = os.environ.get("LOOPPLANE_PACKAGED_SMOKE_SCENARIO")
-    smoke_responses = {
-        "happy": "loopplane-packaged-smoke-ok",
-        "missing-sidecar": "runtime missing",
-        "corrupt-sidecar": "runtime corrupt",
-        "incompatible-sidecar": "runtime incompatible",
-    }
-    if smoke_scenario is not None and smoke_scenario not in smoke_responses:
+    try:
+        model = select_desktop_model(os.environ)
+    except ValueError:
         sys.stderr.write("sidecar smoke configuration failed\n")
         sys.exit(2)
 
@@ -390,15 +436,6 @@ def main() -> None:  # pragma: no cover - real stdio entry (manual smoke)
         sys.stderr.write(f"sidecar bootstrap failed: {type(exc).__name__}\n")
         sys.exit(2)
 
-    response = (
-        smoke_responses[smoke_scenario]
-        if smoke_scenario is not None
-        else "LoopPlane desktop demo"
-    )
-    model = ScriptedModel(
-        script=[ScriptedTurn(increments=[TextIncrement(text=response)])],
-        context_capacity=100_000,
-    )
     config = desktop_runtime_config(
         model=model,
         profile_root=profile,
@@ -410,14 +447,21 @@ def main() -> None:  # pragma: no cover - real stdio entry (manual smoke)
     async def read_line() -> str | None:
         return await anyio.to_thread.run_sync(sys.stdin.readline) or None
 
-    def write_line(text: str) -> None:
-        sys.stdout.write(text + "\n")
-        sys.stdout.flush()
+    def write_bytes(frame: bytes) -> None:
+        sys.stdout.buffer.write(frame)
+        sys.stdout.buffer.flush()
+
+    try:
+        from .protocol import SerializedWriter
+    except ImportError:  # pragma: no cover - script-path load
+        from protocol import SerializedWriter
+
+    writer = SerializedWriter(write_bytes)
 
     dispatcher = build_rpc_dispatcher(
         host,
         working_scope=profile,
-        write_line=write_line,
+        write_frame=writer.write_obj,
         profile_state=profile_state,
         mutation_lease=owner.mutation_lease,
         principal_id=profile_state.principal_id,
@@ -427,7 +471,7 @@ def main() -> None:  # pragma: no cover - real stdio entry (manual smoke)
 
     async def _run_rpc() -> None:
         try:
-            await serve_rpc(dispatcher, read_line, write_line)
+            await serve_rpc(dispatcher, read_line, write_frame=writer.write_obj)
         finally:
             # Release profile ownership only after every retained Host closes.
             await dispatcher.aclose()  # type: ignore[attr-defined]

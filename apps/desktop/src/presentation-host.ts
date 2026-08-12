@@ -33,6 +33,7 @@ type DesktopPresentationApi = DesktopApi &
 export class DesktopPresentationHost implements CoworkPresentationHost {
   private readonly api: DesktopPresentationApi;
   private readonly transport: SidecarTransport;
+  private readonly progressHandlers = new Map<string, Set<ProgressHandler>>();
 
   constructor(api: DesktopPresentationApi) {
     this.api = api;
@@ -179,20 +180,20 @@ export class DesktopPresentationHost implements CoworkPresentationHost {
   }
 
   subscribeProgress(sessionId: string, onEvent: ProgressHandler): () => void {
-    return this.api.interaction.subscribe(sessionId, (payload) => {
-      const push = payload as { method?: string; params?: { event?: string } };
-      if (push?.method === "runtime.event" && push.params?.event) {
-        try {
-          const event =
-            typeof push.params.event === "string"
-              ? JSON.parse(push.params.event)
-              : push.params.event;
-          onEvent(event as { type: string; payload?: unknown });
-        } catch {
-          /* ignore malformed */
-        }
-      }
-    });
+    let handlers = this.progressHandlers.get(sessionId);
+    if (!handlers) {
+      handlers = new Set();
+      this.progressHandlers.set(sessionId, handlers);
+    }
+    handlers.add(onEvent);
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      const current = this.progressHandlers.get(sessionId);
+      current?.delete(onEvent);
+      if (current?.size === 0) this.progressHandlers.delete(sessionId);
+    };
   }
 
   async submit(
@@ -200,10 +201,17 @@ export class DesktopPresentationHost implements CoworkPresentationHost {
     prompt: string,
     options?: PresentationSubmitOptions,
   ): Promise<void> {
-    // Interactive path goes through SidecarTransport; sessionId is correlation.
-    void sessionId;
-    for await (const _ of this.transport.run(prompt, options)) {
-      /* drain */
+    for await (const event of this.transport.run(prompt, options)) {
+      this.routeProgressEvent(sessionId, event);
+    }
+  }
+
+  private routeProgressEvent(
+    sessionId: string,
+    event: { type: string; payload?: unknown },
+  ): void {
+    for (const handler of this.progressHandlers.get(sessionId) ?? []) {
+      handler(event);
     }
   }
 

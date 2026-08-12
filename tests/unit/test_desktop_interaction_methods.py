@@ -16,7 +16,13 @@ sys.path.insert(0, str(SIDECAR))
 from dispatcher import Dispatcher  # noqa: E402
 from interaction import InteractionLease  # noqa: E402
 from methods.interaction import InteractionMethods  # noqa: E402
-from protocol import PROTOCOL_NAME, PROTOCOL_VERSION, RpcError  # noqa: E402
+from protocol import (  # noqa: E402
+    PROTOCOL_MAJOR,
+    PROTOCOL_MINOR,
+    PROTOCOL_NAME,
+    RUNTIME_EVENT_SCHEMA,
+    RpcError,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -40,19 +46,21 @@ def _host(tmp_path: Path) -> LoopPlaneHost:
 
 async def _init(d: Dispatcher) -> None:
     await d.handle_frame(
-        {
-            "jsonrpc": "2.0",
-            "id": 0,
-            "method": "initialize",
-            "params": {"protocol": PROTOCOL_NAME, "version": PROTOCOL_VERSION},
-        }
-        if False
-        else __import__("json").dumps(
+        __import__("json").dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 0,
+                "id": "init",
                 "method": "initialize",
-                "params": {"protocol": PROTOCOL_NAME, "version": PROTOCOL_VERSION},
+                "params": {
+                    "protocol": {
+                        "name": PROTOCOL_NAME,
+                        "major": PROTOCOL_MAJOR,
+                        "minor": PROTOCOL_MINOR,
+                    },
+                    "runtime_event_schema": RUNTIME_EVENT_SCHEMA,
+                    "client": {"name": "test-client", "version": "0"},
+                    "requested_capabilities": [],
+                },
             }
         )
     )
@@ -63,6 +71,27 @@ async def test_create_submit_release_round_trip(tmp_path: Path) -> None:
 
     host = _host(tmp_path)
     lease = InteractionLease()
+    notifications: list[dict] = []
+    d: Dispatcher
+
+    async def emit_event(payload: dict) -> None:
+        notifications.append(d.next_notification("runtime.event", payload))
+
+    async def emit_outcome(payload: dict) -> None:
+        notifications.append(d.next_notification("runtime.outcome", payload))
+
+    async def emit_state(payload: dict) -> None:
+        notifications.append(d.next_notification("runtime.state", payload))
+
+    async def emit_closed(payload: dict) -> None:
+        notifications.append(d.next_notification("runtime.subscriptionClosed", payload))
+
+    lease.set_emitters(
+        emit_event=emit_event,
+        emit_outcome=emit_outcome,
+        emit_state=emit_state,
+        emit_closed=emit_closed,
+    )
     methods = InteractionMethods(host, lease, working_scope=tmp_path)
     d = Dispatcher(methods=methods.handlers())
     await _init(d)
@@ -71,7 +100,7 @@ async def test_create_submit_release_round_trip(tmp_path: Path) -> None:
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 1,
+                "id": "request-1",
                 "method": "session.createInteractive",
                 "params": {"mutation_id": "m1", "pane_id": "p1"},
             }
@@ -80,12 +109,17 @@ async def test_create_submit_release_round_trip(tmp_path: Path) -> None:
     assert "result" in created[0]
     sub_id = created[0]["result"]["subscription_id"]
     session_id = created[0]["result"]["session_id"]
+    assert notifications[-1]["method"] == "runtime.state"
+    assert notifications[-1]["params"] == {
+        "notification_seq": 1,
+        "state": "opened",
+    }
 
     submitted = await d.handle_frame(
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 2,
+                "id": "request-2",
                 "method": "interaction.submit",
                 "params": {
                     "mutation_id": "m2",
@@ -97,18 +131,66 @@ async def test_create_submit_release_round_trip(tmp_path: Path) -> None:
     )
     assert submitted[0]["result"]["accepted"] is True
     assert submitted[0]["result"]["session_id"] == session_id
+    assert notifications[-1]["method"] == "runtime.outcome"
+    assert all(frame["method"] == "runtime.event" for frame in notifications[1:-1])
+    assert [frame["params"]["notification_seq"] for frame in notifications] == list(
+        range(1, len(notifications) + 1)
+    )
+    for frame in notifications:
+        if frame["method"] == "runtime.event":
+            assert isinstance(frame["params"]["event"], dict)
 
     released = await d.handle_frame(
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 3,
+                "id": "request-3",
                 "method": "session.releaseInteractive",
                 "params": {"mutation_id": "m3", "subscription_id": sub_id},
             }
         )
     )
     assert released[0]["result"]["released"] is True
+    assert notifications[-1]["method"] == "runtime.subscriptionClosed"
+    assert notifications[-1]["params"] == {
+        "notification_seq": len(notifications),
+        "subscription_id": sub_id,
+        "session_id": session_id,
+        "reason": "released",
+        "history_readable": True,
+    }
+
+
+async def test_shutdown_emits_draining_then_final_close(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    lease = InteractionLease()
+    notifications: list[tuple[str, dict]] = []
+
+    async def emit_state(payload: dict) -> None:
+        notifications.append(("runtime.state", payload))
+
+    async def emit_closed(payload: dict) -> None:
+        notifications.append(("runtime.subscriptionClosed", payload))
+
+    lease.set_emitters(emit_state=emit_state, emit_closed=emit_closed)
+    methods = InteractionMethods(host, lease, working_scope=tmp_path)
+    created = await methods.create_interactive({"mutation_id": "m1"})
+
+    notifications.clear()
+    await lease.shutdown()
+
+    assert notifications == [
+        ("runtime.state", {"state": "draining"}),
+        (
+            "runtime.subscriptionClosed",
+            {
+                "subscription_id": created["subscription_id"],
+                "session_id": created["session_id"],
+                "reason": "shutdown",
+                "history_readable": True,
+            },
+        ),
+    ]
 
 
 async def test_second_create_is_busy(tmp_path: Path) -> None:
@@ -124,7 +206,7 @@ async def test_second_create_is_busy(tmp_path: Path) -> None:
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 1,
+                "id": "request-1",
                 "method": "session.createInteractive",
                 "params": {"mutation_id": "m1"},
             }
@@ -134,7 +216,7 @@ async def test_second_create_is_busy(tmp_path: Path) -> None:
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 2,
+                "id": "request-2",
                 "method": "session.createInteractive",
                 "params": {"mutation_id": "m2"},
             }
@@ -155,7 +237,7 @@ async def test_missing_mutation_id_rejected(tmp_path: Path) -> None:
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 1,
+                "id": "request-1",
                 "method": "session.createInteractive",
                 "params": {},
             }
@@ -177,7 +259,7 @@ async def test_resume_after_release(tmp_path: Path) -> None:
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 1,
+                "id": "request-1",
                 "method": "session.createInteractive",
                 "params": {"mutation_id": "m1"},
             }
@@ -189,7 +271,7 @@ async def test_resume_after_release(tmp_path: Path) -> None:
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 2,
+                "id": "request-2",
                 "method": "interaction.submit",
                 "params": {
                     "mutation_id": "m2",
@@ -203,7 +285,7 @@ async def test_resume_after_release(tmp_path: Path) -> None:
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 3,
+                "id": "request-3",
                 "method": "session.releaseInteractive",
                 "params": {"mutation_id": "m3", "subscription_id": sub_id},
             }
@@ -214,7 +296,7 @@ async def test_resume_after_release(tmp_path: Path) -> None:
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 4,
+                "id": "request-4",
                 "method": "session.resumeInteractive",
                 "params": {
                     "mutation_id": "m4",

@@ -66,7 +66,43 @@ async def test_serve_reports_a_malformed_request() -> None:
     assert any('"op": "error"' in line for line in out)
 
 
+def test_select_desktop_model_is_scripted_only_for_packaged_smoke() -> None:
+    smoke = bridge.select_desktop_model({"LOOPPLANE_PACKAGED_SMOKE_SCENARIO": "happy"})
+    normal = bridge.select_desktop_model({})
+
+    assert type(smoke).__name__ == "ScriptedModel"
+    assert type(normal).__name__ == "DemoModel"
+
+
+async def test_normal_desktop_model_supports_consecutive_turns() -> None:
+    from loopplane.model import ModelRequest
+
+    model = bridge.select_desktop_model({})
+    first = [
+        increment async for increment in model.stream_turn(ModelRequest(context=[]))
+    ]
+    second = [
+        increment async for increment in model.stream_turn(ModelRequest(context=[]))
+    ]
+
+    assert first
+    assert second
+
+
 # --- US2 T036: session / project / workspace over composed RPC dispatcher ---
+
+
+def _initialize_params() -> dict:
+    return {
+        "protocol": {
+            "name": "loopplane.desktop.stdio",
+            "major": 1,
+            "minor": 0,
+        },
+        "runtime_event_schema": 1,
+        "client": {"name": "test-client", "version": "0"},
+        "requested_capabilities": [],
+    }
 
 
 async def _rpc_call(dispatcher: object, req_id: int, method: str, params: dict) -> dict:
@@ -76,7 +112,7 @@ async def _rpc_call(dispatcher: object, req_id: int, method: str, params: dict) 
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": req_id,
+                "id": f"request-{req_id}",
                 "method": method,
                 "params": params,
             }
@@ -141,18 +177,48 @@ async def test_rpc_session_list_star_and_project_workspace(tmp_path: Path) -> No
         dispatcher,
         0,
         "initialize",
-        {"protocol": "loopplane.desktop.stdio", "version": 1},
+        _initialize_params(),
     )
     assert "result" in init
     methods = init["result"].get("methods") or []
-    for name in (
-        "session.list",
-        "session.setStarred",
+    assert methods == [
+        "agentControls.get",
+        "audit.list",
+        "backup.create",
+        "backup.describe",
+        "capabilities.invokeAction",
+        "capabilities.list",
+        "initialize",
+        "inspection.get",
+        "interaction.answerApproval",
+        "interaction.answerQuestion",
+        "interaction.cancel",
+        "interaction.submit",
+        "project.assignSession",
         "project.create",
+        "project.list",
+        "project.remove",
+        "project.rename",
+        "restore.cancel",
+        "restore.commit",
+        "restore.validate",
+        "session.createInteractive",
+        "session.delete",
+        "session.fork",
+        "session.history",
+        "session.list",
+        "session.releaseInteractive",
+        "session.rename",
+        "session.resumeInteractive",
+        "session.setStarred",
+        "system.shutdown",
+        "system.status",
         "workspace.bind",
         "workspace.list",
-    ):
-        assert name in methods
+        "workspace.relink",
+        "workspace.remove",
+        "workspace.revalidate",
+    ]
 
     # create a durable session via Host interactive API
     from tests.integration.conftest import EventCollector
@@ -281,7 +347,7 @@ async def test_rpc_resume_rejects_foreign_principal_session(tmp_path: Path) -> N
         dispatcher,
         0,
         "initialize",
-        {"protocol": "loopplane.desktop.stdio", "version": 1},
+        _initialize_params(),
     )
     resumed = await _rpc_call(
         dispatcher,
@@ -365,7 +431,7 @@ async def test_rpc_audit_list_is_principal_scoped_opaque_and_metadata_only(
         dispatcher,
         20,
         "initialize",
-        {"protocol": "loopplane.desktop.stdio", "version": 1},
+        _initialize_params(),
     )
     first = await _rpc_call(
         dispatcher, 21, "audit.list", {"session_id": session_id, "limit": 1}
@@ -432,7 +498,7 @@ async def test_rpc_audit_list_is_principal_scoped_opaque_and_metadata_only(
         foreign,
         24,
         "initialize",
-        {"protocol": "loopplane.desktop.stdio", "version": 1},
+        _initialize_params(),
     )
     cross_principal = await _rpc_call(
         foreign, 25, "audit.list", {"session_id": session_id, "limit": 1}

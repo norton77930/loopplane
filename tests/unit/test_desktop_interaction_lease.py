@@ -15,7 +15,11 @@ sys.path.insert(0, str(SIDECAR))
 
 from profile import ProfileBusyError, ProfileOwnershipLock  # noqa: E402
 
-from interaction import InteractionBusy, InteractionLease  # noqa: E402
+from interaction import (  # noqa: E402
+    InteractionBusy,
+    InteractionLease,
+    LiveSubscription,
+)
 from methods.interaction import InteractionMethods  # noqa: E402
 from protocol import RpcError  # noqa: E402
 
@@ -73,7 +77,7 @@ async def test_submit_requires_lease_owner_subscription(tmp_path: Path) -> None:
                 "prompt": "nope",
             }
         )
-    assert exc.value.category in ("not_found", "state", "busy")
+    assert exc.value.category in ("not_found", "invalid_state", "busy")
     # Owner can still submit
     result = await methods.submit(
         {"mutation_id": "m3", "subscription_id": sub, "prompt": "yes"}
@@ -93,6 +97,47 @@ async def test_release_owner_then_other_pane_may_acquire(tmp_path: Path) -> None
     b = await methods.create_interactive({"mutation_id": "m3", "pane_id": "b"})
     assert b["pane_id"] == "b"
     await lease.shutdown()
+
+
+async def test_release_emits_failed_close_and_drops_owner_on_teardown_error() -> None:
+    class BrokenStack:
+        async def __aexit__(self, *_args: object) -> None:
+            raise RuntimeError("teardown failed")
+
+    class SessionSentinel:
+        session_id = "session-1"
+
+    closed: list[dict] = []
+
+    async def emit_closed(payload: dict) -> None:
+        closed.append(payload)
+
+    lease = InteractionLease()
+    lease.set_emitters(emit_closed=emit_closed)
+
+    sub = LiveSubscription(
+        subscription_id="sub-1",
+        session_id="session-1",
+        pane_id="pane-1",
+        session=SessionSentinel(),  # type: ignore[arg-type]
+        stack=BrokenStack(),  # type: ignore[arg-type]
+    )
+    lease._owner = sub
+    lease._pending[sub.subscription_id] = sub
+
+    with pytest.raises(RuntimeError, match="teardown failed"):
+        await lease.release(sub.subscription_id)
+
+    assert lease.active is None
+    assert lease.get(sub.subscription_id) is None
+    assert closed == [
+        {
+            "subscription_id": "sub-1",
+            "session_id": "session-1",
+            "reason": "failed",
+            "history_readable": True,
+        }
+    ]
 
 
 async def test_lease_busy_exception_zero_host_construction_on_contention(

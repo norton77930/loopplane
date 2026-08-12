@@ -180,16 +180,8 @@ export type LoopPlaneDesktopApi = {
 
 declare global {
   interface Window {
-    /** Frozen typed facade from preload (preferred). */
+    /** Frozen typed facade from preload. */
     loopplaneDesktop?: LoopPlaneDesktopApi;
-    /**
-     * @deprecated Legacy line tunnel from feature 019; must not be reintroduced
-     * for privileged RPC. Present only if an older preload is loaded.
-     */
-    api?: {
-      send: (line: string) => void;
-      onLine: (handler: (line: string) => void) => () => void;
-    };
   }
 }
 

@@ -50,7 +50,7 @@ type InteractionPush = {
   params?: {
     event?: string | RawEvent;
     reason?: string;
-    sequence?: number;
+    notification_seq?: number;
     subscription_id?: string;
     session_id?: string;
     [key: string]: unknown;
@@ -68,15 +68,7 @@ function parseNotificationEvent(
   params: InteractionPush["params"],
 ): RawEvent | null {
   if (!params) return null;
-  const raw = params.event;
-  if (typeof raw === "string") {
-    try {
-      return asRawEvent(JSON.parse(raw));
-    } catch {
-      return null;
-    }
-  }
-  return asRawEvent(raw);
+  return asRawEvent(params.event);
 }
 
 /**
@@ -238,6 +230,8 @@ export class SidecarTransport {
 
     const queue: RawEvent[] = [];
     let done = false;
+    let terminalEventSeen = false;
+    const submitFailure: { error?: unknown } = {};
     let wake: (() => void) | null = null;
     const wakeUp = () => {
       wake?.();
@@ -252,6 +246,7 @@ export class SidecarTransport {
         if (push?.method === "runtime.event") {
           const event = parseNotificationEvent(push.params);
           if (event) {
+            if (event.type === "run-terminated") terminalEventSeen = true;
             queue.push(event);
             wakeUp();
           }
@@ -273,30 +268,37 @@ export class SidecarTransport {
           : { permissionMode: options.permissionMode }),
       });
 
-      const submitDone = submitResult.then((result) => {
-        done = true;
-        if (
-          result &&
-          typeof result === "object" &&
-          "termination_reason" in result &&
-          !queue.some((e) => e.type === "run-terminated")
-        ) {
-          queue.push({
-            type: "run-terminated",
-            payload: {
-              reason: String(
-                (result as { termination_reason?: string })
-                  .termination_reason ?? "natural-completion",
-              ),
-              turns_taken: Number(
-                (result as { turns_taken?: number }).turns_taken ?? 0,
-              ),
-            },
-          } as RawEvent);
-        }
-        wakeUp();
-        return result;
-      });
+      const submitDone = submitResult.then(
+        (result) => {
+          done = true;
+          if (
+            result &&
+            typeof result === "object" &&
+            "termination_reason" in result &&
+            !terminalEventSeen
+          ) {
+            queue.push({
+              type: "run-terminated",
+              payload: {
+                reason: String(
+                  (result as { termination_reason?: string })
+                    .termination_reason ?? "natural-completion",
+                ),
+                turns_taken: Number(
+                  (result as { turns_taken?: number }).turns_taken ?? 0,
+                ),
+              },
+            } as RawEvent);
+          }
+          wakeUp();
+          return result;
+        },
+        (error: unknown) => {
+          submitFailure.error = error;
+          done = true;
+          wakeUp();
+        },
+      );
 
       for (;;) {
         while (queue.length > 0) {
@@ -304,7 +306,8 @@ export class SidecarTransport {
           if (event) yield event;
         }
         if (done && queue.length === 0) {
-          await submitDone.catch(() => undefined);
+          await submitDone;
+          if ("error" in submitFailure) throw submitFailure.error;
           while (queue.length > 0) {
             const event = queue.shift();
             if (event) yield event;

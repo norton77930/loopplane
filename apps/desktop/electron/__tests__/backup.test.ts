@@ -8,6 +8,7 @@ import {
   createChildProcessDouble,
   createIpcSenderFrom,
   createWebContentsDouble,
+  desktopInitializeResult,
   TRUSTED_HANDLER_OPTIONS,
 } from "./helpers";
 import { unwrapBackupRestoreEnvelope } from "../backup-restore-ipc";
@@ -25,18 +26,7 @@ async function readyRpc(child: ReturnType<typeof createChildProcessDouble>) {
     JSON.stringify({
       jsonrpc: "2.0",
       id: initReq.id,
-      result: {
-        protocol: "loopplane.desktop.stdio",
-        version: 1,
-        methods: [
-          "backup.describe",
-          "backup.create",
-          "restore.validate",
-          "restore.commit",
-          "restore.cancel",
-        ],
-        capabilities: {},
-      },
+      result: desktopInitializeResult(),
     }),
   );
   await startP;
@@ -398,7 +388,7 @@ describe("backup/restore IPC handlers", () => {
   });
 
   it.each([
-    ["disclosure", { disclosure: "C:\\Users\\person\\private.zip" }],
+    ["disclosure", { disclosure: "<private-home>/private.zip" }],
     ["includes", { includes: ["session_checkpoints", "Traceback: internal"] }],
     ["excludes", { excludes: ["workspace_bindings", "D:\\private\\secret"] }],
   ])(

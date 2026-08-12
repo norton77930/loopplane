@@ -42,6 +42,13 @@ from restore import RestoreManager  # noqa: E402
 
 pytestmark = pytest.mark.anyio
 
+INITIALIZE_PARAMS = {
+    "protocol": {"name": "loopplane.desktop.stdio", "major": 1, "minor": 0},
+    "runtime_event_schema": 1,
+    "client": {"name": "test-client", "version": "0"},
+    "requested_capabilities": [],
+}
+
 
 def _stage_manifest_declared_members(archive: Path, destination: Path) -> None:
     """Test-only staging uses the production manifest-first validation seam.
@@ -282,11 +289,23 @@ async def test_shutdown_keeps_backup_mutation_lease_and_starts_no_durable_work(
         on_shutdown=shutdown_hook,
     )
     await dispatcher.handle_frame(
-        json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": "init",
+                "method": "initialize",
+                "params": INITIALIZE_PARAMS,
+            }
+        )
     )
     response = await dispatcher.handle_frame(
         json.dumps(
-            {"jsonrpc": "2.0", "id": 2, "method": "system.shutdown", "params": {}}
+            {
+                "jsonrpc": "2.0",
+                "id": "shutdown",
+                "method": "system.shutdown",
+                "params": {},
+            }
         )
     )
 

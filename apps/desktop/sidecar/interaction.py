@@ -7,6 +7,7 @@ controller/gateway internals.
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
@@ -40,6 +41,8 @@ class InteractionLease:
     _owner: LiveSubscription | None = None
     _emit_event: EventEmitter | None = None
     _emit_outcome: EventEmitter | None = None
+    _emit_state: EventEmitter | None = None
+    _emit_closed: EventEmitter | None = None
     _pending: dict[str, LiveSubscription] = field(default_factory=dict)
 
     def set_emitters(
@@ -47,16 +50,28 @@ class InteractionLease:
         *,
         emit_event: EventEmitter | None = None,
         emit_outcome: EventEmitter | None = None,
+        emit_state: EventEmitter | None = None,
+        emit_closed: EventEmitter | None = None,
     ) -> None:
         self._emit_event = emit_event
         self._emit_outcome = emit_outcome
+        self._emit_state = emit_state
+        self._emit_closed = emit_closed
 
-    async def emit_outcome(self, payload: dict[str, Any]) -> None:
-        if self._emit_outcome is None:
+    async def _emit(
+        self, emitter: EventEmitter | None, payload: dict[str, Any]
+    ) -> None:
+        if emitter is None:
             return
-        result = self._emit_outcome(payload)
+        result = emitter(payload)
         if result is not None:
             await result
+
+    async def emit_outcome(self, payload: dict[str, Any]) -> None:
+        await self._emit(self._emit_outcome, payload)
+
+    async def emit_state(self, state: str) -> None:
+        await self._emit(self._emit_state, {"state": state})
 
     @property
     def active(self) -> LiveSubscription | None:
@@ -116,7 +131,7 @@ class InteractionLease:
             payload = {
                 "subscription_id": live.subscription_id,
                 "session_id": live.session_id,
-                "event": serialize_event(event),
+                "event": json.loads(serialize_event(event)),
             }
             result = self._emit_event(payload)
             if result is not None:
@@ -143,6 +158,7 @@ class InteractionLease:
         holder["sub"] = sub
         self._owner = sub
         self._pending[sub.subscription_id] = sub
+        await self.emit_state("opened")
         return sub
 
     async def resume_interactive(
@@ -170,7 +186,7 @@ class InteractionLease:
             payload = {
                 "subscription_id": live.subscription_id,
                 "session_id": live.session_id,
-                "event": serialize_event(event),
+                "event": json.loads(serialize_event(event)),
             }
             result = self._emit_event(payload)
             if result is not None:
@@ -198,9 +214,10 @@ class InteractionLease:
         holder["sub"] = sub
         self._owner = sub
         self._pending[sub.subscription_id] = sub
+        await self.emit_state("opened")
         return sub
 
-    async def release(self, subscription_id: str) -> bool:
+    async def release(self, subscription_id: str, *, reason: str = "released") -> bool:
         sub = self._pending.get(subscription_id)
         if sub is None:
             return False
@@ -209,21 +226,38 @@ class InteractionLease:
         sub.released = True
         if self._owner is sub:
             self._owner = None
+        teardown_error: BaseException | None = None
         try:
             await sub.stack.__aexit__(None, None, None)
+        except BaseException as exc:
+            teardown_error = exc
         finally:
             self._pending.pop(subscription_id, None)
+        await self._emit(
+            self._emit_closed,
+            {
+                "subscription_id": sub.subscription_id,
+                "session_id": sub.session_id,
+                "reason": "failed" if teardown_error is not None else reason,
+                "history_readable": True,
+            },
+        )
+        if teardown_error is not None:
+            raise teardown_error
         return True
 
     async def shutdown(self) -> None:
         """Release every interactive Host context; no new durable work after."""
 
+        await self.emit_state("draining")
         ids = list(self._pending.keys())
         for sid in ids:
-            await self.release(sid)
+            await self.release(sid, reason="shutdown")
         self._owner = None
         self._emit_event = None
         self._emit_outcome = None
+        self._emit_state = None
+        self._emit_closed = None
 
 
 class InteractionBusy(RuntimeError):

@@ -178,11 +178,20 @@ const loopplaneDesktop = Object.freeze({
         answers: answer.answers,
       }),
     subscribe: (
-      _subscriptionId: string,
+      subscriptionId: string,
       handler: InteractionHandler,
     ): (() => void) =>
       // Local notification binding only — no RPC at subscribe/unsubscribe time.
-      wrapSubscribe(IPC.interactionEvent, handler),
+      wrapSubscribe(IPC.interactionEvent, (payload) => {
+        if (!payload || typeof payload !== "object") return;
+        const params = (payload as { params?: unknown }).params;
+        if (!params || typeof params !== "object") return;
+        const payloadSubscriptionId = (
+          params as { subscription_id?: unknown }
+        ).subscription_id;
+        if (payloadSubscriptionId !== subscriptionId) return;
+        handler(payload);
+      }),
   }),
 });
 

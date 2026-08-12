@@ -65,6 +65,13 @@ FAILURE_SELFTEST_CASES: tuple[str, ...] = (
     "runtime-diagnostic-failure-accepted",
     "restart-history-placeholder-rejected",
     "restart-history-session-accepted",
+    "profile-inventory-detects-mutation",
+    "orphan-observation-detects-process",
+    "listener-observation-detects-listener",
+    "continuous-observation-detects-transient-listener",
+    "continuous-observation-detects-late-descendant",
+    "continuous-observation-detects-post-close-orphan",
+    "continuous-observation-survives-root-dispose",
 )
 
 
@@ -162,6 +169,15 @@ def test_driver_declares_bounded_failure_scenario_matrix() -> None:
     assert "AddSeconds(10)" in source
     assert "FileMode]::CreateNew" in source
     assert "Get-FileHash" in source
+    assert "Get-ProfileInventory" in source
+    assert "Test-LoopPlaneOrphanProcess" in source
+    assert "Test-LocalTcpListener" in source
+    assert "Start-ProcessNetworkObservation" in source
+    assert "Stop-ProcessNetworkObservation" in source
+    assert "observation_samples" in source
+    assert "failure_profile_unchanged" in source
+    assert not re.search(r"orphan\s*=\s*\$false", source)
+    assert not re.search(r"listener\s*=\s*\$false", source)
     assert "raw_error" not in source
     assert "exception_message" not in source
 
@@ -194,6 +210,12 @@ def test_packaged_application_exposes_bounded_smoke_composition() -> None:
     assert "LOOPPLANE_PACKAGED_SMOKE_PROFILE" in main
     assert "LOOPPLANE_PACKAGED_SMOKE_SCENARIO" in main
     assert "LOOPPLANE_PACKAGED_SMOKE_SCENARIO: smoke?.scenario" in main
+    assert 'join(app.getPath("userData"), "profile")' in main
+    assert "(app.isPackaged" in main
+    assert (
+        "smoke?.profileRoot ??\n        process.env.LOOPPLANE_PROFILE_ROOT" not in main
+    )
+    assert 'new URL("../.desktop-profile", import.meta.url)' not in main
     assert "ScriptedModel" in sidecar_main
     for scenario in (
         "happy",

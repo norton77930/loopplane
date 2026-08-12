@@ -8,6 +8,7 @@ import {
   createChildProcessDouble,
   createIpcSenderFrom,
   createWebContentsDouble,
+  desktopInitializeResult,
   TRUSTED_HANDLER_OPTIONS,
 } from "./helpers";
 import { IPC } from "../ipc-channels";
@@ -24,18 +25,7 @@ async function readyRpc(child: ReturnType<typeof createChildProcessDouble>) {
     JSON.stringify({
       jsonrpc: "2.0",
       id: initReq.id,
-      result: {
-        protocol: "loopplane.desktop.stdio",
-        version: 1,
-        methods: [
-          "workspace.list",
-          "workspace.bind",
-          "workspace.relink",
-          "workspace.remove",
-          "workspace.revalidate",
-        ],
-        capabilities: {},
-      },
+      result: desktopInitializeResult(),
     }),
   );
   await startP;
@@ -86,7 +76,7 @@ describe("workspace IPC handlers", () => {
     const child = createChildProcessDouble();
     const rpc = await readyRpc(child);
     const { handlers, ipcMain } = ipcMap();
-    const secretPath = "C:\\\\Users\\\\secret\\\\docs";
+    const secretPath = "C:\\\\SyntheticPrivateRoot\\\\docs";
     registerDesktopIpcHandlers({ ...TRUSTED_HANDLER_OPTIONS,
       ipcMain,
       rpc,

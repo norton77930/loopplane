@@ -18,7 +18,7 @@ _MAX_PAGE_LIMIT = 100
 _INVALID = RpcError(
     code=-32602,
     message="Invalid params",
-    category="protocol",
+    category="invalid_params",
     retryable=False,
     message_key="desktop.error.invalid_params",
 )

@@ -20,7 +20,12 @@ from dispatcher import Dispatcher  # noqa: E402
 from methods.projects import ProjectMethods  # noqa: E402
 from methods.sessions import SessionMethods  # noqa: E402
 from mutation_lease import ProfileMutationLease  # noqa: E402
-from protocol import PROTOCOL_NAME, PROTOCOL_VERSION  # noqa: E402
+from protocol import (  # noqa: E402
+    PROTOCOL_MAJOR,
+    PROTOCOL_MINOR,
+    PROTOCOL_NAME,
+    RUNTIME_EVENT_SCHEMA,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -47,9 +52,18 @@ async def _init(d: Dispatcher) -> None:
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 0,
+                "id": "init",
                 "method": "initialize",
-                "params": {"protocol": PROTOCOL_NAME, "version": PROTOCOL_VERSION},
+                "params": {
+                    "protocol": {
+                        "name": PROTOCOL_NAME,
+                        "major": PROTOCOL_MAJOR,
+                        "minor": PROTOCOL_MINOR,
+                    },
+                    "runtime_event_schema": RUNTIME_EVENT_SCHEMA,
+                    "client": {"name": "test-client", "version": "0"},
+                    "requested_capabilities": [],
+                },
             }
         )
     )
@@ -64,7 +78,7 @@ async def test_project_crud_via_rpc(tmp_path: Path) -> None:
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 1,
+                "id": "request-1",
                 "method": "project.create",
                 "params": {"mutation_id": "m1", "label": "Work"},
             }
@@ -73,21 +87,35 @@ async def test_project_crud_via_rpc(tmp_path: Path) -> None:
     assert "result" in created[0]
     project_id = created[0]["result"]["project"]["id"]
     listed = await d.handle_frame(
-        json.dumps({"jsonrpc": "2.0", "id": 2, "method": "project.list", "params": {}})
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": "request-2",
+                "method": "project.list",
+                "params": {},
+            }
+        )
     )
     assert len(listed[0]["result"]["projects"]) == 1
     await d.handle_frame(
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 3,
+                "id": "request-3",
                 "method": "project.remove",
                 "params": {"mutation_id": "m2", "project_id": project_id},
             }
         )
     )
     listed2 = await d.handle_frame(
-        json.dumps({"jsonrpc": "2.0", "id": 4, "method": "project.list", "params": {}})
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": "request-4",
+                "method": "project.list",
+                "params": {},
+            }
+        )
     )
     assert listed2[0]["result"]["projects"] == []
 
@@ -107,14 +135,21 @@ async def test_session_list_and_star(tmp_path: Path) -> None:
     d = Dispatcher(methods=SessionMethods(host, lease, principal_id=None).handlers())
     await _init(d)
     listed = await d.handle_frame(
-        json.dumps({"jsonrpc": "2.0", "id": 1, "method": "session.list", "params": {}})
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": "request-1",
+                "method": "session.list",
+                "params": {},
+            }
+        )
     )
     assert any(s["session_id"] == sid for s in listed[0]["result"]["sessions"])
     starred = await d.handle_frame(
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 2,
+                "id": "request-2",
                 "method": "session.setStarred",
                 "params": {
                     "mutation_id": "m1",
@@ -153,7 +188,7 @@ async def test_profile_principal_delete_removes_legacy_none_principal_session(
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": 1,
+                "id": "request-1",
                 "method": "session.delete",
                 "params": {
                     "mutation_id": "delete-legacy",
@@ -166,7 +201,14 @@ async def test_profile_principal_delete_removes_legacy_none_principal_session(
     assert deleted[0]["result"] == {"deleted": True, "session_id": session_id}
 
     listed = await dispatcher.handle_frame(
-        json.dumps({"jsonrpc": "2.0", "id": 2, "method": "session.list", "params": {}})
+        json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": "request-2",
+                "method": "session.list",
+                "params": {},
+            }
+        )
     )
     assert session_id not in {
         item["session_id"] for item in listed[0]["result"]["sessions"]

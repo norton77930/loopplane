@@ -189,6 +189,38 @@ describe("App (desktop single-session composition, T031)", () => {
     }
   });
 
+  it("recovers from an initializing status when main reports runtime ready", async () => {
+    const previousApi = window.loopplaneDesktop;
+    let statusHandler: ((event: unknown) => void) | null = null;
+    window.loopplaneDesktop = {
+      app: {
+        status: async () => ({ ready: false }),
+        shutdown: async () => ({ ok: true }),
+        subscribeStatus: (handler: (event: unknown) => void) => {
+          statusHandler = handler;
+          return () => {
+            statusHandler = null;
+          };
+        },
+      },
+    } as never;
+
+    try {
+      render(<App transport={stubTransport([])} initialPhase="starting" />);
+      await waitFor(() =>
+        expect(screen.getByTestId("runtime-status")).toHaveTextContent(/starting/i),
+      );
+      act(() => {
+        statusHandler?.({ method: "runtime.state", params: { state: "ready" } });
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId("runtime-status")).toHaveTextContent(/usable/i),
+      );
+    } finally {
+      window.loopplaneDesktop = previousApi;
+    }
+  });
+
   it("projects a public-safe main-process failure into the visible diagnostic group", async () => {
     const previousApi = window.loopplaneDesktop;
     let statusHandler: ((event: unknown) => void) | null = null;

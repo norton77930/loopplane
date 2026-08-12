@@ -31,9 +31,17 @@ describe("preload facade", () => {
     expect(src).not.toMatch(/exposeInMainWorld\(\s*["']api["']/);
     expect(src).not.toContain("sidecar:send");
     expect(src).not.toContain("sidecar:line");
-    // Subscribe must not invoke RPC
+    // Subscribe must not invoke RPC and must isolate the requested subscription.
     expect(src).toMatch(/subscribeStatus[\s\S]*wrapSubscribe/);
     expect(src).toMatch(/subscribe:[\s\S]*wrapSubscribe/);
+    expect(src).toContain("subscriptionId");
+    expect(src).toContain("payloadSubscriptionId !== subscriptionId");
+    expect(src).not.toContain("_subscriptionId");
+  });
+
+  it("filters interaction pushes by subscription id", async () => {
+    const src = readFileSync(preloadPath, "utf8");
+    expect(src).toContain("payloadSubscriptionId !== subscriptionId");
   });
 
   it("global.d.ts types the frozen facade", () => {
@@ -42,5 +50,7 @@ describe("preload facade", () => {
     expect(dts).toContain("LoopPlaneDesktopApi");
     expect(dts).toContain("createInteractive");
     expect(dts).toContain("answerApproval");
+    expect(dts).not.toContain("send: (line: string)");
+    expect(dts).not.toContain("onLine:");
   });
 });

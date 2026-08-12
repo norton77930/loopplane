@@ -47,3 +47,61 @@ describe("DesktopPresentationHost inspection projection", () => {
     ]);
   });
 });
+
+describe("DesktopPresentationHost progress isolation", () => {
+  it("subscribes to the active interaction id and routes progress only to its session", async () => {
+    const subscribedIds: string[] = [];
+    let push: ((payload: unknown) => void) | null = null;
+    const progressA: string[] = [];
+    const progressB: string[] = [];
+    const host = new DesktopPresentationHost({
+      sessions: {
+        createInteractive: vi.fn().mockResolvedValue({
+          session_id: "session-1",
+          subscription_id: "sub-1",
+        }),
+      },
+      interaction: {
+        subscribe: vi.fn((subscriptionId: string, handler: (payload: unknown) => void) => {
+          subscribedIds.push(subscriptionId);
+          push = handler;
+          return () => {
+            push = null;
+          };
+        }),
+        submit: vi.fn(async () => {
+          push?.({
+            method: "runtime.event",
+            params: {
+              subscription_id: "sub-1",
+              session_id: "session-1",
+              event: { type: "assistant-output-increment" },
+            },
+          });
+          return {
+            accepted: true,
+            subscription_id: "sub-1",
+            session_id: "session-1",
+            termination_reason: "natural-completion",
+            turns_taken: 1,
+          };
+        }),
+      },
+    } as never);
+
+    const unsubscribeA = host.subscribeProgress("session-1", (event) => {
+      progressA.push(event.type);
+    });
+    const unsubscribeB = host.subscribeProgress("session-2", (event) => {
+      progressB.push(event.type);
+    });
+
+    await host.submit("session-1", "hello");
+
+    expect(subscribedIds).toEqual(["sub-1"]);
+    expect(progressA).toEqual(["assistant-output-increment", "run-terminated"]);
+    expect(progressB).toEqual([]);
+    unsubscribeA();
+    unsubscribeB();
+  });
+});

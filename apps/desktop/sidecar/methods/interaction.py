@@ -51,7 +51,7 @@ def _busy_error(
 
 _BUSY = _busy_error()
 _NOT_FOUND = RpcError(
-    code=-32005,
+    code=-32002,
     message="Not found",
     category="not_found",
     retryable=False,
@@ -60,14 +60,14 @@ _NOT_FOUND = RpcError(
 _INVALID = RpcError(
     code=-32602,
     message="Invalid params",
-    category="protocol",
+    category="invalid_params",
     retryable=False,
     message_key="desktop.error.invalid_params",
 )
 _STATE = RpcError(
-    code=-32001,
+    code=-32005,
     message="Invalid state",
-    category="state",
+    category="invalid_state",
     retryable=False,
     message_key="desktop.error.invalid_state",
 )
@@ -106,6 +106,8 @@ class InteractionMethods:
         working_scope: Path | None = None,
         emit_event: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
         emit_outcome: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
+        emit_state: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
+        emit_closed: Callable[[dict[str, Any]], Awaitable[None] | None] | None = None,
         workspace_store: WorkspaceStore | None = None,
         mutation_lease: ProfileMutationLease | None = None,
         principal_id: str | None = None,
@@ -118,8 +120,16 @@ class InteractionMethods:
         self._mutation_lease = mutation_lease
         self._principal_id = principal_id
         self._principal_provider = principal_provider
-        if emit_event is not None or emit_outcome is not None:
-            self._lease.set_emitters(emit_event=emit_event, emit_outcome=emit_outcome)
+        if any(
+            emitter is not None
+            for emitter in (emit_event, emit_outcome, emit_state, emit_closed)
+        ):
+            self._lease.set_emitters(
+                emit_event=emit_event,
+                emit_outcome=emit_outcome,
+                emit_state=emit_state,
+                emit_closed=emit_closed,
+            )
 
     def _acquire_mutation(self, mutation_id: str) -> None:
         if self._mutation_lease is None:

@@ -174,6 +174,190 @@ function Restore-CopiedSidecar {
     }
 }
 
+function Get-ProfileInventory {
+    param([Parameter(Mandatory = $true)][string] $Root)
+
+    $canonicalRoot = Get-CanonicalPath $Root
+    if (-not (Test-Path -LiteralPath $canonicalRoot -PathType Container)) {
+        throw 'profile_inventory_root_missing'
+    }
+    $entries = New-Object System.Collections.Generic.List[string]
+    foreach ($item in Get-ChildItem -LiteralPath $canonicalRoot -Force -Recurse) {
+        $relative = $item.FullName.Substring($canonicalRoot.Length).TrimStart('\', '/')
+        $kind = if ($item.PSIsContainer) { 'd' } else { 'f' }
+        $digest = if ($item.PSIsContainer) {
+            '-'
+        } else {
+            (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+        $entries.Add($kind + ':' + $relative.Replace('\', '/') + ':' + $digest)
+    }
+    return [string[]]($entries | Sort-Object)
+}
+
+function Test-InventoryEqual {
+    param(
+        [AllowEmptyCollection()][string[]] $Before = @(),
+        [AllowEmptyCollection()][string[]] $After = @()
+    )
+
+    $beforeValues = [System.Collections.Generic.List[string]]::new()
+    foreach ($value in @($Before)) {
+        $beforeValues.Add([string]$value)
+    }
+    $afterValues = [System.Collections.Generic.List[string]]::new()
+    foreach ($value in @($After)) {
+        $afterValues.Add([string]$value)
+    }
+    if ($beforeValues.Count -ne $afterValues.Count) {
+        return $false
+    }
+    return [System.Linq.Enumerable]::SequenceEqual($beforeValues, $afterValues)
+}
+
+function Get-DescendantProcessIds {
+    param([Parameter(Mandatory = $true)][int] $RootProcessId)
+
+    $descendants = New-Object System.Collections.Generic.HashSet[int]
+    $pending = New-Object System.Collections.Generic.Queue[int]
+    [void]$pending.Enqueue($RootProcessId)
+    $processes = @(Get-CimInstance Win32_Process)
+    while ($pending.Count -gt 0) {
+        $parentId = $pending.Dequeue()
+        foreach ($candidate in $processes) {
+            if (
+                [int]$candidate.ParentProcessId -eq $parentId -and
+                $descendants.Add([int]$candidate.ProcessId)
+            ) {
+                $pending.Enqueue([int]$candidate.ProcessId)
+            }
+        }
+    }
+    return [int[]]$descendants
+}
+
+function Test-LoopPlaneOrphanProcess {
+    param([AllowEmptyCollection()][int[]] $ObservedProcessIds = @())
+
+    foreach ($processId in $ObservedProcessIds) {
+        if ($null -ne (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Test-LocalTcpListener {
+    param([AllowEmptyCollection()][int[]] $ObservedProcessIds = @())
+
+    $ids = @($ObservedProcessIds | Select-Object -Unique)
+    if ($ids.Count -eq 0) {
+        return $false
+    }
+    $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop)
+    foreach ($listener in $listeners) {
+        if ($ids -contains [int]$listener.OwningProcess) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Start-ProcessNetworkObservation {
+    param(
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process] $Process,
+        [Parameter(Mandatory = $true)] $ObservedProcessIds,
+        [scriptblock] $DiscoverDescendants,
+        [scriptblock] $DetectListener,
+        [scriptblock] $DetectOrphan
+    )
+
+    $observation = [pscustomobject]@{
+        RootProcessId = [int]$Process.Id
+        ObservedProcessIds = $ObservedProcessIds
+        ListenerObserved = $false
+        Samples = 0
+        DiscoverDescendants = $DiscoverDescendants
+        DetectListener = $DetectListener
+        DetectOrphan = $DetectOrphan
+    }
+    Update-ProcessNetworkObservation -Observation $observation
+    return $observation
+}
+
+function Update-ProcessNetworkObservation {
+    param([Parameter(Mandatory = $true)] $Observation)
+
+    $rootId = [int]$Observation.RootProcessId
+    $currentIds = @($rootId)
+    try {
+        if ($null -ne $Observation.DiscoverDescendants) {
+            $currentIds += @(& $Observation.DiscoverDescendants $rootId)
+        } else {
+            $currentIds += @(Get-DescendantProcessIds $rootId)
+        }
+    } catch {
+        # Process exit races are resolved by the accumulated ID set below.
+    }
+    foreach ($processId in $currentIds) {
+        [void]$Observation.ObservedProcessIds.Add([int]$processId)
+    }
+    $listenerDetected = if ($null -ne $Observation.DetectListener) {
+        & $Observation.DetectListener ([int[]]$Observation.ObservedProcessIds)
+    } else {
+        Test-LocalTcpListener -ObservedProcessIds ([int[]]$Observation.ObservedProcessIds)
+    }
+    if ($listenerDetected) {
+        $Observation.ListenerObserved = $true
+    }
+    $Observation.Samples = [int]$Observation.Samples + 1
+}
+
+function Stop-ProcessNetworkObservation {
+    param(
+        [Parameter(Mandatory = $true)] $Observation,
+        [int] $PostCloseMilliseconds = 500
+    )
+
+    $deadline = [datetime]::UtcNow.AddMilliseconds($PostCloseMilliseconds)
+    do {
+        Update-ProcessNetworkObservation -Observation $Observation
+        if ([datetime]::UtcNow -lt $deadline) {
+            Start-Sleep -Milliseconds 50
+        }
+    } while ([datetime]::UtcNow -lt $deadline)
+
+    $orphanDetected = if ($null -ne $Observation.DetectOrphan) {
+        & $Observation.DetectOrphan ([int[]]$Observation.ObservedProcessIds)
+    } else {
+        Test-LoopPlaneOrphanProcess `
+            -ObservedProcessIds ([int[]]$Observation.ObservedProcessIds)
+    }
+    return [ordered]@{
+        samples = [int]$Observation.Samples
+        listener = [bool]$Observation.ListenerObserved
+        orphan = [bool]$orphanDetected
+    }
+}
+
+function Wait-ObservedProcessExit {
+    param(
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process] $Process,
+        [Parameter(Mandatory = $true)] $Observation,
+        [Parameter(Mandatory = $true)][datetime] $Deadline
+    )
+
+    while ([datetime]::UtcNow -lt $Deadline) {
+        Update-ProcessNetworkObservation -Observation $Observation
+        if ($Process.HasExited) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 50
+    }
+    Update-ProcessNetworkObservation -Observation $Observation
+    return $Process.HasExited
+}
+
 function Test-SidecarRestoreSelfTest {
     param([Parameter(Mandatory = $true)][string] $Variant)
 
@@ -208,8 +392,8 @@ function Test-DiagnosticEvidenceBounded {
         scenario = 'missing-sidecar'
         state = 'diagnosed'
         elapsed_ms = 9999
-        orphan = $false
-        listener = $false
+        orphan = (Test-LoopPlaneOrphanProcess -ObservedProcessIds @())
+        listener = (Test-LocalTcpListener -ObservedProcessIds @())
     }
     $json = $sample | ConvertTo-Json -Compress
     if ([System.Text.Encoding]::UTF8.GetByteCount($json) -gt 65536) {
@@ -395,6 +579,119 @@ function Invoke-PathSelfTest {
                 throw 'restart_history_session_rejected'
             }
         }
+        'profile-inventory-detects-mutation' {
+            $profile = Join-Path `
+                $externalRoot `
+                ('loopplane-078-profile-inventory-' + [guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $profile | Out-Null
+            try {
+                $before = Get-ProfileInventory $profile
+                [System.IO.File]::WriteAllText((Join-Path $profile 'changed.txt'), 'changed')
+                $after = Get-ProfileInventory $profile
+                if (Test-InventoryEqual -Before $before -After $after) {
+                    throw 'profile_inventory_mutation_missed'
+                }
+            } finally {
+                Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+        'orphan-observation-detects-process' {
+            $currentId = [int]$PID
+            if (-not (Test-LoopPlaneOrphanProcess -ObservedProcessIds @($currentId))) {
+                throw 'orphan_process_observation_missed'
+            }
+        }
+        'listener-observation-detects-listener' {
+            $listener = [System.Net.Sockets.TcpListener]::new(
+                [System.Net.IPAddress]::Loopback,
+                0
+            )
+            $listener.Start()
+            try {
+                if (-not (Test-LocalTcpListener -ObservedProcessIds @([int]$PID))) {
+                    throw 'listener_observation_missed'
+                }
+            } finally {
+                $listener.Stop()
+            }
+        }
+        'continuous-observation-detects-transient-listener' {
+            $script:sample = 0
+            $observation = Start-ProcessNetworkObservation `
+                -Process (Get-Process -Id $PID) `
+                -ObservedProcessIds (
+                    New-Object System.Collections.Generic.HashSet[int]
+                ) `
+                -DiscoverDescendants { @() } `
+                -DetectListener {
+                    param([int[]] $ids)
+                    $null = $ids
+                    $script:sample += 1
+                    return $script:sample -eq 2
+                } `
+                -DetectOrphan { $false }
+            Update-ProcessNetworkObservation -Observation $observation
+            Update-ProcessNetworkObservation -Observation $observation
+            if (-not $observation.ListenerObserved) {
+                throw 'transient_listener_observation_missed'
+            }
+        }
+        'continuous-observation-detects-late-descendant' {
+            $script:sample = 0
+            $lateId = 24680
+            $observation = Start-ProcessNetworkObservation `
+                -Process (Get-Process -Id $PID) `
+                -ObservedProcessIds (
+                    New-Object System.Collections.Generic.HashSet[int]
+                ) `
+                -DiscoverDescendants {
+                    param([int] $rootId)
+                    $null = $rootId
+                    $script:sample += 1
+                    if ($script:sample -ge 2) { return @($lateId) }
+                    return @()
+                } `
+                -DetectListener { $false } `
+                -DetectOrphan { $false }
+            Update-ProcessNetworkObservation -Observation $observation
+            if (-not $observation.ObservedProcessIds.Contains($lateId)) {
+                throw 'late_descendant_observation_missed'
+            }
+        }
+        'continuous-observation-detects-post-close-orphan' {
+            $observation = Start-ProcessNetworkObservation `
+                -Process (Get-Process -Id $PID) `
+                -ObservedProcessIds (
+                    New-Object System.Collections.Generic.HashSet[int]
+                ) `
+                -DiscoverDescendants { @() } `
+                -DetectListener { $false } `
+                -DetectOrphan { $true }
+            $result = Stop-ProcessNetworkObservation `
+                -Observation $observation `
+                -PostCloseMilliseconds 0
+            if (-not $result.orphan) {
+                throw 'post_close_orphan_observation_missed'
+            }
+        }
+        'continuous-observation-survives-root-dispose' {
+            $root = Get-Process -Id $PID
+            $observation = Start-ProcessNetworkObservation `
+                -Process $root `
+                -ObservedProcessIds (
+                    New-Object System.Collections.Generic.HashSet[int]
+                ) `
+                -DiscoverDescendants { @() } `
+                -DetectListener { $false } `
+                -DetectOrphan { $false }
+            $root.Dispose()
+            $result = Stop-ProcessNetworkObservation `
+                -Observation $observation `
+                -PostCloseMilliseconds 0
+            if ($result.samples -lt 2) {
+                throw 'disposed_root_observation_stopped'
+            }
+        }
         default {
             throw 'unknown_selftest'
         }
@@ -467,7 +764,8 @@ function Find-UniqueElement {
 function Wait-TopLevelWindow {
     param(
         [Parameter(Mandatory = $true)][System.Diagnostics.Process] $Process,
-        [Parameter(Mandatory = $true)][datetime] $Deadline
+        [Parameter(Mandatory = $true)][datetime] $Deadline,
+        $Observation
     )
 
     $condition = [System.Windows.Automation.PropertyCondition]::new(
@@ -475,6 +773,9 @@ function Wait-TopLevelWindow {
         $Process.Id
     )
     while ([datetime]::UtcNow -lt $Deadline) {
+        if ($null -ne $Observation) {
+            Update-ProcessNetworkObservation -Observation $Observation
+        }
         $window = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
             [System.Windows.Automation.TreeScope]::Children,
             $condition
@@ -493,10 +794,14 @@ function Wait-TopLevelWindow {
 function Wait-RequiredElements {
     param(
         [Parameter(Mandatory = $true)] $Window,
-        [Parameter(Mandatory = $true)][datetime] $Deadline
+        [Parameter(Mandatory = $true)][datetime] $Deadline,
+        $Observation
     )
 
     while ([datetime]::UtcNow -lt $Deadline) {
+        if ($null -ne $Observation) {
+            Update-ProcessNetworkObservation -Observation $Observation
+        }
         try {
             $found = [ordered]@{}
             foreach ($locator in Get-RequiredLocators) {
@@ -674,11 +979,16 @@ function Invoke-SmokeScenario {
         throw 'scenario_profile_exists'
     }
     New-Item -ItemType Directory -Path $profilePath | Out-Null
+    $profileBefore = Get-ProfileInventory $profilePath
 
     $sidecarPath = Get-CopiedSidecarPath $Executable
     $backupPath = $null
     $process = $null
     $relaunch = $null
+    $observations = New-Object System.Collections.Generic.List[object]
+    $observationSamples = 0
+    $listenerObserved = $false
+    $orphanObserved = $false
     $started = [datetime]::UtcNow
     try {
         if ($SmokeScenario -ne 'happy') {
@@ -693,8 +1003,21 @@ function Invoke-SmokeScenario {
             -Profile $profilePath `
             -SmokeScenario $SmokeScenario `
             -WorkingDirectory $WorkingDirectory
-        $window = Wait-TopLevelWindow -Process $process -Deadline $deadline
-        $elements = Wait-RequiredElements -Window $window -Deadline $deadline
+        $processObservation = Start-ProcessNetworkObservation `
+            -Process $process `
+            -ObservedProcessIds (
+                New-Object System.Collections.Generic.HashSet[int]
+            )
+        $observations.Add($processObservation)
+        $window = Wait-TopLevelWindow `
+            -Process $process `
+            -Deadline $deadline `
+            -Observation $processObservation
+        $elements = Wait-RequiredElements `
+            -Window $window `
+            -Deadline $deadline `
+            -Observation $processObservation
+        Update-ProcessNetworkObservation -Observation $processObservation
 
         if ($SmokeScenario -eq 'happy') {
             $status = Read-ContainerText $elements['LoopPlane smoke runtime status']
@@ -716,6 +1039,7 @@ function Invoke-SmokeScenario {
 
             $outcome = ''
             while ([datetime]::UtcNow -lt $deadline) {
+                Update-ProcessNetworkObservation -Observation $processObservation
                 $outcome = Read-ContainerText `
                     $elements['LoopPlane smoke latest outcome']
                 if ($outcome -match 'loopplane-packaged-smoke-ok') {
@@ -728,9 +1052,18 @@ function Invoke-SmokeScenario {
             }
 
             Close-NormalWindow $window
-            if (-not $process.WaitForExit(5000)) {
+            if (-not (Wait-ObservedProcessExit `
+                -Process $process `
+                -Observation $processObservation `
+                -Deadline ([datetime]::UtcNow.AddSeconds(5)))) {
                 throw 'packaged_process_exit_timeout'
             }
+            $processResult = Stop-ProcessNetworkObservation `
+                -Observation $processObservation
+            $observationSamples += [int]$processResult.samples
+            $listenerObserved = $listenerObserved -or [bool]$processResult.listener
+            $orphanObserved = $orphanObserved -or [bool]$processResult.orphan
+            [void]$observations.Remove($processObservation)
             $process.Dispose()
             $process = $null
 
@@ -740,14 +1073,24 @@ function Invoke-SmokeScenario {
                 -Profile $profilePath `
                 -SmokeScenario $SmokeScenario `
                 -WorkingDirectory $WorkingDirectory
+            $relaunchObservation = Start-ProcessNetworkObservation `
+                -Process $relaunch `
+                -ObservedProcessIds (
+                    New-Object System.Collections.Generic.HashSet[int]
+                )
+            $observations.Add($relaunchObservation)
             $relaunchWindow = Wait-TopLevelWindow `
                 -Process $relaunch `
-                -Deadline $relaunchDeadline
+                -Deadline $relaunchDeadline `
+                -Observation $relaunchObservation
             $relaunchElements = Wait-RequiredElements `
                 -Window $relaunchWindow `
-                -Deadline $relaunchDeadline
+                -Deadline $relaunchDeadline `
+                -Observation $relaunchObservation
+            Update-ProcessNetworkObservation -Observation $relaunchObservation
             $sessions = ''
             while ([datetime]::UtcNow -lt $relaunchDeadline) {
+                Update-ProcessNetworkObservation -Observation $relaunchObservation
                 $sessions = Read-ContainerText `
                     $relaunchElements['LoopPlane smoke session list']
                 if (Test-RestartHistoryText $sessions) {
@@ -759,15 +1102,25 @@ function Invoke-SmokeScenario {
                 throw 'restart_history_missing'
             }
             Close-NormalWindow $relaunchWindow
-            if (-not $relaunch.WaitForExit(5000)) {
+            if (-not (Wait-ObservedProcessExit `
+                -Process $relaunch `
+                -Observation $relaunchObservation `
+                -Deadline ([datetime]::UtcNow.AddSeconds(5)))) {
                 throw 'packaged_relaunch_exit_timeout'
             }
+            $relaunchResult = Stop-ProcessNetworkObservation `
+                -Observation $relaunchObservation
+            $observationSamples += [int]$relaunchResult.samples
+            $listenerObserved = $listenerObserved -or [bool]$relaunchResult.listener
+            $orphanObserved = $orphanObserved -or [bool]$relaunchResult.orphan
+            [void]$observations.Remove($relaunchObservation)
             $relaunch.Dispose()
             $relaunch = $null
             $state = 'passed'
         } else {
             $diagnostic = ''
             while ([datetime]::UtcNow -lt $deadline) {
+                Update-ProcessNetworkObservation -Observation $processObservation
                 $diagnostic = Read-ContainerText `
                     $elements['LoopPlane smoke runtime diagnostic']
                 if (Test-RuntimeDiagnosticText $diagnostic) {
@@ -787,9 +1140,18 @@ function Invoke-SmokeScenario {
                 }
             }
             Close-NormalWindow $window
-            if (-not $process.WaitForExit(5000)) {
+            if (-not (Wait-ObservedProcessExit `
+                -Process $process `
+                -Observation $processObservation `
+                -Deadline ([datetime]::UtcNow.AddSeconds(5)))) {
                 throw 'packaged_process_exit_timeout'
             }
+            $processResult = Stop-ProcessNetworkObservation `
+                -Observation $processObservation
+            $observationSamples += [int]$processResult.samples
+            $listenerObserved = $listenerObserved -or [bool]$processResult.listener
+            $orphanObserved = $orphanObserved -or [bool]$processResult.orphan
+            [void]$observations.Remove($processObservation)
             $process.Dispose()
             $process = $null
             $state = 'diagnosed'
@@ -797,6 +1159,21 @@ function Invoke-SmokeScenario {
 
         if (-not (Test-Path -LiteralPath $profilePath -PathType Container)) {
             throw 'scenario_profile_not_preserved'
+        }
+        $profileAfter = Get-ProfileInventory $profilePath
+        $failureProfileUnchanged = if ($SmokeScenario -eq 'happy') {
+            $null
+        } else {
+            Test-InventoryEqual -Before $profileBefore -After $profileAfter
+        }
+        if ($SmokeScenario -ne 'happy' -and -not $failureProfileUnchanged) {
+            throw 'failure_profile_mutated'
+        }
+        if ($orphanObserved) {
+            throw 'orphan_process_detected'
+        }
+        if ($listenerObserved) {
+            throw 'local_listener_detected'
         }
         $observed = @()
         foreach ($locator in Get-RequiredLocators) {
@@ -811,9 +1188,20 @@ function Invoke-SmokeScenario {
             observed_pairs = $observed
             elapsed_ms = [int]([datetime]::UtcNow - $started).TotalMilliseconds
             profile_preserved = $true
+            failure_profile_unchanged = $failureProfileUnchanged
+            orphan = $orphanObserved
+            listener = $listenerObserved
+            observation_samples = $observationSamples
             copied_sidecar_restored = ($SmokeScenario -eq 'happy')
         }
     } finally {
+        foreach ($observation in @($observations)) {
+            $observationResult = Stop-ProcessNetworkObservation `
+                -Observation $observation
+            $observationSamples += [int]$observationResult.samples
+            $listenerObserved = $listenerObserved -or [bool]$observationResult.listener
+            $orphanObserved = $orphanObserved -or [bool]$observationResult.orphan
+        }
         Stop-PackagedProcess $process
         Stop-PackagedProcess $relaunch
         if ($null -ne $backupPath) {
@@ -925,8 +1313,8 @@ try {
         results = $results
         state = 'passed'
         elapsed_ms = [int]([datetime]::UtcNow - $started).TotalMilliseconds
-        orphan = $false
-        listener = $false
+        orphan = [bool]($results | Where-Object { $_.orphan } | Select-Object -First 1)
+        listener = [bool]($results | Where-Object { $_.listener } | Select-Object -First 1)
     }
     Write-BoundedEvidence -Path $evidenceFile -Value $evidence
     exit 0
