@@ -5,7 +5,6 @@
  * implementation-evidence until T055 styling lands.
  */
 
-// @ts-expect-error Vitest provides Node built-ins at runtime; the package tsconfig omits Node types.
 import { readFileSync } from "node:fs";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
