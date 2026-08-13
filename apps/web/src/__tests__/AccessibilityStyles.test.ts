@@ -1,4 +1,4 @@
-// @ts-expect-error Vitest provides Node built-ins at runtime; the Web tsconfig intentionally omits Node types.
+// @ts-ignore Vitest provides Node built-ins at runtime; the Web tsconfig intentionally omits Node types.
 import { readFileSync } from "node:fs";
 
 const styles = readFileSync(
