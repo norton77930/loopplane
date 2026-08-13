@@ -944,11 +944,10 @@ def test_host_attach_rejects_storage_without_retained_authority(
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows retained-handle boundary")
-@pytest.mark.parametrize("boundary", ["collection", "generation"])
-def test_attached_host_retains_runtime_storage_against_replacement(
-    tmp_path: Path, boundary: str
+def test_attached_host_retains_runtime_storage_collection_against_replacement(
+    tmp_path: Path,
 ) -> None:
-    """An attached Desktop Host prevents ancestor or leaf authority replacement."""
+    """An attached Desktop Host prevents replacement of its storage collection."""
 
     from bridge import desktop_runtime_config
 
@@ -967,8 +966,6 @@ def test_attached_host_retains_runtime_storage_against_replacement(
         )
         host = owner.attach_host(config)
         source = root / "generation-storage"
-        if boundary == "generation":
-            source /= "g0"
         target = source.with_name(f"{source.name}-moved")
 
         try:

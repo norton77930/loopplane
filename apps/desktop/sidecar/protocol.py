@@ -41,7 +41,7 @@ ErrorCategory = Literal[
 ]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class RpcError(Exception):
     code: int
     message: str

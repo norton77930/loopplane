@@ -223,27 +223,21 @@ class InteractionLease:
             return False
         if sub.released:
             return True
+        await sub.session.aclose()
+        await sub.stack.__aexit__(None, None, None)
         sub.released = True
         if self._owner is sub:
             self._owner = None
-        teardown_error: BaseException | None = None
-        try:
-            await sub.stack.__aexit__(None, None, None)
-        except BaseException as exc:
-            teardown_error = exc
-        finally:
-            self._pending.pop(subscription_id, None)
+        self._pending.pop(subscription_id, None)
         await self._emit(
             self._emit_closed,
             {
                 "subscription_id": sub.subscription_id,
                 "session_id": sub.session_id,
-                "reason": "failed" if teardown_error is not None else reason,
+                "reason": reason,
                 "history_readable": True,
             },
         )
-        if teardown_error is not None:
-            raise teardown_error
         return True
 
     async def shutdown(self) -> None:

@@ -38,7 +38,7 @@ def _host(tmp_path: Path) -> LoopPlaneHost:
 
 async def test_inspection_get_is_public_safe(tmp_path: Path) -> None:
     methods = InspectionMethods(_host(tmp_path))
-    result = await methods.inspection_get({"session_id": "s1"})
+    result = await methods.inspection_get({})
     assert result["unavailable"] is False
     assert "tools" in result
     blob = str(result)

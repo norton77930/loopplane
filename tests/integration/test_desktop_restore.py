@@ -30,7 +30,13 @@ from durability import initialize_runtime_storage  # noqa: E402
 from methods.backup import BackupMethods  # noqa: E402
 from mutation_lease import ProfileMutationLease  # noqa: E402
 from projects import ProjectStore  # noqa: E402
-from protocol import RpcError  # noqa: E402
+from protocol import (  # noqa: E402
+    PROTOCOL_MAJOR,
+    PROTOCOL_MINOR,
+    PROTOCOL_NAME,
+    RUNTIME_EVENT_SCHEMA,
+    RpcError,
+)
 from workspace import WorkspaceStore  # noqa: E402
 
 pytestmark = pytest.mark.anyio
@@ -81,7 +87,7 @@ async def _rpc(dispatcher: object, request_id: int, method: str, params: dict) -
         json.dumps(
             {
                 "jsonrpc": "2.0",
-                "id": request_id,
+                "id": str(request_id),
                 "method": method,
                 "params": params,
             }
@@ -198,7 +204,16 @@ async def _initialized_dispatcher(
         dispatcher,
         1,
         "initialize",
-        {"protocol": "loopplane.desktop.stdio", "version": 1},
+        {
+            "protocol": {
+                "name": PROTOCOL_NAME,
+                "major": PROTOCOL_MAJOR,
+                "minor": PROTOCOL_MINOR,
+            },
+            "runtime_event_schema": RUNTIME_EVENT_SCHEMA,
+            "client": {"name": "restore-test", "version": "0"},
+            "requested_capabilities": [],
+        },
     )
     assert "result" in initialized
     return (
@@ -883,7 +898,16 @@ async def test_runtime_owner_tracks_handover_and_releases_closed_host_graphs(
         dispatcher,
         1,
         "initialize",
-        {"protocol": "loopplane.desktop.stdio", "version": 1},
+        {
+            "protocol": {
+                "name": PROTOCOL_NAME,
+                "major": PROTOCOL_MAJOR,
+                "minor": PROTOCOL_MINOR,
+            },
+            "runtime_event_schema": RUNTIME_EVENT_SCHEMA,
+            "client": {"name": "restore-test", "version": "0"},
+            "requested_capabilities": [],
+        },
     )
     validated = await _rpc(
         dispatcher,
@@ -1165,7 +1189,16 @@ async def test_restored_desktop_interaction_uses_active_profile_principal(
             desktop,
             5,
             "initialize",
-            {"protocol": "loopplane.desktop.stdio", "version": 1},
+            {
+                "protocol": {
+                    "name": PROTOCOL_NAME,
+                    "major": PROTOCOL_MAJOR,
+                    "minor": PROTOCOL_MINOR,
+                },
+                "runtime_event_schema": RUNTIME_EVENT_SCHEMA,
+                "client": {"name": "restore-test", "version": "0"},
+                "requested_capabilities": [],
+            },
         )
         assert "result" in initialized, initialized
         opened = await _rpc(
@@ -1263,7 +1296,16 @@ async def test_restored_project_session_delete_remains_startable(
             desktop,
             5,
             "initialize",
-            {"protocol": "loopplane.desktop.stdio", "version": 1},
+            {
+                "protocol": {
+                    "name": PROTOCOL_NAME,
+                    "major": PROTOCOL_MAJOR,
+                    "minor": PROTOCOL_MINOR,
+                },
+                "runtime_event_schema": RUNTIME_EVENT_SCHEMA,
+                "client": {"name": "restore-test", "version": "0"},
+                "requested_capabilities": [],
+            },
         )
         opened = await _rpc(
             desktop,
@@ -1392,7 +1434,16 @@ async def test_post_effect_session_delete_error_keeps_authority_consistent(
             desktop,
             5,
             "initialize",
-            {"protocol": "loopplane.desktop.stdio", "version": 1},
+            {
+                "protocol": {
+                    "name": PROTOCOL_NAME,
+                    "major": PROTOCOL_MAJOR,
+                    "minor": PROTOCOL_MINOR,
+                },
+                "runtime_event_schema": RUNTIME_EVENT_SCHEMA,
+                "client": {"name": "restore-test", "version": "0"},
+                "requested_capabilities": [],
+            },
         )
         opened = await _rpc(
             desktop,
@@ -1550,7 +1601,16 @@ async def test_artifact_rollback_failure_does_not_restore_project_membership(
             desktop,
             5,
             "initialize",
-            {"protocol": "loopplane.desktop.stdio", "version": 1},
+            {
+                "protocol": {
+                    "name": PROTOCOL_NAME,
+                    "major": PROTOCOL_MAJOR,
+                    "minor": PROTOCOL_MINOR,
+                },
+                "runtime_event_schema": RUNTIME_EVENT_SCHEMA,
+                "client": {"name": "restore-test", "version": "0"},
+                "requested_capabilities": [],
+            },
         )
         opened = await _rpc(
             desktop,
@@ -2787,7 +2847,16 @@ async def test_session_mutation_and_agent_controls_reject_foreign_principal_sess
         dispatcher,
         1,
         "initialize",
-        {"protocol": "loopplane.desktop.stdio", "version": 1},
+        {
+            "protocol": {
+                "name": PROTOCOL_NAME,
+                "major": PROTOCOL_MAJOR,
+                "minor": PROTOCOL_MINOR,
+            },
+            "runtime_event_schema": RUNTIME_EVENT_SCHEMA,
+            "client": {"name": "restore-test", "version": "0"},
+            "requested_capabilities": [],
+        },
     )
     assert "result" in initialized
     listed = await _rpc(dispatcher, 2, "session.list", {})

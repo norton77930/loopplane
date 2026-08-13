@@ -26,7 +26,7 @@ from loopplane.artifacts.budget import (
     ReplacementDecision,
     ReplacementLedger,
 )
-from loopplane.artifacts.store import ArtifactStore
+from loopplane.artifacts.store import ArtifactSessionDeletion, ArtifactStore
 from loopplane.budget import BudgetChecker, BudgetPostureSnapshot, UsdBudgetCaps
 from loopplane.checkpoint.base import CheckpointStore, SessionSummary
 from loopplane.checkpoint.rebuild import rebuild_session
@@ -262,6 +262,7 @@ class RuntimeController:
         # FAIL-SAFE overlay summarizes the dropped span into the summary marker.
         self._compaction_summarizer = compaction_summarizer
         self._sessions: dict[str, _Session] = {}
+        self._pending_artifact_deletions: list[ArtifactSessionDeletion] = []
 
     def create_session(
         self,
@@ -977,6 +978,7 @@ class RuntimeController:
         self, session_ids: Sequence[str], *, principal_id: str | None
     ) -> list[str]:
         """Delete the subset of supplied sessions owned by ``principal_id``."""
+        self.retry_pending_artifact_deletions()
         owned = {
             summary.session_id
             for summary in self.list_sessions()
@@ -1011,11 +1013,34 @@ class RuntimeController:
                 pass
             if records:
                 if self._artifacts is not None and artifact_deletion is not None:
-                    self._artifacts.rollback_session_deletion(artifact_deletion)
+                    object.__setattr__(artifact_deletion, "rollback_required", True)
+                    try:
+                        self._artifacts.rollback_session_deletion(artifact_deletion)
+                    except Exception:
+                        if artifact_deletion.has_retained_authority:
+                            self._pending_artifact_deletions.append(artifact_deletion)
+                        raise
                 raise
         if self._artifacts is not None and artifact_deletion is not None:
-            self._artifacts.commit_session_deletion(artifact_deletion)
+            try:
+                self._artifacts.commit_session_deletion(artifact_deletion)
+            except Exception:
+                if artifact_deletion.has_retained_authority:
+                    self._pending_artifact_deletions.append(artifact_deletion)
+                self._sessions.pop(session_id, None)
+                raise
         self._sessions.pop(session_id, None)
+
+    def retry_pending_artifact_deletions(self) -> None:
+        """Finish retained artifact erasure before another lifecycle boundary."""
+
+        if self._artifacts is None:
+            return
+        self._artifacts.retry_pending_authority_cleanups()
+        while self._pending_artifact_deletions:
+            deletion = self._pending_artifact_deletions[0]
+            self._artifacts.retry_session_deletion(deletion)
+            self._pending_artifact_deletions.pop(0)
 
     def cancel(self, session_id: str) -> None:
         """Request cancellation: takes effect pre-turn and mid-stream and

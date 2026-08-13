@@ -15,11 +15,7 @@ sys.path.insert(0, str(SIDECAR))
 
 from profile import ProfileBusyError, ProfileOwnershipLock  # noqa: E402
 
-from interaction import (  # noqa: E402
-    InteractionBusy,
-    InteractionLease,
-    LiveSubscription,
-)
+from interaction import InteractionBusy, InteractionLease  # noqa: E402
 from methods.interaction import InteractionMethods  # noqa: E402
 from protocol import RpcError  # noqa: E402
 
@@ -99,45 +95,58 @@ async def test_release_owner_then_other_pane_may_acquire(tmp_path: Path) -> None
     await lease.shutdown()
 
 
-async def test_release_emits_failed_close_and_drops_owner_on_teardown_error() -> None:
-    class BrokenStack:
-        async def __aexit__(self, *_args: object) -> None:
-            raise RuntimeError("teardown failed")
-
-    class SessionSentinel:
-        session_id = "session-1"
-
-    closed: list[dict] = []
-
-    async def emit_closed(payload: dict) -> None:
-        closed.append(payload)
-
+async def test_release_retries_real_session_teardown_after_transient_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    host = _host(tmp_path)
     lease = InteractionLease()
-    lease.set_emitters(emit_closed=emit_closed)
-
-    sub = LiveSubscription(
-        subscription_id="sub-1",
-        session_id="session-1",
-        pane_id="pane-1",
-        session=SessionSentinel(),  # type: ignore[arg-type]
-        stack=BrokenStack(),  # type: ignore[arg-type]
+    methods = InteractionMethods(host, lease, working_scope=tmp_path)
+    created = await methods.create_interactive(
+        {"mutation_id": "m1", "pane_id": "pane-1"}
     )
-    lease._owner = sub
-    lease._pending[sub.subscription_id] = sub
+    subscription_id = created["subscription_id"]
+    sub = lease.require_owner(subscription_id)
+    attempts = 0
+    original_cleanup = sub.session._cleanup
+    assert original_cleanup is not None
+
+    async def fail_once() -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("teardown failed")
+        result = original_cleanup()
+        if result is not None:
+            await result
+
+    monkeypatch.setattr(sub.session, "_cleanup", fail_once)
 
     with pytest.raises(RuntimeError, match="teardown failed"):
-        await lease.release(sub.subscription_id)
+        await lease.release(subscription_id)
 
+    assert lease.active is sub
+    assert lease.get(subscription_id) is sub
+
+    assert await lease.release(subscription_id) is True
+    assert attempts == 2
     assert lease.active is None
-    assert lease.get(sub.subscription_id) is None
-    assert closed == [
-        {
-            "subscription_id": "sub-1",
-            "session_id": "session-1",
-            "reason": "failed",
-            "history_readable": True,
-        }
-    ]
+    assert lease.get(subscription_id) is None
+
+
+async def test_session_aclose_is_idempotent_after_context_exit(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+
+    async def sink(_event: object) -> None:
+        return None
+
+    async with host.session(sink) as session:
+        await session.aclose()
+        await session.aclose()
+
+    await session.aclose()
+    async with host.session(sink):
+        pass
 
 
 async def test_lease_busy_exception_zero_host_construction_on_contention(

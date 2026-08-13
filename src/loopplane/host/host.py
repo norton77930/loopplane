@@ -273,11 +273,17 @@ class LoopPlaneHost:
         )
         controller.attach_reviewer(session_id)
         self._bind(sink, controller, session_id, on_event, on_approval)
-        try:
-            yield Session(controller, session_id, sink, self._config)
-        finally:
+        session = Session(controller, session_id, sink, self._config)
+
+        def cleanup() -> None:
             sink.unbind()
             self._active = False
+
+        session._cleanup = cleanup
+        try:
+            yield session
+        finally:
+            await session.aclose()
 
     def list_sessions(self) -> list[SessionSummary]:
         return [
@@ -349,27 +355,41 @@ class LoopPlaneHost:
             await controller.resume(session_id, working_scope=working_scope)
             controller.attach_reviewer(session_id)
             self._bind(sink, controller, session_id, on_event, on_approval)
-            yield Session(controller, session_id, sink, self._config)
+            session = Session(controller, session_id, sink, self._config)
+
+            def cleanup() -> None:
+                sink.unbind()
+                self._active = False
+
+            session._cleanup = cleanup
+            yield session
         finally:
-            self._assembled.sink.unbind()
-            self._active = False
+            if "session" in locals():
+                await session.aclose()
+            else:
+                self._assembled.sink.unbind()
+                self._active = False
 
     async def aclose(self) -> None:
         """Release managed adapters and retained storage authority."""
 
         first_error: Exception | None = None
         try:
-            await self._assembled.capability_manager.aclose()
+            self._assembled.controller.retry_pending_artifact_deletions()
         except Exception as exc:
             first_error = exc
+        try:
+            await self._assembled.capability_manager.aclose()
+        except Exception as exc:
+            if first_error is None:
+                first_error = exc
         lease = self._assembled.storage_lease
-        if lease is not None:
+        if lease is not None and first_error is None:
             try:
                 lease.close()
                 self._assembled.storage_lease = None
             except Exception as exc:
-                if first_error is None:
-                    first_error = exc
+                first_error = exc
         if first_error is not None:
             raise first_error
 
@@ -926,6 +946,7 @@ class Session:
         self._sink = sink
         self._config = config
         self._outcome: RunOutcome | None = None
+        self._cleanup: Callable[[], Awaitable[None] | None] | None = None
 
     @property
     def session_id(self) -> str:
@@ -954,6 +975,15 @@ class Session:
         # Resolve anything the loop is parked on (a pending approval/question)
         # so a cancelled interactive run can never hang on a reviewer (FR-115).
         self._controller.on_reviewer_disconnect(self._session_id)
+
+    async def aclose(self) -> None:
+        cleanup = self._cleanup
+        if cleanup is None:
+            return
+        result = cleanup()
+        if result is not None:
+            await result
+        self._cleanup = None
 
     def answer_approval(
         self,

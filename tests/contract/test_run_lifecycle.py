@@ -10,6 +10,7 @@ flags including past user inputs, and increment batching that never reorders
 from __future__ import annotations
 
 import math
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -17,7 +18,10 @@ import anyio
 import pytest
 
 from loopplane.approval import HumanApproval
+from loopplane.artifacts import ArtifactStore
+from loopplane.artifacts.store import ArtifactSessionDeletion
 from loopplane.checkpoint import FileCheckpointStore
+from loopplane.checkpoint.records import SessionMetaPayload, SessionMetaRecord
 from loopplane.controller.controller import RuntimeController
 from loopplane.controller.dispatcher import (
     BatchingSink,
@@ -81,6 +85,198 @@ def _tool_script() -> list[ScriptEntry]:
 
 
 # --- controller operations -----------------------------------------------------
+
+
+async def test_artifact_rollback_failure_retains_authority_for_host_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A proven pre-effect failure cannot discard detached artifact authority."""
+
+    sink = EventCollector()
+    store = ArtifactStore(tmp_path / "sessions")
+    checkpoint = FileCheckpointStore(tmp_path / "sessions")
+    controller = RuntimeController(
+        model=ScriptedModel(script=[], context_capacity=100_000),
+        gateway=ToolGateway(),
+        event_sink=sink,
+        checkpoint_store=checkpoint,
+        artifact_store=store,
+    )
+    session_id = controller.create_session(working_scope=tmp_path, principal_id="owner")
+    now = datetime.now(UTC)
+    await checkpoint.append(
+        SessionMetaRecord(
+            session_id=session_id,
+            sequence=1,
+            recorded_at=now,
+            payload=SessionMetaPayload(
+                created_at=now,
+                label="rollback retry",
+                principal_id="owner",
+            ),
+        )
+    )
+    await store.offload(
+        session_id=session_id,
+        call_id="c1",
+        outputs=[TextBlock(text="owned artifact")],
+    )
+
+    def fail_checkpoint_delete(_session_id: str) -> None:
+        raise OSError("checkpoint delete rejected")
+
+    monkeypatch.setattr(checkpoint, "delete_session", fail_checkpoint_delete)
+    original_rollback = store.rollback_session_deletion
+
+    def fail_rollback(deletion: ArtifactSessionDeletion) -> None:
+        assert deletion.has_retained_authority is True
+        raise RuntimeError("artifact deletion rollback blocked")
+
+    monkeypatch.setattr(store, "rollback_session_deletion", fail_rollback)
+    with pytest.raises(RuntimeError, match="rollback blocked"):
+        controller.delete_session(session_id)
+
+    assert len(controller._pending_artifact_deletions) == 1
+    monkeypatch.setattr(store, "rollback_session_deletion", original_rollback)
+    controller.retry_pending_artifact_deletions()
+    assert controller._pending_artifact_deletions == []
+    assert (tmp_path / "sessions" / session_id / "artifacts").is_dir()
+
+
+async def test_delete_retries_failed_prepare_cleanup_before_detaching_next_session(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A retained prepare handle blocks the next direct delete until released."""
+
+    import loopplane.artifacts.store as artifact_store_module
+
+    sink = EventCollector()
+    store = ArtifactStore(tmp_path / "sessions")
+    controller = RuntimeController(
+        model=ScriptedModel(script=[], context_capacity=100_000),
+        gateway=ToolGateway(),
+        event_sink=sink,
+        checkpoint_store=FileCheckpointStore(tmp_path / "sessions"),
+        artifact_store=store,
+    )
+    first = controller.create_session(working_scope=tmp_path, principal_id="owner")
+    second = controller.create_session(working_scope=tmp_path, principal_id="owner")
+    for session_id in (first, second):
+        await store.offload(
+            session_id=session_id,
+            call_id="c1",
+            outputs=[TextBlock(text="owned artifact")],
+        )
+    original_validate = store._validate_staged_tree
+    original_anchor_close = artifact_store_module._windows_close_directory_anchor
+    original_os_close = os.close
+    fail_validation = True
+    failures = 1
+    target_authority: int | None = None
+
+    def fail_first_validation(*args: object, **kwargs: object) -> None:
+        nonlocal fail_validation
+        original_validate(*args, **kwargs)  # type: ignore[arg-type]
+        if fail_validation:
+            fail_validation = False
+            raise RuntimeError("validation failed")
+
+    monkeypatch.setattr(store, "_validate_staged_tree", fail_first_validation)
+    if os.name == "nt":
+
+        def fail_once(handle: int) -> None:
+            nonlocal failures, target_authority
+            if target_authority is None:
+                target_authority = handle
+            if handle == target_authority and failures:
+                failures -= 1
+                raise OSError("injected prepare close failure")
+            original_anchor_close(handle)
+
+        monkeypatch.setattr(
+            artifact_store_module,
+            "_windows_close_directory_anchor",
+            fail_once,
+        )
+    else:
+
+        def fail_once(descriptor: int) -> None:
+            nonlocal failures, target_authority
+            if target_authority is None:
+                target_authority = descriptor
+            if descriptor == target_authority and failures:
+                failures -= 1
+                raise OSError("injected prepare close failure")
+            original_os_close(descriptor)
+
+        monkeypatch.setattr(os, "close", fail_once)
+
+    with pytest.raises(RuntimeError, match="rollback blocked"):
+        controller.delete_session(first)
+
+    with pytest.raises(OSError, match="prepare close failure"):
+        controller.delete_session(second)
+    assert second in controller._sessions
+    assert (tmp_path / "sessions" / second / "artifacts").is_dir()
+
+    controller.delete_session(second)
+    assert second not in controller._sessions
+
+
+async def test_artifact_commit_failure_drops_session_and_retries_before_next_delete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A post-checkpoint erase failure remains exact and retryable."""
+
+    if os.name == "nt":
+        pytest.skip("POSIX retained-member retry contract")
+    sink = EventCollector()
+    gateway = ToolGateway()
+    store = ArtifactStore(tmp_path / "sessions")
+    controller = RuntimeController(
+        model=ScriptedModel(script=[], context_capacity=100_000),
+        gateway=gateway,
+        event_sink=sink,
+        checkpoint_store=FileCheckpointStore(tmp_path / "sessions"),
+        artifact_store=store,
+    )
+    first = controller.create_session(working_scope=tmp_path, principal_id="owner")
+    second = controller.create_session(working_scope=tmp_path, principal_id="owner")
+    await store.offload(
+        session_id=first,
+        call_id="c1",
+        outputs=[TextBlock(text="first artifact")],
+    )
+    await store.offload(
+        session_id=second,
+        call_id="c2",
+        outputs=[TextBlock(text="second artifact")],
+    )
+    failures = 1
+    original_commit = store.commit_session_deletion
+
+    def fail_once(deletion: ArtifactSessionDeletion) -> None:
+        nonlocal failures
+        if failures:
+            failures -= 1
+            raise OSError("injected artifact erase failure")
+        original_commit(deletion)
+
+    monkeypatch.setattr(store, "commit_session_deletion", fail_once)
+    with pytest.raises(OSError, match="erase failure"):
+        controller.delete_session(first)
+
+    assert first not in controller._sessions
+    assert first not in {summary.session_id for summary in controller.list_sessions()}
+    assert len(controller._pending_artifact_deletions) == 1
+
+    deleted = controller.bulk_delete_sessions([second], principal_id="owner")
+
+    assert deleted == [second]
+    assert controller._pending_artifact_deletions == []
 
 
 async def test_create_drive_detach_resume_terminate_and_list(tmp_path: Path) -> None:

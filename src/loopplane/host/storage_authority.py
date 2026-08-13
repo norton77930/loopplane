@@ -8,7 +8,7 @@ import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 _GENERATION_ID_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789-")
 _WINDOWS_RESERVED_GENERATION_IDS = frozenset(
@@ -16,6 +16,12 @@ _WINDOWS_RESERVED_GENERATION_IDS = frozenset(
     | {f"com{number}" for number in range(1, 10)}
     | {f"lpt{number}" for number in range(1, 10)}
 )
+
+
+def _windows_ctypes() -> Any:
+    import ctypes
+
+    return cast(Any, ctypes)
 
 
 class StorageAuthorityLease(Protocol):
@@ -380,6 +386,8 @@ def _windows_open_directory(path: Path) -> int:
     import ctypes
     from ctypes import wintypes
 
+    windows_ctypes = _windows_ctypes()
+
     delete_access = 0x00010000
     file_read_attributes = 0x00000080
     file_share_read = 0x00000001
@@ -389,7 +397,7 @@ def _windows_open_directory(path: Path) -> int:
     file_flag_open_reparse_point = 0x00200000
     invalid_handle = ctypes.c_void_p(-1).value
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = windows_ctypes.WinDLL("kernel32", use_last_error=True)
     create_file = kernel32.CreateFileW
     create_file.argtypes = [
         wintypes.LPCWSTR,
@@ -411,13 +419,15 @@ def _windows_open_directory(path: Path) -> int:
         None,
     )
     if handle == invalid_handle:
-        raise ctypes.WinError(ctypes.get_last_error())
+        raise windows_ctypes.WinError(windows_ctypes.get_last_error())
     return int(handle)
 
 
 def _windows_handle_identity(handle: int) -> tuple[int, int, int]:
     import ctypes
     from ctypes import wintypes
+
+    windows_ctypes = _windows_ctypes()
 
     file_attribute_directory = 0x00000010
     file_attribute_reparse_point = 0x00000400
@@ -436,7 +446,7 @@ def _windows_handle_identity(handle: int) -> tuple[int, int, int]:
             ("file_index_low", wintypes.DWORD),
         ]
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = windows_ctypes.WinDLL("kernel32", use_last_error=True)
     get_information = kernel32.GetFileInformationByHandle
     get_information.argtypes = [
         wintypes.HANDLE,
@@ -445,7 +455,7 @@ def _windows_handle_identity(handle: int) -> tuple[int, int, int]:
     get_information.restype = wintypes.BOOL
     information = _ByHandleFileInformation()
     if not get_information(wintypes.HANDLE(handle), ctypes.byref(information)):
-        raise ctypes.WinError(ctypes.get_last_error())
+        raise windows_ctypes.WinError(windows_ctypes.get_last_error())
     if not information.file_attributes & file_attribute_directory or (
         information.file_attributes & file_attribute_reparse_point
     ):
@@ -464,12 +474,13 @@ def _validate_windows_identity(
 
 
 def _windows_close_handle(handle: int) -> None:
-    import ctypes
     from ctypes import wintypes
 
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    windows_ctypes = _windows_ctypes()
+
+    kernel32 = windows_ctypes.WinDLL("kernel32", use_last_error=True)
     close_handle = kernel32.CloseHandle
     close_handle.argtypes = [wintypes.HANDLE]
     close_handle.restype = wintypes.BOOL
     if not close_handle(wintypes.HANDLE(handle)):
-        raise ctypes.WinError(ctypes.get_last_error())
+        raise windows_ctypes.WinError(windows_ctypes.get_last_error())

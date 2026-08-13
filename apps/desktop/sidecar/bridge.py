@@ -343,21 +343,17 @@ def build_rpc_dispatcher(
     async def teardown() -> None:
         if torn_down["value"]:
             return
-        try:
-            await lease.shutdown()
-        finally:
-            shutting_down["value"] = True
-            try:
-                if backup_methods is not None:
-                    backup_methods.shutdown()
-                if handover is not None:
-                    await handover.aclose()
-                elif on_shutdown is not None:
-                    result = on_shutdown()
-                    if result is not None:
-                        await result
-            finally:
-                torn_down["value"] = True
+        await lease.shutdown()
+        shutting_down["value"] = True
+        if backup_methods is not None:
+            backup_methods.shutdown()
+        if handover is not None:
+            await handover.aclose()
+        elif on_shutdown is not None:
+            result = on_shutdown()
+            if result is not None:
+                await result
+        torn_down["value"] = True
 
     async def system_shutdown(_params: dict) -> dict:
         # Bounded teardown only: it starts no durable work.
@@ -394,9 +390,30 @@ def select_desktop_model(env: Mapping[str, str]) -> Any:
 
     smoke_scenario = env.get("LOOPPLANE_PACKAGED_SMOKE_SCENARIO")
     if smoke_scenario is None:
-        from loopplane.cli.providers import select_model
+        import importlib
 
-        return select_model(env)
+        from loopplane.model import ModelBoundary, TextIncrement, TokenUsage, TurnEnd
+
+        class DemoModel:
+            def context_capacity(self) -> int:
+                return 1_000_000
+
+            async def stream_turn(self, _request: Any) -> Any:
+                yield TextIncrement(
+                    text="LoopPlane demo model: no provider is configured."
+                )
+                yield TurnEnd(stop_reason="end-turn", usage=TokenUsage())
+
+        reference = env.get("LOOPPLANE_MODEL")
+        if not reference or ":" not in reference:
+            return DemoModel()
+        module_name, _, attr = reference.partition(":")
+        try:
+            builder = getattr(importlib.import_module(module_name), attr)
+            model = builder()
+        except Exception:
+            return DemoModel()
+        return model if isinstance(model, ModelBoundary) else DemoModel()
     if smoke_scenario not in _SMOKE_RESPONSES:
         raise ValueError("sidecar_smoke_scenario_invalid")
 

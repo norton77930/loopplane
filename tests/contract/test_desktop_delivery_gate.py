@@ -42,6 +42,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER_PS1 = REPO_ROOT / "scripts" / "verify-desktop-stage-b.ps1"
 PACKAGE_WRAPPER_PS1 = REPO_ROOT / "scripts" / "build-desktop-package.ps1"
 SIDECAR_WRAPPER_PS1 = REPO_ROOT / "scripts" / "build-desktop-sidecar.ps1"
+WEB_WORKFLOW_YML = REPO_ROOT / ".github" / "workflows" / "web.yml"
 
 # Cases T004/T085/T086 SelfTest harnesses must implement (name → expect success).
 SELFTEST_CASES: dict[str, bool] = {
@@ -272,6 +273,22 @@ def test_verifier_script_exists_at_canonical_path() -> None:
         "missing scripts/verify-desktop-stage-b.ps1 "
         "(T004 implements bootstrap/final/delivery modes here)"
     )
+
+
+def test_fresh_checkout_test_and_web_workflows_use_tracked_authorities() -> None:
+    """T088 CI must not depend on ignored directories or deleted app-local locks."""
+
+    pytest_bootstrap = (REPO_ROOT / "conftest.py").read_text(encoding="utf-8")
+    assert 'Path("tmp").mkdir(exist_ok=True)' in pytest_bootstrap
+
+    web_workflow = WEB_WORKFLOW_YML.read_text(encoding="utf-8")
+    assert "cache-dependency-path: package-lock.json" in web_workflow
+    assert "apps/web/package-lock.json" not in web_workflow
+    assert web_workflow.count('- "package.json"') == 2
+    assert web_workflow.count('- "package-lock.json"') == 2
+    assert "npm run typecheck -w @loopplane/web" in web_workflow
+    assert "npm test -w @loopplane/web" in web_workflow
+    assert "npm run build -w @loopplane/web" in web_workflow
 
 
 def _run_selftest(
