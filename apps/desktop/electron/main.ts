@@ -18,7 +18,7 @@ import {
 type SidecarChildProcess = ChildProcessByStdio<Writable, Readable, null>;
 
 type WindowRuntime = {
-  window: BrowserWindow;
+  window: BrowserWindow | null;
   child: SidecarChildProcess;
   rpc: SidecarRpcClient;
   disposeHandlers: (() => void) | null;
@@ -45,6 +45,15 @@ const PACKAGED_SMOKE_SCENARIOS = new Set<PackagedSmokeScenario>([
   "corrupt-sidecar",
   "incompatible-sidecar",
 ]);
+const SIDECAR_WARMUP_MS = 2_500;
+const SIDECAR_INIT_TIMEOUT_MS = 7_000;
+
+async function waitForSidecarWarmup(spawnedAt: number): Promise<void> {
+  if (!app.isPackaged) return;
+  const remaining = SIDECAR_WARMUP_MS - (Date.now() - spawnedAt);
+  if (remaining <= 0) return;
+  await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+}
 
 function packagedSmokeOptions(): PackagedSmokeOptions | null {
   const argument = process.argv.find((value) =>
@@ -66,6 +75,13 @@ function packagedSmokeOptions(): PackagedSmokeOptions | null {
     scenario: scenario as PackagedSmokeScenario,
     profileRoot,
   };
+}
+
+const packagedSmokeRequested = process.argv.some((value) =>
+  value.startsWith(PACKAGED_SMOKE_ARGUMENT),
+);
+if (app.isPackaged && packagedSmokeRequested) {
+  app.commandLine.appendSwitch("enable-features", "UiaProvider");
 }
 
 let active: WindowRuntime | null = null;
@@ -100,149 +116,108 @@ async function teardownRuntime(
   await runtime.shutdownPromise;
 }
 
-function createWindow(smoke: PackagedSmokeOptions | null): void {
-  const entryPath = fileURLToPath(new URL("../dist/index.html", import.meta.url));
+function createWindow(
+  smoke: PackagedSmokeOptions | null,
+  rendererReady: Promise<void> = Promise.resolve(),
+): void {
+  const entryPath = app.isPackaged
+    ? join(app.getAppPath(), "dist", "index.html")
+    : fileURLToPath(new URL("../dist/index.html", import.meta.url));
   const entryUrl = pathToFileURL(entryPath).href;
-  let spawnSpec: SidecarSpawn;
+  let spawnedAt: number;
+  let child: SidecarChildProcess;
   try {
-    spawnSpec = resolveSidecar({
+    const spawnSpec: SidecarSpawn = resolveSidecar({
       packaged: app.isPackaged,
       platform: process.platform,
       resourcesPath: process.resourcesPath,
       devDir: fileURLToPath(new URL("../sidecar", import.meta.url)),
     });
+    spawnedAt = Date.now();
+    // spawn() throws synchronously on Windows when the bundled executable is
+    // present but not loadable, so a corrupt sidecar has to reach the same
+    // visible diagnostic instead of escaping as an unhandled main-process error.
+    child = spawn(spawnSpec.command, spawnSpec.args, {
+      stdio: ["pipe", "pipe", "inherit"],
+      env: {
+        ...process.env,
+        LOOPPLANE_PROFILE_ROOT:
+          smoke?.profileRoot ??
+          (app.isPackaged
+            ? join(app.getPath("userData"), "profile")
+            : process.env.LOOPPLANE_PROFILE_ROOT ??
+              join(app.getPath("userData"), "profile")),
+        LOOPPLANE_PACKAGED_SMOKE_SCENARIO: smoke?.scenario,
+      },
+    });
   } catch {
-    if (smoke) {
-      const window = new BrowserWindow({
-        width: 1000,
-        height: 700,
-        webPreferences: {
-          contextIsolation: true,
-          nodeIntegration: false,
-          preload: fileURLToPath(new URL("./preload.cjs", import.meta.url)),
-          sandbox: true,
-        },
-      });
-      diagnosticWindow = window;
-      window.on("closed", () => {
-        if (diagnosticWindow === window) diagnosticWindow = null;
-      });
-      installNavigationGuards(
-        {
-          webContents: {
-            onWillNavigate(listener) {
-              window.webContents.on("will-navigate", listener);
-            },
-            setWindowOpenHandler(handler) {
-              window.webContents.setWindowOpenHandler(handler);
-            },
-            getURL() {
-              return window.webContents.getURL();
-            },
-          },
-        },
-        { entryUrl },
-      );
-      installDenyByDefaultPermissions(session.defaultSession);
-      window.webContents.once("did-finish-load", () => {
-        if (window.isDestroyed()) return;
-        window.webContents.send("lp:app:statusEvent", {
-          method: "runtime.state",
-          params: {
-            state: "failed",
-            diagnostic: "The bundled sidecar is missing. Reinstall LoopPlane.",
-            recovery: "reinstall_application",
+    void rendererReady.then(() => {
+      if (smoke) {
+        const window = new BrowserWindow({
+          width: 1000,
+          height: 700,
+          webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+            preload: fileURLToPath(new URL("./preload.cjs", import.meta.url)),
+            sandbox: true,
           },
         });
-      });
-      void window.loadFile(entryPath);
-    } else {
+        diagnosticWindow = window;
+        window.on("closed", () => {
+          if (diagnosticWindow === window) diagnosticWindow = null;
+        });
+        installNavigationGuards(
+          {
+            webContents: {
+              onWillNavigate(listener) {
+                window.webContents.on("will-navigate", listener);
+              },
+              setWindowOpenHandler(handler) {
+                window.webContents.setWindowOpenHandler(handler);
+              },
+              getURL() {
+                return window.webContents.getURL();
+              },
+            },
+          },
+          { entryUrl },
+        );
+        installDenyByDefaultPermissions(session.defaultSession);
+        window.webContents.once("did-finish-load", () => {
+          if (window.isDestroyed()) return;
+          window.webContents.send("lp:app:statusEvent", {
+            method: "runtime.state",
+            params: {
+              state: "failed",
+              diagnostic:
+                "The bundled sidecar could not be started. Reinstall LoopPlane.",
+              recovery: "reinstall_application",
+            },
+          });
+        });
+        void window.loadFile(entryPath);
+        return;
+      }
       dialog.showErrorBox(
         "LoopPlane",
         "The bundled sidecar executable is missing; the installation may be corrupt.",
       );
       app.quit();
-    }
+    });
     return;
   }
-
-  const child = spawn(spawnSpec.command, spawnSpec.args, {
-    stdio: ["pipe", "pipe", "inherit"],
-    env: {
-      ...process.env,
-      LOOPPLANE_PROFILE_ROOT:
-        smoke?.profileRoot ??
-        (app.isPackaged
-          ? join(app.getPath("userData"), "profile")
-          : process.env.LOOPPLANE_PROFILE_ROOT ??
-            join(app.getPath("userData"), "profile")),
-      LOOPPLANE_PACKAGED_SMOKE_SCENARIO: smoke?.scenario,
-    },
-  });
 
   if (!child.stdin || !child.stdout) {
-    dialog.showErrorBox("LoopPlane", "Failed to open sidecar stdio.");
-    app.quit();
+    void rendererReady.then(() => {
+      dialog.showErrorBox("LoopPlane", "Failed to open sidecar stdio.");
+      app.quit();
+    });
     return;
   }
 
-  const window = new BrowserWindow({
-    width: 1000,
-    height: 700,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: fileURLToPath(new URL("./preload.cjs", import.meta.url)),
-      sandbox: true,
-    },
-  });
-
-  const chooseDirectory = async (): Promise<string | null> => {
-    const result = await dialog.showOpenDialog(window, {
-      properties: ["openDirectory"],
-    });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0] ?? null;
-  };
-
-  const chooseBackupDestination = async (): Promise<string | null> => {
-    const result = await dialog.showSaveDialog(window, {
-      defaultPath: "loopplane-backup.zip",
-      filters: [{ name: "LoopPlane backup", extensions: ["zip"] }],
-    });
-    if (result.canceled || !result.filePath) return null;
-    return result.filePath;
-  };
-
-  const chooseRestoreSource = async (): Promise<string | null> => {
-    const result = await dialog.showOpenDialog(window, {
-      properties: ["openFile"],
-      filters: [{ name: "LoopPlane backup", extensions: ["zip"] }],
-    });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0] ?? null;
-  };
-
-  installNavigationGuards(
-    {
-      webContents: {
-        onWillNavigate(listener) {
-          window.webContents.on("will-navigate", listener);
-        },
-        setWindowOpenHandler(handler) {
-          window.webContents.setWindowOpenHandler(handler);
-        },
-        getURL() {
-          return window.webContents.getURL();
-        },
-      },
-    },
-    { entryUrl },
-  );
-  installDenyByDefaultPermissions(session.defaultSession);
-
   const runtime: WindowRuntime = {
-    window,
+    window: null,
     child,
     rpc: null as unknown as SidecarRpcClient,
     disposeHandlers: null,
@@ -252,6 +227,11 @@ function createWindow(smoke: PackagedSmokeOptions | null): void {
   };
 
   const rpc = new SidecarRpcClient({
+    // A cold packaged start unpacks the frozen sidecar before it can answer
+    // initialize; the default 5s deadline plus the warmup expires first and
+    // reports a healthy runtime as unavailable. Failure scenarios never reach
+    // this timer: missing/corrupt fail at spawn and incompatible answers at once.
+    initTimeoutMs: SIDECAR_INIT_TIMEOUT_MS,
     child: {
       stdin: child.stdin,
       stdout: child.stdout,
@@ -266,7 +246,8 @@ function createWindow(smoke: PackagedSmokeOptions | null): void {
       },
     },
     onNotification: (method, params) => {
-      if (window.isDestroyed() || runtime.shuttingDown) return;
+      const window = runtime.window;
+      if (!window || window.isDestroyed() || runtime.shuttingDown) return;
       // Never start new durable work during shutdown; route only exact V1 methods.
       if (
         method === "runtime.event" ||
@@ -281,7 +262,13 @@ function createWindow(smoke: PackagedSmokeOptions | null): void {
       }
     },
     onStateChange: (state) => {
-      if (state === "failed" && !runtime.shuttingDown && !window.isDestroyed()) {
+      const window = runtime.window;
+      if (
+        state === "failed" &&
+        !runtime.shuttingDown &&
+        window &&
+        !window.isDestroyed()
+      ) {
         window.webContents.send("lp:app:statusEvent", {
           method: "runtime.state",
           params: { state: "failed", recovery: "restart_runtime" },
@@ -292,37 +279,146 @@ function createWindow(smoke: PackagedSmokeOptions | null): void {
   runtime.rpc = rpc;
   active = runtime;
 
-  const bindHandlers = (): (() => void) =>
-    registerDesktopIpcHandlers({
-      ipcMain,
-      rpc,
-      expectedSenderId: window.webContents.id,
-      expectedSenderUrl: entryUrl,
-      status: async () => ({ ready: rpc.connectionState === "ready" }),
-      onShutdown: async () => {
-        await teardownRuntime(runtime);
-        app.quit();
+  const openRendererWindow = (): BrowserWindow => {
+    if (runtime.window && !runtime.window.isDestroyed()) return runtime.window;
+
+    const window = new BrowserWindow({
+      width: 1000,
+      height: 700,
+      show: false,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        preload: fileURLToPath(new URL("./preload.cjs", import.meta.url)),
+        sandbox: true,
       },
-      chooseDirectory,
-      chooseBackupDestination,
-      chooseRestoreSource,
     });
+    runtime.window = window;
 
-  runtime.disposeHandlers = bindHandlers();
+    const chooseDirectory = async (): Promise<string | null> => {
+      const result = await dialog.showOpenDialog(window, {
+        properties: ["openDirectory"],
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return result.filePaths[0] ?? null;
+    };
 
-  void (async () => {
-    try {
-      await rpc.start();
-      if (runtime.shuttingDown) return;
-      runtime.started = true;
-      runtime.disposeHandlers = bindHandlers();
-      if (!window.isDestroyed()) {
+    const chooseBackupDestination = async (): Promise<string | null> => {
+      const result = await dialog.showSaveDialog(window, {
+        defaultPath: "loopplane-backup.zip",
+        filters: [{ name: "LoopPlane backup", extensions: ["zip"] }],
+      });
+      if (result.canceled || !result.filePath) return null;
+      return result.filePath;
+    };
+
+    const chooseRestoreSource = async (): Promise<string | null> => {
+      const result = await dialog.showOpenDialog(window, {
+        properties: ["openFile"],
+        filters: [{ name: "LoopPlane backup", extensions: ["zip"] }],
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return result.filePaths[0] ?? null;
+    };
+
+    installNavigationGuards(
+      {
+        webContents: {
+          onWillNavigate(listener) {
+            window.webContents.on("will-navigate", listener);
+          },
+          setWindowOpenHandler(handler) {
+            window.webContents.setWindowOpenHandler(handler);
+          },
+          getURL() {
+            return window.webContents.getURL();
+          },
+        },
+      },
+      { entryUrl },
+    );
+    installDenyByDefaultPermissions(session.defaultSession);
+
+    const bindHandlers = (): (() => void) =>
+      registerDesktopIpcHandlers({
+        ipcMain,
+        rpc,
+        expectedSenderId: window.webContents.id,
+        expectedSenderUrl: entryUrl,
+        status: async () => ({ ready: rpc.connectionState === "ready" }),
+        onShutdown: async () => {
+          await teardownRuntime(runtime);
+          app.quit();
+        },
+        chooseDirectory,
+        chooseBackupDestination,
+        chooseRestoreSource,
+      });
+
+    runtime.disposeHandlers = bindHandlers();
+
+    // Renderer reload: keep initial handlers available through the first load,
+    // then drop registrations for an old frame and re-bind after later loads.
+    let rendererLoaded = false;
+    window.webContents.on("did-start-navigation", () => {
+      if (!rendererLoaded) return;
+      // Local bindings only — no new durable sidecar work during reload.
+      runtime.disposeHandlers?.();
+      runtime.disposeHandlers = null;
+    });
+    window.webContents.on("did-finish-load", () => {
+      if (runtime.shuttingDown || window.isDestroyed()) return;
+      if (rendererLoaded) {
+        runtime.disposeHandlers = bindHandlers();
+      } else {
+        rendererLoaded = true;
+      }
+      if (rpc.connectionState === "ready") {
         window.webContents.send("lp:app:statusEvent", {
           method: "runtime.state",
           params: { state: "ready" },
         });
       }
+    });
+
+    window.on("closed", () => {
+      if (runtime.window === window) runtime.window = null;
+      void (async () => {
+        await teardownRuntime(runtime);
+        if (active === runtime) active = null;
+        app.quit();
+      })();
+    });
+
+    return window;
+  };
+
+  // Overlap the sidecar handshake with Electron/renderer startup: one packaged
+  // smoke deadline covers window + accessible locators + a usable runtime, and a
+  // handshake serialized after the renderer load spends that budget twice.
+  const sidecarStart = (async () => {
+    await waitForSidecarWarmup(spawnedAt);
+    await rpc.start();
+  })();
+  // Keep the rejection handled until the join below re-raises it in context.
+  sidecarStart.catch(() => {});
+
+  void (async () => {
+    try {
+      await rendererReady;
+      const window = openRendererWindow();
+      const rendererLoad = window.loadFile(entryPath);
+      await rendererLoad;
+      window.show();
+      await sidecarStart;
+      if (runtime.shuttingDown) return;
+      runtime.started = true;
+      window.webContents.send("lp:app:statusEvent", {
+        method: "runtime.state",
+        params: { state: "ready" },
+      });
     } catch (error) {
+      if (runtime.shuttingDown) return;
       const diagnostic =
         error instanceof Error &&
         "public" in error &&
@@ -330,8 +426,9 @@ function createWindow(smoke: PackagedSmokeOptions | null): void {
           "incompatible_protocol"
           ? "The local runtime is incompatible."
           : "The local runtime is unavailable.";
-      if (smoke && !window.isDestroyed()) {
-        window.webContents.once("did-finish-load", () => {
+      if (smoke) {
+        const window = openRendererWindow();
+        const sendFailed = (): void => {
           if (window.isDestroyed()) return;
           window.webContents.send("lp:app:statusEvent", {
             method: "runtime.state",
@@ -341,49 +438,36 @@ function createWindow(smoke: PackagedSmokeOptions | null): void {
               recovery: "restart_runtime",
             },
           });
-        });
-        await window.loadFile(entryPath);
-      } else if (!window.isDestroyed()) {
-        dialog.showErrorBox("LoopPlane", diagnostic);
+        };
+        // Reloading a renderer that already mounted drops its status
+        // subscription, so this one-shot diagnostic would be delivered to a
+        // frame that no longer exists. Only load a window that never started.
+        if (window.webContents.getURL()) {
+          sendFailed();
+        } else {
+          window.webContents.once("did-finish-load", sendFailed);
+          await window.loadFile(entryPath);
+        }
+        window.show();
+        return;
       }
+      dialog.showErrorBox("LoopPlane", diagnostic);
       await teardownRuntime(runtime, { force: true });
-      if (!smoke) app.quit();
+      app.quit();
     }
   })();
-
-  // Renderer reload: drop IPC registrations for the old frame; re-bind after load.
-  window.webContents.on("did-start-navigation", () => {
-    // Local bindings only — no new durable sidecar work during reload.
-    runtime.disposeHandlers?.();
-    runtime.disposeHandlers = null;
-  });
-  window.webContents.on("did-finish-load", () => {
-    if (runtime.shuttingDown || window.isDestroyed()) return;
-    runtime.disposeHandlers = bindHandlers();
-    if (rpc.connectionState === "ready") {
-      window.webContents.send("lp:app:statusEvent", {
-        method: "runtime.state",
-        params: { state: "ready" },
-      });
-    }
-  });
-
-  window.on("closed", () => {
-    void (async () => {
-      await teardownRuntime(runtime);
-      if (active === runtime) active = null;
-      app.quit();
-    })();
-  });
-
-  void window.loadFile(entryPath);
 }
 
-void app.whenReady().then(() => {
-  let smoke: PackagedSmokeOptions | null;
-  try {
-    smoke = packagedSmokeOptions();
-  } catch {
+let smoke: PackagedSmokeOptions | null = null;
+let smokeInvalid = false;
+try {
+  smoke = packagedSmokeOptions();
+} catch {
+  smokeInvalid = true;
+}
+
+const rendererReady = app.whenReady().then(() => {
+  if (smokeInvalid) {
     dialog.showErrorBox("LoopPlane", "Packaged smoke configuration is invalid.");
     app.quit();
     return;
@@ -391,8 +475,15 @@ void app.whenReady().then(() => {
   if (smoke) {
     app.setAccessibilitySupportEnabled(true);
   }
-  createWindow(smoke);
 });
+
+if (!smokeInvalid) {
+  if (smoke) {
+    createWindow(smoke, rendererReady);
+  } else {
+    void rendererReady.then(() => createWindow(null));
+  }
+}
 
 app.on("window-all-closed", () => {
   if (!active) app.quit();

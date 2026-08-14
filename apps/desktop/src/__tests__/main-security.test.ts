@@ -57,12 +57,80 @@ describe("bundled CSP and main composition", () => {
     expect(main).toContain("installDenyByDefaultPermissions");
     expect(main).not.toContain("function createDiagnosticWindow");
     expect(main).toContain("registerDesktopIpcHandlers");
-    expect(main.indexOf("registerDesktopIpcHandlers({")).toBeLessThan(
+    expect(main).toContain("const openRendererWindow = (): BrowserWindow =>");
+    expect(main).toContain("const SIDECAR_WARMUP_MS = 2_500");
+    expect(main).toContain("initTimeoutMs: SIDECAR_INIT_TIMEOUT_MS");
+    const warmupMs = Number(
+      /const SIDECAR_WARMUP_MS = ([\d_]+);/.exec(main)?.[1]?.replace(/_/g, ""),
+    );
+    const initMs = Number(
+      /const SIDECAR_INIT_TIMEOUT_MS = ([\d_]+);/
+        .exec(main)?.[1]
+        ?.replace(/_/g, ""),
+    );
+    expect(Number.isFinite(warmupMs)).toBe(true);
+    expect(Number.isFinite(initMs)).toBe(true);
+    // The handshake deadline has to outlast a cold frozen sidecar unpack, yet
+    // still fail inside the fixed 10s packaged-smoke acceptance window.
+    expect(warmupMs + initMs).toBeGreaterThan(7_500);
+    expect(warmupMs + initMs).toBeLessThan(10_000);
+    expect(main).toContain("await rendererReady");
+    expect(main).toContain("await waitForSidecarWarmup(spawnedAt)");
+    expect(main.indexOf("await waitForSidecarWarmup(spawnedAt)")).toBeLessThan(
       main.indexOf("await rpc.start()"),
+    );
+    expect(main).toContain("const window = openRendererWindow()");
+    expect(main).toContain("const rendererLoad = window.loadFile(entryPath)");
+    // The sidecar handshake overlaps Electron/renderer startup instead of being
+    // serialized after it, so one packaged-smoke deadline is not spent twice.
+    expect(main).toContain("const sidecarStart = (async () => {");
+    expect(main).toContain("sidecarStart.catch(() => {})");
+    expect(main).toContain("await sidecarStart");
+    expect(main.indexOf("const sidecarStart = (async () => {")).toBeLessThan(
+      main.indexOf("await rendererReady"),
+    );
+    expect(main.indexOf("await rpc.start()")).toBeLessThan(
+      main.indexOf("const window = openRendererWindow()"),
+    );
+    expect(main.indexOf("await rendererLoad")).toBeLessThan(
+      main.indexOf("window.show()"),
+    );
+    expect(main.indexOf("window.show()")).toBeLessThan(
+      main.indexOf("await sidecarStart"),
+    );
+    // A corrupt bundled sidecar makes spawn() throw synchronously on Windows, so
+    // it must land in the same visible-diagnostic catch as a missing sidecar
+    // instead of escaping as an unhandled main-process error with no renderer.
+    expect(main).not.toContain("const child = spawn(");
+    expect(main).toContain("child = spawn(spawnSpec.command, spawnSpec.args, {");
+    expect(
+      main.indexOf("const spawnSpec: SidecarSpawn = resolveSidecar({"),
+    ).toBeLessThan(
+      main.indexOf("child = spawn(spawnSpec.command, spawnSpec.args, {"),
+    );
+    expect(
+      main.indexOf("child = spawn(spawnSpec.command, spawnSpec.args, {"),
+    ).toBeLessThan(main.indexOf('recovery: "reinstall_application"'));
+    // The packaged-smoke failure diagnostic is one shot: reloading a renderer
+    // that already mounted destroys the frame holding its status subscription,
+    // so the failure path only loads a window that never started one.
+    expect(main).toContain("const sendFailed = (): void =>");
+    expect(main).toContain("if (window.webContents.getURL()) {");
+    expect(main.indexOf("const sendFailed = (): void =>")).toBeLessThan(
+      main.indexOf("await window.loadFile(entryPath)"),
+    );
+    expect(main).toContain("createWindow(smoke, rendererReady)");
+    expect(main).toContain("show: false");
+    expect(main.indexOf("registerDesktopIpcHandlers({")).toBeLessThan(
+      main.indexOf("await window.loadFile(entryPath)"),
     );
     expect(main).toContain("status: async () => ({ ready: rpc.connectionState === \"ready\" })");
     expect(main).toContain('method: "runtime.state"');
     expect(main).toContain('state: "ready"');
+    expect(main).toContain("let rendererLoaded = false");
+    expect(main).toContain("if (!rendererLoaded) return");
+    expect(main).toContain("if (rendererLoaded) {");
+    expect(main).toContain("rendererLoaded = true");
     expect(main).toContain("shutdownPromise: Promise<void> | null");
     expect(main).toContain("runtime.shutdownPromise ??=");
     expect(main).toContain("await runtime.shutdownPromise");

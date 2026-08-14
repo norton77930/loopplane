@@ -69,6 +69,7 @@ describe("accepted Desktop package metadata", () => {
     expect(mainConfig).toContain("dist-electron");
     expect(preloadConfig).toContain("electron/preload.ts");
     expect(preloadConfig).toContain("dist-electron");
+    expect(viteConfig).toContain('base: "./"');
     expect(viteConfig).toContain("build:");
     expect(viteConfig).toContain('outDir: "dist"');
   });
@@ -81,6 +82,10 @@ describe("accepted Desktop package metadata", () => {
     expect(builder).toContain("dist-electron/**/*");
     expect(builder).toContain("from: sidecar/dist");
     expect(builder).toContain("to: sidecar");
+    expect(builder).toContain('- "**/*"');
+    expect(main).toContain('app.isPackaged');
+    expect(main).toContain('join(app.getAppPath(), "dist", "index.html")');
+    expect(main).toContain('new URL("../dist/index.html"');
     expect(main).toContain('new URL("./preload.cjs"');
   });
 });
@@ -123,10 +128,16 @@ describe("descriptor-only build wrappers", () => {
     expect(wrapper).toContain("--extra openai");
     expect(wrapper).toContain("Scripts/pyinstaller.exe");
     expect(wrapper).toContain("loopplane-sidecar.spec");
+    expect(wrapper).toContain("$bundleRoot = Join-Path $outputRoot 'loopplane-sidecar'");
+    expect(wrapper).toContain("output_root = $bundleRoot");
     expect(wrapper).not.toMatch(/(^|\r?\n)\s*(?:&\s*)?pyinstaller(?:\.exe)?\b/i);
     expect(spec).toContain("SPECPATH");
     expect(spec).toContain('build_root / "src"');
     expect(spec).toContain('entrypoint = sidecar_root / "__main__.py"');
+    expect(spec).toContain('collect_submodules("loopplane.adapters")');
+    expect(spec).not.toContain('collect_submodules("loopplane")');
+    expect(spec).toContain("exclude_binaries=True");
+    expect(spec).toContain("COLLECT(");
     expect(spec).not.toContain('Analysis(\n    ["bridge.py"]');
     expect(entrypoint).toContain("from bridge import main");
   });
@@ -227,6 +238,7 @@ describe("external packaged-artifact smoke boundary", () => {
     expect(smoke).toContain("Restore-CopiedSidecar");
     expect(smoke).toContain("profile-");
     expect(smoke).toContain("LoopPlane smoke runtime diagnostic");
+    expect(smoke).toContain("Wait-RuntimeUsable");
     expect(smoke).toContain("AddSeconds(10)");
     expect(smoke).toContain("FileMode]::CreateNew");
     expect(smoke).toContain("Get-FileHash");

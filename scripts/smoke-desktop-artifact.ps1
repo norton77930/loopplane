@@ -45,6 +45,169 @@ $script:SupportedScenarios = @(
     'incompatible-sidecar'
 )
 
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+
+public static class LoopPlaneSmokeWindow
+{
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(IntPtr window);
+}
+
+// Observation runs inside the fixed acceptance deadline, so it must cost
+// microseconds: Win32_Process/Get-NetTCPConnection each cost ~1-3s per sample
+// on a loaded desktop and would measure the harness instead of the artifact.
+public static class LoopPlaneSmokeProcessTable
+{
+    private const uint TH32CS_SNAPPROCESS = 0x00000002;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    private struct PROCESSENTRY32
+    {
+        public uint dwSize;
+        public uint cntUsage;
+        public uint th32ProcessID;
+        public IntPtr th32DefaultHeapID;
+        public uint th32ModuleID;
+        public uint cntThreads;
+        public uint th32ParentProcessID;
+        public int pcPriClassBase;
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string szExeFile;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Ansi)]
+    private static extern bool Process32First(IntPtr snapshot, ref PROCESSENTRY32 entry);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Ansi)]
+    private static extern bool Process32Next(IntPtr snapshot, ref PROCESSENTRY32 entry);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    /// <summary>Flat [childPid, parentPid, ...] pairs for every visible process.</summary>
+    public static int[] ParentPairs()
+    {
+        List<int> pairs = new List<int>();
+        IntPtr snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (snapshot == IntPtr.Zero || snapshot == new IntPtr(-1))
+        {
+            throw new InvalidOperationException("process_snapshot_failed");
+        }
+        try
+        {
+            PROCESSENTRY32 entry = new PROCESSENTRY32();
+            entry.dwSize = (uint)Marshal.SizeOf(typeof(PROCESSENTRY32));
+            if (Process32First(snapshot, ref entry))
+            {
+                do
+                {
+                    pairs.Add((int)entry.th32ProcessID);
+                    pairs.Add((int)entry.th32ParentProcessID);
+                }
+                while (Process32Next(snapshot, ref entry));
+            }
+        }
+        finally
+        {
+            CloseHandle(snapshot);
+        }
+        return pairs.ToArray();
+    }
+}
+
+public static class LoopPlaneSmokeTcpTable
+{
+    private const int AF_INET = 2;
+    private const int AF_INET6 = 23;
+    private const int TCP_TABLE_OWNER_PID_LISTENER = 3;
+    private const uint NO_ERROR = 0;
+    private const uint ERROR_NOT_SUPPORTED = 50;
+    private const uint ERROR_INSUFFICIENT_BUFFER = 122;
+    private const int IPV4_ROW_BYTES = 24;
+    private const int IPV4_PID_OFFSET = 20;
+    private const int IPV6_ROW_BYTES = 56;
+    private const int IPV6_PID_OFFSET = 52;
+
+    [DllImport("iphlpapi.dll", SetLastError = true)]
+    private static extern uint GetExtendedTcpTable(
+        IntPtr table,
+        ref int size,
+        bool order,
+        int addressFamily,
+        int tableClass,
+        int reserved);
+
+    /// <summary>Owning process IDs of every local TCP listener (IPv4 and IPv6).</summary>
+    public static int[] ListenerProcessIds()
+    {
+        List<int> owners = new List<int>();
+        Collect(AF_INET, IPV4_ROW_BYTES, IPV4_PID_OFFSET, owners);
+        Collect(AF_INET6, IPV6_ROW_BYTES, IPV6_PID_OFFSET, owners);
+        return owners.ToArray();
+    }
+
+    private static void Collect(int family, int rowBytes, int pidOffset, List<int> owners)
+    {
+        // The listener table can grow between sizing and reading; bound the retries.
+        for (int attempt = 0; attempt < 4; attempt += 1)
+        {
+            int size = 0;
+            uint status = GetExtendedTcpTable(
+                IntPtr.Zero, ref size, false, family, TCP_TABLE_OWNER_PID_LISTENER, 0);
+            if (status == ERROR_NOT_SUPPORTED)
+            {
+                return;
+            }
+            if (status != NO_ERROR && status != ERROR_INSUFFICIENT_BUFFER)
+            {
+                throw new InvalidOperationException("tcp_listener_table_failed");
+            }
+            if (size <= 0)
+            {
+                return;
+            }
+            IntPtr buffer = Marshal.AllocHGlobal(size);
+            try
+            {
+                status = GetExtendedTcpTable(
+                    buffer, ref size, false, family, TCP_TABLE_OWNER_PID_LISTENER, 0);
+                if (status == ERROR_NOT_SUPPORTED)
+                {
+                    return;
+                }
+                if (status == ERROR_INSUFFICIENT_BUFFER)
+                {
+                    continue;
+                }
+                if (status != NO_ERROR)
+                {
+                    throw new InvalidOperationException("tcp_listener_table_failed");
+                }
+                int count = Marshal.ReadInt32(buffer);
+                for (int index = 0; index < count; index += 1)
+                {
+                    IntPtr row = new IntPtr(buffer.ToInt64() + 4 + ((long)index * rowBytes));
+                    owners.Add(Marshal.ReadInt32(row, pidOffset));
+                }
+                return;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+        throw new InvalidOperationException("tcp_listener_table_failed");
+    }
+}
+'@
+
 function Get-CanonicalPath {
     param([Parameter(Mandatory = $true)][string] $Path)
 
@@ -221,15 +384,15 @@ function Get-DescendantProcessIds {
     $descendants = New-Object System.Collections.Generic.HashSet[int]
     $pending = New-Object System.Collections.Generic.Queue[int]
     [void]$pending.Enqueue($RootProcessId)
-    $processes = @(Get-CimInstance Win32_Process)
+    $pairs = [LoopPlaneSmokeProcessTable]::ParentPairs()
     while ($pending.Count -gt 0) {
         $parentId = $pending.Dequeue()
-        foreach ($candidate in $processes) {
+        for ($index = 0; $index -lt $pairs.Length; $index += 2) {
             if (
-                [int]$candidate.ParentProcessId -eq $parentId -and
-                $descendants.Add([int]$candidate.ProcessId)
+                [int]$pairs[$index + 1] -eq $parentId -and
+                $descendants.Add([int]$pairs[$index])
             ) {
-                $pending.Enqueue([int]$candidate.ProcessId)
+                $pending.Enqueue([int]$pairs[$index])
             }
         }
     }
@@ -254,9 +417,8 @@ function Test-LocalTcpListener {
     if ($ids.Count -eq 0) {
         return $false
     }
-    $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop)
-    foreach ($listener in $listeners) {
-        if ($ids -contains [int]$listener.OwningProcess) {
+    foreach ($owner in [LoopPlaneSmokeTcpTable]::ListenerProcessIds()) {
+        if ($ids -contains [int]$owner) {
             return $true
         }
     }
@@ -791,13 +953,26 @@ function Wait-TopLevelWindow {
     throw 'packaged_window_timeout'
 }
 
+function Activate-PackagedRendererAccessibility {
+    param(
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process] $Process,
+        [Parameter(Mandatory = $true)] $Window
+    )
+
+    [void][LoopPlaneSmokeWindow]::SetForegroundWindow($Process.MainWindowHandle)
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.SendKeys]::SendWait('{TAB}')
+}
+
 function Wait-RequiredElements {
     param(
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process] $Process,
         [Parameter(Mandatory = $true)] $Window,
         [Parameter(Mandatory = $true)][datetime] $Deadline,
         $Observation
     )
 
+    Activate-PackagedRendererAccessibility -Process $Process -Window $Window
     while ([datetime]::UtcNow -lt $Deadline) {
         if ($null -ne $Observation) {
             Update-ProcessNetworkObservation -Observation $Observation
@@ -836,6 +1011,26 @@ function Read-ContainerText {
         }
     }
     return ($values -join "`n")
+}
+
+function Wait-RuntimeUsable {
+    param(
+        [Parameter(Mandatory = $true)] $Container,
+        [Parameter(Mandatory = $true)][datetime] $Deadline,
+        $Observation
+    )
+
+    while ([datetime]::UtcNow -lt $Deadline) {
+        if ($null -ne $Observation) {
+            Update-ProcessNetworkObservation -Observation $Observation
+        }
+        $status = Read-ContainerText $Container
+        if ($status -match '(?i)usable') {
+            return $status
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    throw 'runtime_not_usable'
 }
 
 function Start-PackagedProcess {
@@ -1014,16 +1209,17 @@ function Invoke-SmokeScenario {
             -Deadline $deadline `
             -Observation $processObservation
         $elements = Wait-RequiredElements `
+            -Process $process `
             -Window $window `
             -Deadline $deadline `
             -Observation $processObservation
         Update-ProcessNetworkObservation -Observation $processObservation
 
         if ($SmokeScenario -eq 'happy') {
-            $status = Read-ContainerText $elements['LoopPlane smoke runtime status']
-            if ($status -notmatch '(?i)usable') {
-                throw 'runtime_not_usable'
-            }
+            [void](Wait-RuntimeUsable `
+                -Container $elements['LoopPlane smoke runtime status'] `
+                -Deadline $deadline `
+                -Observation $processObservation)
             $newSession = $elements['LoopPlane smoke new session'].GetCurrentPattern(
                 [System.Windows.Automation.InvokePattern]::Pattern
             )
@@ -1038,10 +1234,14 @@ function Invoke-SmokeScenario {
             $submit.Invoke()
 
             $outcome = ''
-            while ([datetime]::UtcNow -lt $deadline) {
+            $terminalDeadline = [datetime]::UtcNow.AddSeconds(10)
+            while ([datetime]::UtcNow -lt $terminalDeadline) {
                 Update-ProcessNetworkObservation -Observation $processObservation
-                $outcome = Read-ContainerText `
-                    $elements['LoopPlane smoke latest outcome']
+                $outcomeElement = Find-UniqueElement `
+                    -Root $window `
+                    -Name 'LoopPlane smoke latest outcome' `
+                    -ControlType ([System.Windows.Automation.ControlType]::Group)
+                $outcome = Read-ContainerText $outcomeElement
                 if ($outcome -match 'loopplane-packaged-smoke-ok') {
                     break
                 }
@@ -1084,6 +1284,7 @@ function Invoke-SmokeScenario {
                 -Deadline $relaunchDeadline `
                 -Observation $relaunchObservation
             $relaunchElements = Wait-RequiredElements `
+                -Process $relaunch `
                 -Window $relaunchWindow `
                 -Deadline $relaunchDeadline `
                 -Observation $relaunchObservation
@@ -1091,8 +1292,11 @@ function Invoke-SmokeScenario {
             $sessions = ''
             while ([datetime]::UtcNow -lt $relaunchDeadline) {
                 Update-ProcessNetworkObservation -Observation $relaunchObservation
-                $sessions = Read-ContainerText `
-                    $relaunchElements['LoopPlane smoke session list']
+                $sessionList = Find-UniqueElement `
+                    -Root $relaunchWindow `
+                    -Name 'LoopPlane smoke session list' `
+                    -ControlType ([System.Windows.Automation.ControlType]::List)
+                $sessions = Read-ContainerText $sessionList
                 if (Test-RestartHistoryText $sessions) {
                     break
                 }
@@ -1195,7 +1399,7 @@ function Invoke-SmokeScenario {
             copied_sidecar_restored = ($SmokeScenario -eq 'happy')
         }
     } finally {
-        foreach ($observation in @($observations)) {
+        foreach ($observation in $observations.ToArray()) {
             $observationResult = Stop-ProcessNetworkObservation `
                 -Observation $observation
             $observationSamples += [int]$observationResult.samples

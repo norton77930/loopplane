@@ -17,7 +17,10 @@ for required in (loopplane_src / "loopplane", entrypoint):
 
 sys.path.insert(0, str(loopplane_src))
 sys.path.insert(0, str(sidecar_root))
-hiddenimports = collect_submodules("loopplane")
+# Desktop can dynamically select built-in model adapters via LOOPPLANE_MODEL.
+# All other runtime modules are collected from the static import graph; collecting
+# every loopplane submodule bloats the frozen startup beyond the 5-second handshake.
+hiddenimports = collect_submodules("loopplane.adapters")
 
 a = Analysis(
     [str(entrypoint)],
@@ -37,9 +40,8 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="loopplane-sidecar",
     debug=False,
     bootloader_ignore_signals=False,
@@ -51,4 +53,14 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+collect = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="loopplane-sidecar",
 )

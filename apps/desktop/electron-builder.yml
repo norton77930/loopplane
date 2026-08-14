@@ -14,7 +14,7 @@ extraResources:
   - from: sidecar/dist
     to: sidecar
     filter:
-      - loopplane-sidecar.exe
+      - "**/*"
 win:
   target: nsis
 mac:

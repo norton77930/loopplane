@@ -57,6 +57,7 @@ function emitElectronBundles(): Plugin {
 }
 
 export default defineConfig({
+  base: "./",
   plugins: [react(), emitElectronBundles()],
   build: {
     outDir: "dist",

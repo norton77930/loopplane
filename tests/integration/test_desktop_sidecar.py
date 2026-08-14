@@ -8,6 +8,10 @@ new package.
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -87,6 +91,96 @@ async def test_normal_desktop_model_supports_consecutive_turns() -> None:
 
     assert first
     assert second
+
+
+def test_entrypoint_negotiates_before_profile_bootstrap(tmp_path: Path) -> None:
+    profile_file = tmp_path / "profile-file"
+    profile_file.write_text("not a directory", encoding="utf-8")
+    entrypoint = _BRIDGE_PATH.with_name("__main__.py")
+    request = {
+        "jsonrpc": "2.0",
+        "id": "initialize-1",
+        "method": "initialize",
+        "params": {
+            "protocol": {
+                "name": "loopplane.desktop.stdio",
+                "major": 1,
+                "minor": 0,
+            },
+            "runtime_event_schema": 1,
+            "client": {"name": "test-client", "version": "0"},
+            "requested_capabilities": [
+                "sessions",
+                "interaction",
+                "projects",
+                "inspection",
+                "workspace",
+                "backup",
+            ],
+        },
+    }
+    env = os.environ.copy()
+    env["LOOPPLANE_PROFILE_ROOT"] = str(profile_file)
+    env["LOOPPLANE_PACKAGED_SMOKE_SCENARIO"] = "happy"
+    for name in ("LOOPPLANE_STAGE_B_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        env.pop(name, None)
+
+    completed = subprocess.run(
+        [sys.executable, str(entrypoint)],
+        input=json.dumps(request) + "\n",
+        text=True,
+        capture_output=True,
+        env=env,
+        timeout=10,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    response = json.loads(completed.stdout.splitlines()[0])
+    assert response["id"] == "initialize-1"
+    assert response["result"]["protocol"] == {
+        "name": "loopplane.desktop.stdio",
+        "major": 1,
+        "minor": 0,
+    }
+    assert response["result"]["methods"] == [
+        "agentControls.get",
+        "audit.list",
+        "backup.create",
+        "backup.describe",
+        "capabilities.invokeAction",
+        "capabilities.list",
+        "initialize",
+        "inspection.get",
+        "interaction.answerApproval",
+        "interaction.answerQuestion",
+        "interaction.cancel",
+        "interaction.submit",
+        "project.assignSession",
+        "project.create",
+        "project.list",
+        "project.remove",
+        "project.rename",
+        "restore.cancel",
+        "restore.commit",
+        "restore.validate",
+        "session.createInteractive",
+        "session.delete",
+        "session.fork",
+        "session.history",
+        "session.list",
+        "session.releaseInteractive",
+        "session.rename",
+        "session.resumeInteractive",
+        "session.setStarred",
+        "system.shutdown",
+        "system.status",
+        "workspace.bind",
+        "workspace.list",
+        "workspace.relink",
+        "workspace.remove",
+        "workspace.revalidate",
+    ]
 
 
 # --- US2 T036: session / project / workspace over composed RPC dispatcher ---

@@ -1,10 +1,9 @@
 """Desktop stdio sidecar entry (feature 019 + 078 T024/T025/T026).
 
 Legacy ``{op: run}`` helpers remain for integration tests. The launchable
-``main`` path acquires the Profile Ownership Lock, bootstraps generation via
-``validate_active_generation``, then serves JSON-RPC V1 through the pure
-dispatcher with Host-only interaction methods — never constructing Host before
-that gate.
+``main`` path negotiates JSON-RPC V1 before expensive runtime composition, then
+acquires the Profile Ownership Lock and bootstraps generation via
+``validate_active_generation`` before constructing Host-backed methods.
 """
 
 from __future__ import annotations
@@ -14,18 +13,13 @@ from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from loopplane.events import RuntimeEvent, serialize_event
-from loopplane.host import (
-    DesktopStorageAuthorityFactory,
-    LoopPlaneHost,
-    RuntimeConfig,
-    StorageConfig,
-)
-
 if TYPE_CHECKING:
     from profile import ProfileState
 
     from runtime import DesktopRuntimeOwner
+
+    from loopplane.events import RuntimeEvent
+    from loopplane.host import LoopPlaneHost, RuntimeConfig
 
 ReadLine = Callable[[], Awaitable[str | None]]
 WriteLine = Callable[[str], None]
@@ -38,6 +32,8 @@ async def collect_events(host: LoopPlaneHost, prompt: str) -> list[str]:
     The testable core: each normalized event becomes one ``serialize_event`` line,
     and the run's terminal outcome is the final line.
     """
+    from loopplane.events import serialize_event
+
     lines: list[str] = []
 
     async def sink(event: RuntimeEvent) -> None:
@@ -78,6 +74,8 @@ async def serve(
 
 
 async def _run(host: LoopPlaneHost, prompt: str, write_line: WriteLine) -> None:
+    from loopplane.events import serialize_event
+
     async def sink(event: RuntimeEvent) -> None:
         write_line(serialize_event(event))
 
@@ -155,6 +153,12 @@ def desktop_runtime_config(
     *, model: Any, profile_root: Path, generation_id: str
 ) -> RuntimeConfig:
     """Compose Desktop's required SQLite storage below one active generation id."""
+
+    from loopplane.host import (
+        DesktopStorageAuthorityFactory,
+        RuntimeConfig,
+        StorageConfig,
+    )
 
     try:
         from .durability import initialize_runtime_storage
@@ -377,6 +381,66 @@ def build_rpc_dispatcher(
     return dispatcher
 
 
+_DESKTOP_METHOD_NAMES = (
+    "agentControls.get",
+    "audit.list",
+    "backup.create",
+    "backup.describe",
+    "capabilities.invokeAction",
+    "capabilities.list",
+    "inspection.get",
+    "interaction.answerApproval",
+    "interaction.answerQuestion",
+    "interaction.cancel",
+    "interaction.submit",
+    "project.assignSession",
+    "project.create",
+    "project.list",
+    "project.remove",
+    "project.rename",
+    "restore.cancel",
+    "restore.commit",
+    "restore.validate",
+    "session.createInteractive",
+    "session.delete",
+    "session.fork",
+    "session.history",
+    "session.list",
+    "session.releaseInteractive",
+    "session.rename",
+    "session.resumeInteractive",
+    "session.setStarred",
+    "workspace.bind",
+    "workspace.list",
+    "workspace.relink",
+    "workspace.remove",
+    "workspace.revalidate",
+)
+_DESKTOP_CAPABILITIES = {
+    "sessions": "available",
+    "interaction": "available",
+    "inspection": "available",
+    "backup": "available",
+    "projects": "available",
+    "workspace": "available",
+}
+
+
+async def _runtime_not_ready(_params: dict[str, Any]) -> dict[str, Any]:
+    raise RuntimeError("runtime not ready")
+
+
+def build_initialize_dispatcher() -> object:
+    """Validate and answer initialize before expensive Host composition."""
+
+    from dispatcher import Dispatcher
+
+    return Dispatcher(
+        methods={name: _runtime_not_ready for name in _DESKTOP_METHOD_NAMES},
+        capabilities=dict(_DESKTOP_CAPABILITIES),
+    )
+
+
 _SMOKE_RESPONSES = {
     "happy": "loopplane-packaged-smoke-ok",
     "missing-sidecar": "runtime missing",
@@ -435,6 +499,28 @@ def main() -> None:  # pragma: no cover - real stdio entry (manual smoke)
 
     import anyio
 
+    init_line = sys.stdin.readline()
+    if not init_line:
+        return
+
+    try:
+        init_request = json.loads(init_line)
+    except (TypeError, ValueError):
+        return
+
+    if init_request.get("method") != "initialize":
+        return
+
+    init_dispatcher = build_initialize_dispatcher()
+    init_responses = anyio.run(init_dispatcher.handle_frame, init_line)  # type: ignore[attr-defined]
+    if not init_responses:
+        return
+
+    sys.stdout.write(json.dumps(init_responses[0], separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+    if "result" not in init_responses[0]:
+        return
+
     try:
         model = select_desktop_model(os.environ)
     except ValueError:
@@ -485,6 +571,7 @@ def main() -> None:  # pragma: no cover - real stdio entry (manual smoke)
         runtime_config=config,
         runtime_owner=owner,
     )
+    dispatcher.state.initialized = True  # type: ignore[attr-defined]
 
     async def _run_rpc() -> None:
         try:

@@ -623,14 +623,16 @@ try {
         $specPath
     ) $sidecarRoot
 
-    $executable = Join-Path $outputRoot 'loopplane-sidecar.exe'
-    if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
+    $bundleRoot = Join-Path $outputRoot 'loopplane-sidecar'
+    $executable = Join-Path $bundleRoot 'loopplane-sidecar.exe'
+    if (-not (Test-Path -LiteralPath $bundleRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $executable -PathType Leaf)) {
         throw 'frozen_sidecar_missing'
     }
     $result = [ordered]@{
         mode = 'delivery-sidecar'
         build_root = $buildRoot
-        output_root = $outputRoot
+        output_root = $bundleRoot
         executable_path = $executable
         descriptor_sha256 = Get-Sha256 $descriptorFile
     }

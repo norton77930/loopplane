@@ -116,6 +116,11 @@ def test_driver_uses_only_builtin_uia_and_normal_window_patterns() -> None:
     assert "ValuePattern" in source
     assert "InvokePattern" in source
     assert "WindowPattern" in source
+    assert "SetForegroundWindow" in source
+    assert "SendKeys]::SendWait('{TAB}')" in source
+    assert "$terminalDeadline = [datetime]::UtcNow.AddSeconds(10)" in source
+    assert "$outcomeElement = Find-UniqueElement" in source
+    assert "$sessionList = Find-UniqueElement" in source
     assert "loopplane packaged smoke" in source
     assert "loopplane-packaged-smoke-ok" in source
     assert "--loopplane-packaged-smoke=" in source
@@ -174,12 +179,36 @@ def test_driver_declares_bounded_failure_scenario_matrix() -> None:
     assert "Test-LocalTcpListener" in source
     assert "Start-ProcessNetworkObservation" in source
     assert "Stop-ProcessNetworkObservation" in source
+    assert "foreach ($observation in $observations.ToArray())" in source
+    assert "@($observations)" not in source
     assert "observation_samples" in source
     assert "failure_profile_unchanged" in source
     assert not re.search(r"orphan\s*=\s*\$false", source)
     assert not re.search(r"listener\s*=\s*\$false", source)
     assert "raw_error" not in source
     assert "exception_message" not in source
+
+
+def test_sidecar_entrypoint_defers_model_import_until_after_initialize() -> None:
+    code = (
+        "import importlib.util, pathlib, sys; "
+        "path = pathlib.Path(sys.argv[1]); "
+        "sys.path.insert(0, str(path.parent)); "
+        "spec = importlib.util.spec_from_file_location('desktop_sidecar_entry', path); "
+        "module = importlib.util.module_from_spec(spec); "
+        "spec.loader.exec_module(module); "
+        "print('loopplane.model' in sys.modules)"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", code, str(SIDECAR_MAIN)],
+        text=True,
+        capture_output=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "False"
 
 
 def test_packaged_application_exposes_bounded_smoke_composition() -> None:
@@ -207,6 +236,7 @@ def test_packaged_application_exposes_bounded_smoke_composition() -> None:
     assert "--loopplane-packaged-smoke=" in main
     assert "app.isPackaged" in main
     assert "setAccessibilitySupportEnabled(true)" in main
+    assert 'app.commandLine.appendSwitch("enable-features", "UiaProvider")' in main
     assert "LOOPPLANE_PACKAGED_SMOKE_PROFILE" in main
     assert "LOOPPLANE_PACKAGED_SMOKE_SCENARIO" in main
     assert "LOOPPLANE_PACKAGED_SMOKE_SCENARIO: smoke?.scenario" in main
