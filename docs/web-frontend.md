@@ -153,3 +153,22 @@ and `@` autocompletes skill/tool mentions from the unit-027 inspection data; bac
 commands are out of scope); and a **client-side cost estimate** (`pricing.ts` — the unit-026 usage
 × a bundled price table for the unit-028 selected model, shown by `UsageIndicator` as a labeled
 estimate, with token counts only when no price entry exists). Each degrades gracefully.
+
+## Shared presentation (unit 078)
+
+Unit 078 extracted the cowork surface into `packages/cowork-presentation`, a first-party
+workspace package that both Web and Desktop render from. The package owns the shell layout,
+pane workspace state and the single-active interactive lease, focus and dismissal helpers,
+the approval and question dialogs, and the runtime-unavailable surface. It is
+presentation-only: it holds no transport, no Host reference, and no provider credential.
+
+Each app supplies its own adapter. The Web adapter keeps talking to the unit-011 HTTP host
+exactly as before, and the Desktop adapter talks to a local sidecar over stdio JSON-RPC.
+Nothing about the Web app's **outward** behavior changed: the routes, the JSON envelopes,
+the event stream, and the auth boundary are the same, and the Web contract suites
+(`tests/contract/test_web_*_contract.py`, `test_webapi_boundary.py`,
+`test_web_type_artifacts.py`) assert that from the committed tree.
+
+Workspace resolution runs off a **single root lock**. Install from the repository root with
+`npm ci` and address a workspace explicitly, for example `npm test -w @loopplane/web`; there
+is no per-app lock any more.

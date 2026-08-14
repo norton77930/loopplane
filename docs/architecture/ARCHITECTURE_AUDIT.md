@@ -3,6 +3,7 @@
 > **Snapshot**: audited 2026-07-06 · commit `d095c8b` · read-only (no tests run, no files modified).
 > **Evidence tags**: `[RO-VERIFIED]` confirmed by direct file reads/greps during the audit · `[INFERRED]` reasonable inference · `[UNVERIFIED]` taken from recorded documentation, not re-verified.
 > **Maintenance rule**: this file is a point-in-time snapshot; it does not self-update. Re-run the audit and refresh the snapshot header every ~10 units or before each release. Before relying on this file, confirm the tree has not moved substantially past the snapshot commit.
+> **Known drift (2026-08-14, recorded by unit 078 T098; body deliberately not rewritten)**: the tree has moved past this snapshot. Unit 078 Desktop cowork parity is implemented and its Stage-C delivery gate has passed, so the completion line below ("076–078 Not started") is stale — `docs/loopplane-agent-board.md` remains the only completion authority. 078 also added the first-party `packages/cowork-presentation` workspace package and moved Desktop delivery behind four scripts (one tokenized verifier plus two token-free descriptor-only wrappers and an external-CWD UI-Automation smoke), neither of which existed at snapshot time. A full re-audit is out of scope for T098.
 
 ## 1. Source-of-truth decision
 

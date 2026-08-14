@@ -105,3 +105,19 @@
 - **Why AI errs**: agents treat examples as API templates and write code that ignores newer guards (budget, permission modes)
 - **Mitigation**: extend examples to newer capabilities (needs its own unit); the template's §A excludes examples from required reading
 - **Gate**: none · **Verify**: `tests/integration/test_examples_smoke.py`
+
+## R14 — A guard asserts the construct instead of the property
+
+- **Affected**: any source-shape contract, especially delivery and boundary guards
+- **Severity/Likelihood**: High / Med
+- **Why AI errs**: writing a guard straight from the implementation makes the assertion mirror the code that was just written, so it passes by construction and never encodes the property its own name claims. Unit 078 shipped `it("... invokes smoke from an external CWD")` asserting `toContain("Push-Location $runRoot")` — the one construct that cannot set a process working directory. Every delivery run then failed closed before UI Automation while the guard stayed green.
+- **Mitigation**: state the property, not the spelling; prove the new assertion is RED against the pre-fix source before trusting it; prefer asserting the observable effect (or the absence of the wrong construct) over the presence of the right-looking one
+- **Gate**: the guard's own negative self-check · **Verify**: extract the previous revision (`git show HEAD:<file>`) and confirm the new assertion fails on it
+
+## R15 — Fail-open multi-command CI steps
+
+- **Affected**: `.github/workflows/*.yml` steps that run several commands under `shell: powershell`
+- **Severity/Likelihood**: High / High
+- **Why AI errs**: a `run: |` block reads like a script where any failure stops the job, but GitHub reports only the **last** command's exit code and native tools do not raise in PowerShell. A fifteen-command reviewed-source gate can report `success` while `ruff`, `mypy`, `pytest`, and `npm test` all failed inside it.
+- **Mitigation**: check `$LASTEXITCODE` after each command, or split one command per step
+- **Gate**: none today (recorded, unrepaired, maintainer decision) · **Verify**: compare a green multi-command step against the same commands run as their own workflow

@@ -875,3 +875,68 @@ guard cannot pass vacuously against a repository that simply never mentions it.
   output.
 - The T092 result reflects the local tree. Repository CI remains red for reasons recorded
   under T090 and belonging to T093/T094.
+
+## Phase 9 convergence — T096–T098 documentation
+
+### T096 Desktop usage and delivery documentation
+
+`docs/desktop-gui.md` was still a unit-019/024 document. It told the reader to
+`pip install pyinstaller` and run `npm run dist` directly, which is exactly the bare route
+078 removed, and it described `npm run dev` as building the renderer and launching Electron
+when that script is now only `vite`. It was rewritten around the delivered system: the
+shared presentation package, the trust boundary across renderer, main, and sidecar, the
+two-phase startup, the on-disk profile-ownership layout, projects and chooser-bound
+workspaces, the backup disclosure with its draft and credential exclusions and the
+validate / commit / cancel restore lease, the four-script delivery table with PyInstaller
+named as build-only, the two required Windows CI jobs, and external-CWD package validation.
+
+That last section states the trap explicitly: the driver reads the **process** working
+directory, `Push-Location` does not change it, and the run fails closed with
+`checkout_cwd_forbidden` before any window appears. A worked `Start-Process
+-WorkingDirectory` invocation is given.
+
+`docs/manual-qa.md` lost the same `pip install pyinstaller` block. Its Desktop dev launch
+now installs from the repository root and launches from `apps/desktop`, because the Electron
+binary is a workspace devDependency and is not hoisted — the previously documented command
+would not have resolved. Its packaged-artifact checklist is now the verifier-gated chain and
+the external-CWD smoke acceptance rather than a bare tool sequence.
+
+### T097 shared presentation and unchanged Web contracts
+
+- `docs/web-frontend.md` gains a unit-078 section describing `packages/cowork-presentation`
+  as presentation-only — no transport, no Host reference, no credential — rendered by both
+  apps through their own adapters, and records that the Web app's outward behavior is
+  unchanged with the asserting suites named. It also records the single root lock and the
+  `-w` workspace addressing that replaced per-app locks.
+- `docs/web-api-host.md` gains a unit-078 section stating that nothing on that surface
+  changed and that Desktop does not mount, call, or depend on the host at all.
+- `docs/api-reference.md` was updated earlier in this unit with the six Desktop storage
+  authority symbols that `tests/contract/test_api_reference.py` compares against
+  `__all__`.
+
+### T098 capability, gap, architecture, and risk records
+
+- `docs/capabilities.md` gains a **Desktop cowork parity** layer row for 078.
+- `docs/gap-analysis.md` no longer calls 078 "the next reserved board unit"; it records the
+  unit as implemented with its delivery gate passed, while naming the board as the only
+  completion authority.
+- `docs/architecture/ARCHITECTURE_AUDIT.md` is a frozen dated snapshot whose own maintenance
+  rule forbids self-update, so its body was **not** rewritten. A dated known-drift note
+  records that its "076–078 Not started" line is stale and that the shared package and the
+  four-script delivery route postdate the snapshot.
+- `docs/architecture/RISK_REGISTER.md` gains two risks this unit actually paid for:
+  **R14 — a guard asserts the construct instead of the property**, taken from the
+  `Push-Location` false green, and **R15 — fail-open multi-command CI steps**, taken from
+  the reviewed-source gate that reports only its last command's exit code.
+- `CHANGELOG.md` gains the 078 entry under `[Unreleased]`, which previously jumped from 077
+  to 080. No version was bumped and no release was made.
+
+### Honesty
+
+- These are documentation edits. No new gate result is claimed by them.
+- The unit-024 row in `docs/capabilities.md` still describes the historical packaging route;
+  it was left as history and the new 078 row records that delivery replaced it.
+- `docs/gap-analysis.md` still lists 079 and the later roadmap tail as future work; that was
+  out of scope here.
+- The architecture audit remains stale in substance. Only a drift marker was added; a real
+  re-audit is a separate unit.
