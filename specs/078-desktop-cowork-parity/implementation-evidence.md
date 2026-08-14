@@ -774,7 +774,7 @@ The fixed ten-second acceptance deadline was not changed.
 | T090 focused Python delivery gate, packaged smoke, and sidecar | **115 passed** |
 | T090 full local `uv run pytest` | **1988 passed, 33 skipped** |
 | T090 Desktop typecheck and build | **PASS** |
-| T090 repository CI on the reviewed commit | **failure**; 5 failed / 1955 passed on Windows and 22 failed / 1944 passed on Ubuntu, all predating this task |
+| T090 repository CI on the reviewed commit | **failure**; 5 failed / 1955 passed on Windows and 22 failed / 1944 passed on Ubuntu. All were repaired later in this unit — the delivery-script defects during T090, the 18 POSIX failures in the convergence repair — so none is deferred |
 | T090 `web` and `desktop` source-gate workflows on the reviewed commit | **success**; both had failed on every prior commit of this branch |
 
 ### Honesty
@@ -1084,6 +1084,7 @@ contracts that encoded a call shape or a platform sequence the implementation do
 | Full suite, Windows | **1994 passed, 33 skipped**, 0 failed |
 | `uv run ruff check` and `uv run ruff format --check` | **PASS** |
 | `uv run mypy` (project configuration) | **Success: no issues found in 205 source files** |
+| Repository CI on the pushed commit `371341b`, run `31817242567` | **success** on both legs: `test (ubuntu-latest)` **1969 passed, 28 skipped, 0 failed** and `test (windows-latest)` success. `web` and `desktop` also succeeded on push and pull request. |
 
 ### Honesty
 
@@ -1093,8 +1094,9 @@ contracts that encoded a call shape or a platform sequence the implementation do
   is `test_public_safety.py`, which shells out to `git ls-files` and the mirror carries no
   `.git`; one is Unit 082's untracked `test_docs_links.py`. All three groups pass on Windows
   and were already green on Ubuntu CI. Copying `.git` (2.0 GB) or installing `pwsh` was not
-  done, so a fully green Linux run is **not** claimed here — the authoritative check is the
-  next Ubuntu CI run.
+  done, so a fully green Linux run is **not** claimed from the local mirror. The
+  authoritative check is repository CI, and run `31817242567` on the pushed commit reports
+  Ubuntu green with zero failures.
 - `mypy` was first run as `mypy src tests`, which overrides the configured file set and
   reported 956 errors across 121 files. The project gate is a bare `uv run mypy`; that is the
   invocation recorded above.
