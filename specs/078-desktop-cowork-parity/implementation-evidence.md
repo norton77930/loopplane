@@ -1145,13 +1145,15 @@ of a property (R14), so both were confirmed RED before the workflow changed.
 | `Assert-Gate` runtime proof under Windows PowerShell 5.1 | a passing gate does not throw; a failing gate throws its label; a later gate does **not** run after an earlier failure; `-w @loopplane/... -- --run` reaches the command verbatim |
 | `uv run ruff format --check .` and `uv run ruff check .` | **PASS** (533 files) |
 | `uv run mypy` | **Success: no issues found in 205 source files** |
+| The two repaired push steps, live on the runner (`desktop` run `31825795739`) | both **success**. `Python delivery contracts` 108 passed; `Shared, Web, and Desktop source gates` ran all eight guarded gates — presentation 29 tests / 7 files, web 202 / 58, desktop 165 / 19, plus three typechecks and two builds. No guard fired spuriously. |
 
 ### Honesty
 
-- Only the two push/pull-request steps are exercised by the `desktop` workflow on this
-  commit. The `Recheck reviewed source before Stage C` step runs only inside the delivery
-  job, which requires an approved submitted review, so its repaired form is verified by
-  parse, by runtime proof of the identical guard, and by contract — **not** by a live run.
+- The two push/pull-request steps are now verified live on the runner, including that the
+  guard does not fire on a passing gate. The `Recheck reviewed source before Stage C` step
+  runs only inside the delivery job, which requires an approved submitted review, so its
+  repaired form is verified by parse, by runtime proof of the identical guard, and by
+  contract — **not** by a live run.
 - The guard is structural: no unit test can execute a workflow step, so it approximates
   "a failing gate fails the step" by forbidding the shape that cannot. The runtime proof
   above covers the behaviour the structure stands in for.
