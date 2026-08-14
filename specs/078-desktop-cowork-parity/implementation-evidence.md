@@ -1239,12 +1239,14 @@ Both were written first and observed red against the unrepaired tree:
   contract under real UI Automation with a real sidecar; it is **not** a
   delivery-route artifact and is not claimed as one.
 - Three earlier smoke attempts failed — `packaged_smoke_failed`,
-  `runtime_not_usable`, and an unresolvable-path error. All three were caused by
-  passing the 8.3 short form of the scratch and artifact paths
-  (`C:\Users\NORTON~1.DEN\...`), which the driver cannot canonicalize. The same
-  package passes the whole matrix once the paths are supplied in full. The
-  `runtime_not_usable` result was **not** the known R16 timing margin, and was
-  briefly misattributed to it before the control run exposed the real cause.
+  `runtime_not_usable`, and an unresolvable-path error. All three came from
+  supplying the artifact and scratch locations in 8.3 short form, which is how
+  `%TEMP%` expands on that machine and which the driver cannot canonicalize. The
+  same package passes the whole matrix once the paths are given in full. The
+  `runtime_not_usable` result was therefore **not** the known R16 timing margin,
+  though it was briefly misattributed to it before the control run showed
+  otherwise. A driver that reported the offending path instead of a fixed public
+  code would have cost one run rather than four.
 - The runtime status and the runtime diagnostic can show the same sentence when
   no specific diagnostic is available. That duplication is existing product
   behaviour and was left alone: the diagnostic's text is asserted by the driver
