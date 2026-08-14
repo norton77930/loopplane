@@ -504,28 +504,32 @@ export function App({
 
   const mainBody = (
       <main className="app">
-        <h1>LoopPlane Desktop</h1>
-        <button type="button" onClick={() => setShowSettings(true)}>
-          Settings
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setShowSettings(false);
-            setShowBackupRestore(true);
-          }}
-        >
-          Backup and restore
-        </button>
-        <div
-          className="runtime-status"
-          role="group"
-          aria-label="LoopPlane smoke runtime status"
-          aria-live="polite"
-          data-testid="runtime-status"
-        >
-          <span role="status">{statusText}</span>
-        </div>
+        <header className="desktop-topbar">
+          <h1>LoopPlane Desktop</h1>
+          <div
+            className="runtime-status"
+            role="group"
+            aria-label="LoopPlane smoke runtime status"
+            aria-live="polite"
+            data-testid="runtime-status"
+          >
+            <span role="status">{statusText}</span>
+          </div>
+          <div className="desktop-topbar-actions">
+            <button type="button" onClick={() => setShowSettings(true)}>
+              Settings
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSettings(false);
+                setShowBackupRestore(true);
+              }}
+            >
+              Backup and restore
+            </button>
+          </div>
+        </header>
         <RuntimeUnavailable
           active={
             phase === "unavailable" ||
@@ -540,27 +544,36 @@ export function App({
               : "No runtime diagnostic."}
         </RuntimeUnavailable>
         {confirmDeleteId && (
-          <div className="confirm-dialog" role="dialog" aria-label="Confirm delete">
-            <p>Delete this session? History will be removed.</p>
-            <button
-              type="button"
-              onClick={() => {
-                void transport
-                  ?.deleteSession(confirmDeleteId, true)
-                  .then(async () => {
-                    if (activeSessionId === confirmDeleteId) {
-                      await newSession();
-                    }
-                    setConfirmDeleteId(null);
-                    await refreshLists();
-                  });
-              }}
+          <div className="modal-backdrop">
+            <div
+              className="confirm-dialog"
+              role="dialog"
+              aria-label="Confirm delete"
             >
-              Confirm delete
-            </button>
-            <button type="button" onClick={() => setConfirmDeleteId(null)}>
-              Cancel
-            </button>
+              <p>Delete this session? History will be removed.</p>
+              <div className="confirm-dialog-actions">
+                <button type="button" onClick={() => setConfirmDeleteId(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    void transport
+                      ?.deleteSession(confirmDeleteId, true)
+                      .then(async () => {
+                        if (activeSessionId === confirmDeleteId) {
+                          await newSession();
+                        }
+                        setConfirmDeleteId(null);
+                        await refreshLists();
+                      });
+                  }}
+                >
+                  Confirm delete
+                </button>
+              </div>
+            </div>
           </div>
         )}
         <MessageList
@@ -612,6 +625,7 @@ export function App({
         >
           <input
             aria-label="LoopPlane smoke prompt"
+            placeholder="Message LoopPlane…"
             value={input}
             disabled={blocked || !transport}
             onChange={(event) => setInput(event.target.value)}
@@ -641,28 +655,37 @@ export function App({
   return (
     <div className="desktop-shell" data-phase={phase}>
       {ownerClosePaneId && (
-        <div className="confirm-dialog" role="dialog" aria-label="Close interactive pane">
-          <p>This pane owns the active interaction. Close and release it?</p>
-          <button
-            type="button"
-            onClick={() => {
-              void (async () => {
-                await transport?.release?.();
-                setPaneWorkspace((ws) => {
-                  const released = releaseLease(ws, ownerClosePaneId);
-                  return closePane(released, ownerClosePaneId);
-                });
-                setOwnerClosePaneId(null);
-                runActive.current = false;
-                setPhase("ready");
-              })();
-            }}
+        <div className="modal-backdrop">
+          <div
+            className="confirm-dialog"
+            role="dialog"
+            aria-label="Close interactive pane"
           >
-            Release and close
-          </button>
-          <button type="button" onClick={() => setOwnerClosePaneId(null)}>
-            Cancel
-          </button>
+            <p>This pane owns the active interaction. Close and release it?</p>
+            <div className="confirm-dialog-actions">
+              <button type="button" onClick={() => setOwnerClosePaneId(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  void (async () => {
+                    await transport?.release?.();
+                    setPaneWorkspace((ws) => {
+                      const released = releaseLease(ws, ownerClosePaneId);
+                      return closePane(released, ownerClosePaneId);
+                    });
+                    setOwnerClosePaneId(null);
+                    runActive.current = false;
+                    setPhase("ready");
+                  })();
+                }}
+              >
+                Release and close
+              </button>
+            </div>
+          </div>
         </div>
       )}
       <CoworkShell

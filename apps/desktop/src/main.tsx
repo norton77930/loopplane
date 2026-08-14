@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
 import { createTransportFromWindow } from "./sidecar";
+import "./styles.css";
 
 const root = document.getElementById("root");
 const transport = createTransportFromWindow();

@@ -9,6 +9,9 @@ const webSrc = fileURLToPath(new URL("../web/src", import.meta.url));
 const coworkPresentationEntry = fileURLToPath(
   new URL("../../packages/cowork-presentation/src/index.ts", import.meta.url),
 );
+const coworkPresentationStyles = fileURLToPath(
+  new URL("../../packages/cowork-presentation/src/styles.css", import.meta.url),
+);
 const electronExternal = [
   "electron",
   ...builtinModules,
@@ -65,6 +68,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@web": webSrc,
+      // A string alias matches by prefix, so the subpath entry has to come
+      // first: otherwise `@loopplane/cowork-presentation/styles.css` resolves
+      // against the index module and cannot be found.
+      "@loopplane/cowork-presentation/styles.css": coworkPresentationStyles,
       "@loopplane/cowork-presentation": coworkPresentationEntry,
     },
   },
