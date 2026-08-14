@@ -203,16 +203,23 @@ jobs:
           $scratchRoot = Join-Path $runRoot 'smoke-scratch'
           $evidencePath = Join-Path $runRoot 'smoke-evidence.json'
 
-          Push-Location $runRoot
-          try {
-            & "$env:GITHUB_WORKSPACE/scripts/smoke-desktop-artifact.ps1" `
-              -AppExecutable $appExecutable `
-              -ScratchRoot $scratchRoot `
-              -EvidencePath $evidencePath `
-              -Scenario all
-            if ($LASTEXITCODE -ne 0) {
-              throw 'desktop_smoke_failed'
-            }
-          } finally {
-            Pop-Location
+          # Push-Location only moves the PowerShell provider location. The smoke
+          # asserts on the process working directory, which would still be the
+          # checkout and fail closed, so launch it with a real external one.
+          $smoke = Start-Process -FilePath 'powershell.exe' `
+            -WorkingDirectory $runRoot `
+            -NoNewWindow `
+            -Wait `
+            -PassThru `
+            -ArgumentList @(
+              '-NoProfile',
+              '-ExecutionPolicy', 'Bypass',
+              '-File', "$env:GITHUB_WORKSPACE/scripts/smoke-desktop-artifact.ps1",
+              '-AppExecutable', $appExecutable,
+              '-ScratchRoot', $scratchRoot,
+              '-EvidencePath', $evidencePath,
+              '-Scenario', 'all'
+            )
+          if ($smoke.ExitCode -ne 0) {
+            throw 'desktop_smoke_failed'
           }

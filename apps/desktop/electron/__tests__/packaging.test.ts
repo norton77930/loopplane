@@ -197,8 +197,18 @@ describe("Windows delivery workflow", () => {
     ]) {
       expect(workflow).toContain(determinant);
     }
-    expect(workflow).toContain("Push-Location $runRoot");
-    expect(workflow).toContain("-Scenario all");
+    // Push-Location only moves the PowerShell provider location, so it cannot
+    // establish the external working directory the smoke asserts on: the run
+    // stays in the checkout and fails closed before any UI Automation.
+    expect(workflow).not.toMatch(/^\s*Push-Location\b/m);
+    expect(workflow).toContain("-WorkingDirectory $runRoot");
+    expect(workflow).toContain(
+      "'-File', \"$env:GITHUB_WORKSPACE/scripts/smoke-desktop-artifact.ps1\"",
+    );
+    expect(workflow.indexOf("-WorkingDirectory $runRoot")).toBeLessThan(
+      workflow.lastIndexOf("smoke-desktop-artifact.ps1"),
+    );
+    expect(workflow).toContain("'-Scenario', 'all'");
   });
 });
 
