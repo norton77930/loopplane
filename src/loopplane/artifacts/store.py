@@ -339,12 +339,19 @@ class ArtifactStore:
             except Exception as rollback_exc:
                 rollback_error = rollback_exc
             finally:
-                assert original_parent_anchor is not None
-                assert quarantine_root_anchor is not None
-                assert staged_parent_anchor is not None
-                assert detached_anchor is not None
-                assert artifacts_anchor is not None
-                if rollback_error is not None and moved:
+                # A failure while acquiring the anchors leaves some of them
+                # unset, so the retained-authority record below cannot be built.
+                # The close-everything branch already tolerates the gaps, and
+                # `rollback_error` still surfaces the failure to the caller.
+                if (
+                    rollback_error is not None
+                    and moved
+                    and original_parent_anchor is not None
+                    and quarantine_root_anchor is not None
+                    and staged_parent_anchor is not None
+                    and detached_anchor is not None
+                    and artifacts_anchor is not None
+                ):
                     cleanup = _PendingArtifactAuthorityCleanup(
                         member_descriptors=(),
                         anchors=(),
@@ -462,6 +469,12 @@ class ArtifactStore:
                 else deletion.original.name
             )
             if _anchored_name_exists(deletion.original_parent_anchor, destination_name):
+                # A foreign object owns the destination name. Nothing has moved,
+                # so the detached tree is still retained and a caller that clears
+                # the obstruction can roll back again; releasing the authority
+                # here would make that retry impossible. An unusable store is a
+                # different case and still releases below.
+                object.__setattr__(deletion, "rollback_required", True)
                 raise RuntimeError("artifact deletion rollback blocked")
             if os.name == "nt" and not deletion.shared_session_directory:
                 deletion.artifacts_anchor.close()
@@ -713,6 +726,17 @@ class ArtifactStore:
             source_parent_descriptor=source_parent._descriptor,
             destination_parent_descriptor=destination_parent._descriptor,
         )
+        # renameat2 resolves the source name in the kernel, so a replacement
+        # installed after the check above would be moved instead of the validated
+        # directory. Re-prove the identity at the destination, as the Windows
+        # branch already does.
+        moved = os.stat(
+            destination_name,
+            dir_fd=destination_parent._descriptor,
+            follow_symlinks=False,
+        )
+        if (moved.st_dev, moved.st_ino) != moved_directory.identity:
+            raise RuntimeError("artifact deletion authority changed")
 
     def _delete_anchored_tree(self, deletion: ArtifactSessionDeletion) -> None:
         if os.name == "nt":
@@ -760,6 +784,17 @@ class ArtifactStore:
             raise RuntimeError("artifact deletion authority changed")
         staged_anchor = deletion.staged_parent_anchor
         artifacts_anchor = deletion.artifacts_anchor
+        if staged_anchor._descriptor is None and artifacts_anchor._descriptor is None:
+            # A retry after a pass that removed the tree and then failed while
+            # releasing authority. The anchors are already closed, so redoing the
+            # removal would assert on them; the only work left is that release.
+            if (
+                not deletion.posix_members_pending
+                and deletion.posix_artifacts_cleanup_name is None
+                and deletion.posix_session_cleanup_name is None
+            ):
+                return
+            raise RuntimeError("artifact deletion authority changed")
         assert staged_anchor._descriptor is not None
         assert artifacts_anchor._descriptor is not None
         if not deletion.posix_members_pending:
@@ -987,8 +1022,28 @@ def _file_identity(path: Path) -> tuple[int, int]:
     return info.st_dev, info.st_ino
 
 
+def _retained_descriptor_root(path: Path) -> bool:
+    """Report an exact ``/proc/self/fd/<fd>`` or ``/dev/fd/<fd>`` store root.
+
+    The desktop storage authority hands the store a root that *is* one open
+    directory descriptor of this process, so its final component is a magic
+    link. That link is an already-validated capability and the descriptor table
+    is process-private, so this exact root may be followed; every child anchor
+    stays no-follow checked. ``loopplane.host.snapshot`` applies the same rule.
+    """
+
+    name = path.name
+    return (
+        os.name != "nt"
+        and path.is_absolute()
+        and path.parent in {Path("/proc/self/fd"), Path("/dev/fd")}
+        and name.isascii()
+        and name.isdecimal()
+    )
+
+
 def _directory_identity(path: Path) -> tuple[int, int]:
-    info = os.lstat(path)
+    info = os.stat(path) if _retained_descriptor_root(path) else os.lstat(path)
     reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
     if (
         not stat.S_ISDIR(info.st_mode)
@@ -1106,12 +1161,12 @@ def _posix_open_artifact_members(
 
 
 def _posix_open_directory_anchor(path: Path) -> int:
-    flags = (
-        os.O_RDONLY
-        | getattr(os, "O_DIRECTORY", 0)
-        | getattr(os, "O_NOFOLLOW", 0)
-        | getattr(os, "O_CLOEXEC", 0)
-    )
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0)
+    if not _retained_descriptor_root(path):
+        # Every anchor but the process-private capability root must refuse a
+        # link at its final component. O_NOFOLLOW would fail that root outright:
+        # a procfs descriptor link reports ENOTDIR rather than opening.
+        flags |= getattr(os, "O_NOFOLLOW", 0)
     return os.open(path, flags)
 
 

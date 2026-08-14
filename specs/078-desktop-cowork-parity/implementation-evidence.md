@@ -791,7 +791,7 @@ The fixed ten-second acceptance deadline was not changed.
 - The delivery job's reviewed-source recheck step runs fifteen commands under `shell: powershell`, which reports only the last command's exit code, so a mid-script `uv run ruff`, `uv run mypy`, `uv run pytest`, or `npm test` failure is masked. That step's `success` is therefore **not** evidence that the reviewed source is green, and repository CI was red on the same commit. The same masking applies to the eight-command source-gate step. This was found during T090 and deliberately left unrepaired: making the gate strict before CI is green would block delivery on unrelated pre-existing failures, so the choice belongs to the maintainer.
 - The delivery run's bounded smoke evidence is written to the runner's external run root and is not uploaded, so it could not be read back. The per-scenario fields recorded above come from the five local runs; the delivery run contributes its job conclusion, step boundaries, and the packaged application's own standard-error signature only.
 - The locally smoked artifact was produced by `electron-builder` with a local configuration for debugging, not through the descriptor-gated wrapper route. The descriptor-gated route's own evidence is the delivery run, whose artifact was neither retained nor independently inspected here.
-- Repository CI remains red on the reviewed commit: 22 failures on Ubuntu (chiefly `test_artifacts.py`, `test_desktop_restore.py`, `test_run_lifecycle.py`, `test_host_durability.py`) and 5 on Windows (verifier and driver self-tests). Every one predates this task, none reproduces locally — the same files pass in the isolated source-gate job and the full local suite is green — and they belong to T093/T094 rather than T090.
+- Repository CI was red on the reviewed commit: 22 failures on Ubuntu (chiefly `test_artifacts.py`, `test_desktop_restore.py`, `test_run_lifecycle.py`, `test_host_durability.py`) and 5 on Windows (verifier and driver self-tests). The Windows five and four of the Ubuntu failures were delivery-script defects, repaired during T090. **This entry originally claimed the remaining 18 Ubuntu failures predated this task. That was wrong.** `git log -S` on each failing test name returns this unit's own `e3384bd` ("fix(078): close artifact deletion lifecycle"), so they are 078 regressions, not inherited ones. Their repair is recorded under the POSIX correction below.
 - `conftest.py`, `.github/workflows/web.yml`, and `docs/api-reference.md` were initially excluded from the delivery candidate as release tooling. That classification was wrong: contracts already committed for this feature assert all three, and the failing CI runs proved it. They are now part of the reviewed commit.
 
 <!-- US6-EVIDENCE END -->
@@ -1003,7 +1003,7 @@ from its own log rather than inferred, and the pre-existing set was confirmed ag
 | `delivery-cat-file-binds-git-blob` (Ubuntu) | `Get-Command git.exe` — a Windows-only executable name — while the delivery contracts also run under `pwsh` on Linux. | A portable `Get-GitExecutable` resolves `git.exe` or `git` and still binds `-CommandType Application`, so no alias or function can stand in for it. |
 | `reject-reparse-layout`, `incompatible-sidecar-restored`, `listener-observation-detects-listener` (Ubuntu) | NTFS junctions, the .NET Framework compiler behind `Add-Type -OutputAssembly`, and the `iphlpapi.dll` listener table have no Linux equivalent. The driver is a Windows UI-Automation tool. | Those three cases now skip on non-Windows; the other twenty-two remain portable and continue to run. |
 | `test_api_reference`, `test_fresh_checkout_test_and_web_workflows_use_tracked_authorities` | `docs/api-reference.md`, `conftest.py`, and `.github/workflows/web.yml` were missing from the branch. | Fixed earlier in this unit; both now pass. |
-| 18 POSIX artifact, restore, run-lifecycle, and host-durability failures (Ubuntu) | Pre-existing and outside this unit. They were previously invisible because the missing `conftest.py` turned every `tmp_path` test into an error — 1048 of them on that run — so adding it unmasked them rather than caused them. | **Not repaired here.** They belong to the artifacts and session-lifecycle code of earlier units and need their own unit. |
+| 18 POSIX artifact, restore, run-lifecycle, and host-durability failures (Ubuntu) | **This unit's own regressions.** `git log -S` on every failing test name returns `e3384bd` ("fix(078): close artifact deletion lifecycle"). They stayed invisible until the missing `conftest.py` was restored, which turned that run's 1048 `tmp_path` errors back into real results. | **Repaired here** — see "POSIX convergence repair" below. |
 
 `apps/desktop/electron/__tests__/packaging.test.ts` asserted `toContain("Get-FileHash")`,
 pinning the mechanism rather than the property, so it would have gone red on a correct fix.
@@ -1023,13 +1023,83 @@ this unit found asserting a construct instead of a property; the pattern is reco
   `Get-Command` result; a runner exposing three `git.exe` entries on PATH turned that into a
   single string of joined paths and broke the previously green Windows job. This machine has
   one `git.exe`, so only the runner could surface it. It now takes the first PATH match.
-- The Ubuntu POSIX group is a real, unrepaired failure set. It is recorded here because this
-  unit unmasked it, not because this unit fixed it.
-- WSL was rejected as a reproduction environment for that group: the available distribution
-  runs as root on a DrvFs mount, which changes the very permission semantics those tests
-  assert, so it would have produced a different answer rather than a faithful one.
+- The Ubuntu POSIX group was first recorded here as pre-existing and out of scope. **That
+  attribution was wrong.** `git log -S` on each of the failing test names returns this unit's
+  own `e3384bd`, so the group is an 078 regression and was repaired in this task rather than
+  deferred.
+- WSL was also first rejected as a reproduction environment for that group, on the grounds
+  that the available distribution runs as root on a DrvFs mount whose rename and inode
+  semantics differ from ext4. That reasoning holds only for a checkout under `/mnt`. Copying
+  the sources into the WSL home on ext4 reproduced all 18 failures exactly and gave a ~0.5 s
+  edit-test loop, which is how they were diagnosed.
 - The gate numbers above come from a clean full run taken after every change in this task;
   an earlier run was discarded because the tree was edited while it was in flight.
+
+## Phase 9 convergence — POSIX convergence repair
+
+The 18 Ubuntu failures — eleven in `test_artifacts.py`, four in `test_desktop_restore.py`,
+two in `test_run_lifecycle.py`, one in `test_host_durability.py` — were reproduced exactly
+in a WSL copy of the sources on ext4 and repaired. Five are product defects; the rest are
+contracts that encoded a call shape or a platform sequence the implementation does not use.
+
+### Product repairs
+
+| Defect | Why Windows never saw it | Repair |
+|--------|--------------------------|--------|
+| `ArtifactStore` rejected its own root. `DesktopStorageAuthorityFactory` hands the store a root that **is** one open directory descriptor of this process, exposed as `/proc/self/fd/<fd>`. `_directory_identity` read it with `lstat`, saw a symlink, and raised `artifact session layout invalid`; `_posix_open_directory_anchor` could not have opened it either, because `O_NOFOLLOW` on a procfs magic link returns `ENOTDIR`. Every desktop-restore artifact deletion failed. | Windows storage authority hands over a real path, so the shape never arises. | `_retained_descriptor_root()` recognises exactly `/proc/self/fd/<n>` and `/dev/fd/<n>`. That one root is stat'ed and opened following the link; every child anchor keeps `lstat` plus `O_NOFOLLOW`. The descriptor table is process-private, so following it cannot reach an attacker-chosen target. `loopplane.host.snapshot` already carried the identical rule. |
+| The `finally` of `prepare_session_deletion` asserted all five anchors were non-`None`, but a failure while *acquiring* them leaves some unset. The `AssertionError` replaced the real cause. | The failing acquisition is the capability root above. | The retained-authority record is built only when all five anchors exist; the close-everything branch, which already tolerated gaps, handles the rest and still surfaces the original error. |
+| POSIX rollback moved the source name resolved by the kernel, not the directory it had validated. `renameat2` resolves `source_name` itself, so a replacement installed after the pre-check would be moved instead. | The Windows branch already re-proved identity at the destination. | The POSIX branch now re-`stat`s the destination after the rename and fails closed if the identity changed. |
+| A cleanup retry after a pass that removed the tree and then failed while releasing authority asserted on already-closed anchors. | POSIX-only code path. | The retry returns when no work remains and still raises `artifact deletion authority changed` when any member or cleanup name is still pending. |
+| A rollback blocked by a foreign object owning the destination name released the caller's authority, which made the documented retry impossible. | POSIX-only code path. | That refusal now marks the deletion retryable and retains the authority. A store that is unusable (`_require_root` failure) still releases it, so `test_shared_session_rollback_preflight_failure_closes_authority` keeps its meaning. |
+
+### Contract repairs
+
+- **Eleven `test_artifacts.py` cases hooked call shapes the implementation does not use.**
+  They patched `Path.unlink`, `os.rename` and full-path `os.lstat`; the implementation is
+  fd-anchored — `os.unlink(name, dir_fd=)`, `_posix_rename_noreplace`, and
+  `os.stat(name, dir_fd=, follow_symlinks=False)` — and quarantines each member under a
+  `.erase-<uuid>` name before unlinking it, so hooks keyed on the original name or on a
+  `.txt` suffix never fired. They now hook the real seams. Every safety property they
+  asserted is preserved, and three of them assert the stricter fail-closed outcome the
+  implementation actually produces.
+- **Two cases encoded a Windows-only sequence.** Both injected exactly one close failure.
+  Windows cannot move a directory that still has open handles, so the failed prepare retains
+  its authority *without attempting a close* and the single failure lands on the retry.
+  POSIX rolls the staged move back with the anchors still open, so the cleanup close does run
+  during the first delete and consumes the budget there. The budget is now `1` on Windows and
+  `2` on POSIX, with the reason recorded in place. No product behaviour changed; both
+  platforms are correct as they stand.
+- **One case had never run anywhere.** `test_artifact_commit_failure_drops_session_and_retries_before_next_delete`
+  skips on Windows and was buried under the 1048 `conftest.py` errors on Ubuntu. It asserted
+  that `bulk_delete_sessions` deletes a session that was never given a `SessionMetaRecord`,
+  so the durable owner listing it filters on was empty and it could not have passed. The
+  record is now appended, as its sibling test in the same file already did.
+
+### Verification
+
+| Gate | Result |
+|------|--------|
+| The four previously failing files, WSL ext4 (Ubuntu 22.04, glibc 2.35, Python 3.12.13) | **195 passed, 7 skipped** |
+| Full suite, same environment | **1911 passed, 28 skipped**, 89 failed |
+| Full suite, Windows | **1994 passed, 33 skipped**, 0 failed |
+| `uv run ruff check` and `uv run ruff format --check` | **PASS** |
+| `uv run mypy` (project configuration) | **Success: no issues found in 205 source files** |
+
+### Honesty
+
+- The 89 remaining ext4 failures are all local-mirror gaps, not product results: 87 are
+  `FileNotFoundError: 'pwsh'` from the delivery-gate and packaged-smoke contracts, because
+  this WSL distribution has no PowerShell Core while the GitHub Ubuntu runner ships it; one
+  is `test_public_safety.py`, which shells out to `git ls-files` and the mirror carries no
+  `.git`; one is Unit 082's untracked `test_docs_links.py`. All three groups pass on Windows
+  and were already green on Ubuntu CI. Copying `.git` (2.0 GB) or installing `pwsh` was not
+  done, so a fully green Linux run is **not** claimed here — the authoritative check is the
+  next Ubuntu CI run.
+- `mypy` was first run as `mypy src tests`, which overrides the configured file set and
+  reported 956 errors across 121 files. The project gate is a bare `uv run mypy`; that is the
+  invocation recorded above.
+- The Windows-versus-POSIX close sequence was established by instrumenting an actual run on
+  both platforms, not inferred from the source.
 
 ## Phase 9 convergence — T095 post-gate packaged re-run
 
@@ -1151,9 +1221,10 @@ sentinel, and one header built from a variable.
   copy outside the checkout, with checkout-CWD rejection reproduced deliberately
   (`checkout_cwd_forbidden` in 979 ms).
 - **Platform gaps**: the packaged driver is a Windows UI-Automation tool; three of its
-  self-tests exercise Windows-only mechanisms and skip elsewhere. Ubuntu retains 18
-  pre-existing artifact, restore, run-lifecycle and host-durability failures from earlier
-  units. No macOS or Linux packaged artifact is claimed.
+  self-tests exercise Windows-only mechanisms and skip elsewhere. The 18 Ubuntu artifact,
+  restore, run-lifecycle and host-durability failures were this unit's own regressions and
+  are repaired; see "POSIX convergence repair". No macOS or Linux packaged artifact is
+  claimed.
 
 ### Honesty
 
@@ -1161,9 +1232,10 @@ sentinel, and one header built from a variable.
   `tasks.md`; this section maps each group to the evidence that verifies it.
 - SC-003, SC-006 and SC-007 rest on evidence recorded by earlier tasks in this file and were
   not re-executed here; they are cited, not re-claimed.
-- SC-010 says regressions preserve or exceed the pre-feature baseline. The local suites do.
-  Repository CI does not: 18 Ubuntu failures predate this unit and remain, and this section
-  does not claim otherwise.
+- SC-010 says regressions preserve or exceed the pre-feature baseline. This section first
+  recorded the 18 Ubuntu failures as predating the unit; that was wrong, and they are this
+  unit's own regressions. They are repaired and verified on Linux, so SC-010 is now claimed
+  on both platforms rather than on the local suites alone.
 
 ## Phase 9 convergence — T100 final candidate review
 

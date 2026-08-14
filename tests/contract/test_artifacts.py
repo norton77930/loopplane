@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from loopplane.artifacts import ArtifactStore, ReplacementLedger
+from loopplane.artifacts import store as artifact_store_module
 from loopplane.context import RunContext
 from loopplane.events import EventSequencer, RuntimeEvent
 from loopplane.events.emitter import EventEmitter
@@ -126,23 +127,37 @@ async def test_session_cleanup_does_not_unlink_through_mutable_parent_paths(
         call_id="c1",
         outputs=[TextBlock(text="owned artifact")],
     )
-    original_unlink = Path.unlink
+    original_path_unlink = Path.unlink
+    original_os_unlink = os.unlink
     truncated = False
+    unlinked_through_a_path: list[str] = []
 
-    def verify_erasure_before_unlink(path: Path, missing_ok: bool = False) -> None:
-        nonlocal truncated
+    def record_path_unlink(path: Path, missing_ok: bool = False) -> None:
+        # A path-based unlink resolves each component at call time, so it is the
+        # mutable-parent route this contract forbids for detached content.
         if ".d" in path.parts:
-            assert path.stat().st_size == 0
-            truncated = True
-        original_unlink(path, missing_ok=missing_ok)
+            unlinked_through_a_path.append(str(path))
+        original_path_unlink(path, missing_ok=missing_ok)
 
-    monkeypatch.setattr(Path, "unlink", verify_erasure_before_unlink)
+    def verify_erasure_before_unlink(name: str, *, dir_fd: int | None = None) -> None:
+        nonlocal truncated
+        if dir_fd is not None:
+            info = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+            assert info.st_size == 0, "a member must be erased before it is unlinked"
+            truncated = True
+        original_os_unlink(name, dir_fd=dir_fd)
+
+    monkeypatch.setattr(Path, "unlink", record_path_unlink)
+    monkeypatch.setattr(os, "unlink", verify_erasure_before_unlink)
 
     store.delete_session("s1")
 
     assert (tmp_path / "s1").exists() is False
     if os.name != "nt":
+        # Erasure is observed where it actually happens: against an opened
+        # directory descriptor, never through a re-resolved path.
         assert truncated is True
+        assert unlinked_through_a_path == []
         assert (tmp_path / ".d").exists() is False
 
 
@@ -184,28 +199,27 @@ async def test_shared_session_rollback_anchors_parent_during_rename(
         assert replacement.exists() is False
         return
 
+    # The anchored move does not go through os.rename: it issues renameat2 so the
+    # no-replace flag is enforced by the kernel. Inject the race at that seam, or
+    # the replacement never happens and the contract passes vacuously.
     original_rename = os.rename
+    original_noreplace = artifact_store_module._posix_rename_noreplace
     replacement_attempted = False
 
-    def rename_during_rollback(
-        source: str,
-        destination: str,
-        *,
-        src_dir_fd: int | None = None,
-        dst_dir_fd: int | None = None,
-    ) -> None:
+    def rename_during_rollback(**anchored: object) -> None:
         nonlocal replacement_attempted
-        if src_dir_fd is not None and not replacement_attempted:
+        if not replacement_attempted:
             replacement_attempted = True
+            # Move the session directory out from under the rollback, after its
+            # pre-move check and before the anchored rename lands.
             original_rename(session, replacement)
-        original_rename(
-            source,
-            destination,
-            src_dir_fd=src_dir_fd,
-            dst_dir_fd=dst_dir_fd,
-        )
+        original_noreplace(**anchored)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(os, "rename", rename_during_rollback)
+    monkeypatch.setattr(
+        artifact_store_module,
+        "_posix_rename_noreplace",
+        rename_during_rollback,
+    )
     with pytest.raises(RuntimeError, match="artifact deletion rollback blocked"):
         store.rollback_session_deletion(deletion)
 
@@ -243,14 +257,26 @@ async def test_shared_session_commit_erases_exact_detached_staging_tree(
         unrelated = replacement_artifacts / "unrelated.txt"
         unrelated.write_text("unrelated", encoding="utf-8")
 
-    store.commit_session_deletion(deletion)
-
     if replacement_blocked:
+        store.commit_session_deletion(deletion)
         assert deletion.staged.exists() is False
         return
+
+    # The retained members are erased through the held descriptors, but removing
+    # the staged shell finds a different inode under the quarantine root, so the
+    # anchored cleanup refuses instead of deleting whatever now owns that name.
+    with pytest.raises(RuntimeError, match="artifact deletion authority changed"):
+        store.commit_session_deletion(deletion)
+
+    # The replacement that now owns the staged name is untouched.
     assert unrelated.read_text(encoding="utf-8") == "unrelated"
+    assert deletion.staged.is_dir()
+    # The detached tree is reached only through the retained descriptors, so its
+    # members are erased and unlinked and the artifacts directory is gone. Only
+    # the outer shell survives, because removing it by name would have destroyed
+    # an inode this deletion never validated.
     assert moved.is_dir()
-    assert all(member.stat().st_size == 0 for member in (moved / "artifacts").iterdir())
+    assert (moved / "artifacts").exists() is False
 
 
 async def test_shared_session_prepare_rejects_artifacts_child_replacement(
@@ -287,31 +313,27 @@ async def test_shared_session_prepare_rejects_artifacts_child_replacement(
 
         monkeypatch.setattr(os, "replace", replace_child)
     else:
+        # The anchored move issues renameat2, not os.rename, so the swap has to be
+        # injected at that seam to land inside the check-to-rename window.
         original_rename = os.rename
+        original_noreplace = artifact_store_module._posix_rename_noreplace
         replaced = False
 
-        def rename_child(
-            source: str,
-            destination: str,
-            *,
-            src_dir_fd: int | None = None,
-            dst_dir_fd: int | None = None,
-        ) -> None:
+        def rename_child(**anchored: object) -> None:
             nonlocal replaced, replacement_file
-            if src_dir_fd is not None and not replaced:
+            if not replaced:
                 replaced = True
                 original_rename(session / "artifacts", original_artifacts)
                 (session / "artifacts").mkdir()
                 replacement_file = session / "artifacts" / "unrelated.txt"
                 replacement_file.write_text("unrelated", encoding="utf-8")
-            original_rename(
-                source,
-                destination,
-                src_dir_fd=src_dir_fd,
-                dst_dir_fd=dst_dir_fd,
-            )
+            original_noreplace(**anchored)  # type: ignore[arg-type]
 
-        monkeypatch.setattr(os, "rename", rename_child)
+        monkeypatch.setattr(
+            artifact_store_module,
+            "_posix_rename_noreplace",
+            rename_child,
+        )
 
     with pytest.raises(RuntimeError, match="artifact deletion"):
         store.prepare_session_deletion("s1")
@@ -531,7 +553,11 @@ async def test_posix_member_race_truncates_retained_object_only(
         original_ftruncate(descriptor, length)
 
     monkeypatch.setattr(os, "ftruncate", replace_before_truncate)
-    store.commit_session_deletion(deletion)
+    # The retained descriptor still names the original inode, so the erase lands
+    # on the moved object. Cleanup then finds a different inode under the member
+    # name and refuses, rather than unlinking the replacement.
+    with pytest.raises(RuntimeError, match="artifact deletion authority changed"):
+        store.commit_session_deletion(deletion)
 
     assert injected is True
     assert artifact.read_bytes() == replacement
@@ -684,33 +710,50 @@ async def test_posix_cleanup_revalidates_every_member_before_unlink(
     )
     deletion = store.prepare_session_deletion("s1")
     assert deletion is not None
-    members = sorted((deletion.staged / "artifacts").iterdir())
-    first, second = members
-    original_lstat = os.lstat
-    second_checks = 0
-    injected = False
+    artifacts_dir = deletion.staged / "artifacts"
+    assert len(sorted(artifacts_dir.iterdir())) == 2
+    original_stat = os.stat
+    quarantine_checks: dict[str, int] = {}
+    injected: str | None = None
 
     def replace_second_before_its_unlink(
-        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
-        *args: object,
-        **kwargs: object,
+        name: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        *,
+        dir_fd: int | None = None,
+        follow_symlinks: bool = True,
     ) -> os.stat_result:
-        nonlocal injected, second_checks
-        if Path(path) == second:
-            second_checks += 1
-            if second_checks == 3:
-                injected = True
-                second.rename(second.with_name("owned-second"))
-                second.write_text("unrelated", encoding="utf-8")
-        return original_lstat(path, *args, **kwargs)
+        nonlocal injected
+        # Every member is renamed to a ".erase-" name and then unlinked, so each
+        # such name is stat'ed twice against the artifacts anchor: once to prove
+        # the name is free, once to revalidate identity immediately before the
+        # unlink. Swap the *second* member inside that second window, which is
+        # the only window an attacker could aim at.
+        if (
+            isinstance(name, str)
+            and name.startswith(".erase-")
+            and dir_fd == deletion.artifacts_anchor._descriptor
+        ):
+            quarantine_checks[name] = quarantine_checks.get(name, 0) + 1
+            if quarantine_checks[name] == 2 and len(quarantine_checks) == 2:
+                injected = name
+                quarantined = artifacts_dir / name
+                quarantined.rename(artifacts_dir / "owned-second")
+                quarantined.write_text("unrelated", encoding="utf-8")
+        return original_stat(name, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
 
-    monkeypatch.setattr(os, "lstat", replace_second_before_its_unlink)
+    monkeypatch.setattr(os, "stat", replace_second_before_its_unlink)
     with pytest.raises(RuntimeError, match="authority changed"):
         store.commit_session_deletion(deletion)
 
-    assert injected is True
-    assert first.exists()
-    assert second.read_text(encoding="utf-8") == "unrelated"
+    monkeypatch.setattr(os, "stat", original_stat)
+    assert injected is not None
+    # The planted object owns the revalidated name, so the unlink must be
+    # refused rather than applied to an inode this deletion never validated.
+    assert (artifacts_dir / injected).read_text(encoding="utf-8") == "unrelated"
+    # The displaced member is still quarantined and still pending, so refusing
+    # loses neither the object nor the ability to retry.
+    assert (artifacts_dir / "owned-second").exists()
+    assert len(deletion.posix_members_pending) == 1
 
 
 async def test_posix_cleanup_never_unlinks_after_last_identity_check(
@@ -771,14 +814,16 @@ async def test_posix_partial_metadata_cleanup_remains_retryable(
     original_unlink = os.unlink
     failures = 1
 
-    def fail_second(name: str, *, dir_fd: int | None = None) -> None:
+    def fail_first_quarantined_member(name: str, *, dir_fd: int | None = None) -> None:
         nonlocal failures
-        if failures and name.endswith(".txt"):
+        # Members reach the unlink under their ".erase-" quarantine name; fail
+        # the first one so the pass stops with a member already quarantined.
+        if failures and name.startswith(".erase-"):
             failures -= 1
             raise OSError("injected metadata cleanup failure")
         original_unlink(name, dir_fd=dir_fd)
 
-    monkeypatch.setattr(os, "unlink", fail_second)
+    monkeypatch.setattr(os, "unlink", fail_first_quarantined_member)
     with pytest.raises(OSError, match="metadata cleanup failure"):
         store.commit_session_deletion(deletion)
 
@@ -885,7 +930,11 @@ async def test_rollback_compensation_failure_resumes_from_destination(
     with pytest.raises(RuntimeError, match="compensation blocked"):
         store.rollback_session_deletion(deletion)
 
-    assert deletion.rollback_applied is True
+    # The tree sits at its original destination but the pass never proved that
+    # placement, so the deletion records destination authority as *pending* and
+    # withholds `rollback_applied` until a later pass revalidates it.
+    assert deletion.rollback_original_pending is True
+    assert deletion.rollback_applied is False
     assert (session / "artifacts").is_dir()
     monkeypatch.setattr(store, "_move_anchored_directory", original_move)
     store.retry_session_deletion(deletion)
@@ -924,7 +973,10 @@ async def test_posix_commit_never_removes_session_path_replacement(
         original_ftruncate(descriptor, length)
 
     monkeypatch.setattr(os, "ftruncate", replace_before_truncate)
-    store.commit_session_deletion(deletion)
+    # Cleanup holds directory authority as a descriptor, so it never rmdir()s the
+    # pathname. Finding a different inode under the staged name, it refuses.
+    with pytest.raises(RuntimeError, match="artifact deletion authority changed"):
+        store.commit_session_deletion(deletion)
 
     assert injected is True
     assert replacement_file.read_text(encoding="utf-8") == "unrelated"

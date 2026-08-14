@@ -260,7 +260,12 @@ async def test_host_close_retries_failed_prepare_cleanup_before_storage_release(
     original_validate = store._validate_staged_tree
     original_anchor_close = artifact_store_module._windows_close_directory_anchor
     original_os_close = os.close
-    failures = 1
+    # Windows cannot move a directory that still has open handles, so the failed
+    # prepare retains its authority without ever attempting a close and the
+    # single injected failure lands on the close retry. POSIX rolls the staged
+    # move back with the anchors still open, so the cleanup close does run during
+    # the delete and the same descriptor has to refuse a second time.
+    failures = 1 if sys.platform == "win32" else 2
     target_authority: int | None = None
 
     def fail_validation(*args: object, **kwargs: object) -> None:

@@ -173,7 +173,12 @@ async def test_delete_retries_failed_prepare_cleanup_before_detaching_next_sessi
     original_anchor_close = artifact_store_module._windows_close_directory_anchor
     original_os_close = os.close
     fail_validation = True
-    failures = 1
+    # Windows cannot move a directory that still has open handles, so `first`
+    # retains its authority without ever attempting a close and the single
+    # injected failure lands on the retry. POSIX rolls the staged move back with
+    # the anchors still open, so the cleanup close does run during `first` and
+    # the same descriptor has to refuse a second time for the retry to block.
+    failures = 1 if os.name == "nt" else 2
     target_authority: int | None = None
 
     def fail_first_validation(*args: object, **kwargs: object) -> None:
@@ -236,15 +241,32 @@ async def test_artifact_commit_failure_drops_session_and_retries_before_next_del
     sink = EventCollector()
     gateway = ToolGateway()
     store = ArtifactStore(tmp_path / "sessions")
+    checkpoint = FileCheckpointStore(tmp_path / "sessions")
     controller = RuntimeController(
         model=ScriptedModel(script=[], context_capacity=100_000),
         gateway=gateway,
         event_sink=sink,
-        checkpoint_store=FileCheckpointStore(tmp_path / "sessions"),
+        checkpoint_store=checkpoint,
         artifact_store=store,
     )
     first = controller.create_session(working_scope=tmp_path, principal_id="owner")
     second = controller.create_session(working_scope=tmp_path, principal_id="owner")
+    now = datetime.now(UTC)
+    for session_id in (first, second):
+        # `bulk_delete_sessions` deletes only what the durable owner listing
+        # reports, so each session needs its meta record to be reachable there.
+        await checkpoint.append(
+            SessionMetaRecord(
+                session_id=session_id,
+                sequence=1,
+                recorded_at=now,
+                payload=SessionMetaPayload(
+                    created_at=now,
+                    label="erase retry",
+                    principal_id="owner",
+                ),
+            )
+        )
     await store.offload(
         session_id=first,
         call_id="c1",
