@@ -1158,6 +1158,86 @@ of a property (R14), so both were confirmed RED before the workflow changed.
   "a failing gate fails the step" by forbidding the shape that cannot. The runtime proof
   above covers the behaviour the structure stands in for.
 
+## Phase 9 convergence — desktop renderer presentation repair
+
+The packaged application was unusable: it painted as raw serif HTML in a single
+column. Two defects, found by reading build output rather than source.
+
+### The renderer loaded no stylesheet
+
+`apps/desktop` contained no `.css` reference at all — no import in `main.tsx`, no
+`<link>` in `index.html`, and no CSS asset in the Vite build, which emitted only
+`index.html` and one JS chunk. The Web build emits a 30 kB stylesheet from the
+same shared package. Every shared component styles through `className` and none
+use inline styles, so nothing had any appearance.
+
+`main.tsx` now imports a renderer stylesheet that pulls in
+`@loopplane/cowork-presentation/styles.css`, exactly as `apps/web/src/styles.css`
+already did. Resolving that specifier also needed a Vite repair: a string alias
+matches by **prefix**, so aliasing the bare package name alone routed the
+`/styles.css` subpath into the index module's path and the build failed with
+`ENOENT`. The subpath now has its own alias, declared first.
+
+### `CoworkShell` had no layout to load
+
+`CoworkShell` is rendered only by Desktop — Web imports `AppShell`,
+`MessageList`, `InspectionPanel`, the dialogs and the settings views, but never
+the pane workspace. So the shared stylesheet carried its T050/T055 accessibility
+baseline and nothing else: `grid-template-columns: minmax(0, 1fr)`,
+unconditionally, at every width. Nine desktop-owned classes had no rule anywhere.
+
+The workspace now has three columns at 1180px and two at 760px, with the
+inspection panel becoming a full-width bottom strip in between rather than being
+dropped. Below 760px the accessibility baseline still governs, so the 320px
+reflow contract and the reduced-motion and forced-colors blocks are untouched
+and no content is hidden at any width. The desktop-owned classes are defined on
+the existing tokens, so light/dark and spacing follow the shared system.
+
+### Why every gate stayed green
+
+This is the substantive finding. The packaged smoke drives the **accessibility
+tree** through seven fixed Name/ControlType pairs; Vitest asserts DOM roles; the
+shared accessibility CSS tests assert reflow at 320px — and a single-column
+unstyled page passes reflow trivially. Nothing anywhere asserted that a
+stylesheet was loaded at all, so an application nobody could use was green on
+every platform and in every job.
+
+### Guards
+
+Both were written first and observed red against the unrepaired tree:
+
+- `renderer stylesheet delivery` asserts the entry loads the shared design
+  system and that Vite can resolve the specifier — the property all of the above
+  missed.
+- `packaged smoke locators` asserts each of the seven fixed pairs resolves
+  exactly once, mirroring `Find-UniqueElement` one layer down so a rename or a
+  duplicate fails in seconds instead of in a packaged UI Automation run. Proven
+  to catch a duplicate by temporarily relabelling the cancel button.
+
+### Verification
+
+| Gate | Result |
+|------|--------|
+| Vitest, all three workspaces | web **202 passed / 58 files**, desktop **168 / 20**, shared **29 / 7** |
+| `npm run typecheck` (all three) | **PASS** |
+| Python desktop contracts (delivery gate, packaged smoke, packaging, public safety) | **130 passed** |
+| Renderer build output | `index-*.css` **36.6 kB**, where it previously emitted none |
+| Layout, headless capture at 1440 / 1000 / 700px | three columns / two columns plus bottom strip / single column, no content hidden |
+
+### Honesty
+
+- The layout was verified by rendering the built renderer offscreen in a
+  browser, not by launching the packaged Electron application. The transport
+  bridge is absent there, so every capture shows the `unavailable` phase; the
+  full shell still renders, which is what the layout claim rests on.
+- The runtime status and the runtime diagnostic can show the same sentence when
+  no specific diagnostic is available. That duplication is existing product
+  behaviour and was left alone: the diagnostic's text is asserted by the driver
+  self-tests, so changing it is not a presentation-scoped change.
+- No packaged smoke was run for this repair. It changes renderer markup, so the
+  seven locators are now guarded by the unit contract above, but a packaged run
+  remains the authority and has not been executed since.
+
 ## Phase 9 convergence — T095 post-gate packaged re-run
 
 After the full gates, `apps/desktop` was rebuilt and repackaged, and the resulting
