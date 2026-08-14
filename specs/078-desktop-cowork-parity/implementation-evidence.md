@@ -795,3 +795,83 @@ The fixed ten-second acceptance deadline was not changed.
 - `conftest.py`, `.github/workflows/web.yml`, and `docs/api-reference.md` were initially excluded from the delivery candidate as release tooling. That classification was wrong: contracts already committed for this feature assert all three, and the failing CI runs proved it. They are now part of the reviewed commit.
 
 <!-- US6-EVIDENCE END -->
+
+---
+
+## Phase 9 convergence — T091 public-safety routing
+
+T010 established the surface taxonomy and proved the scanner itself separates content
+surfaces from secondary ones. It did **not** route any product payload through that
+scanner: before this task the synthetic markers were referenced only by the scanner's own
+tests and by the committed-file scan, so no shipped Desktop surface had ever been asserted
+clean with them.
+
+`tests/contract/test_desktop_public_safety_routing.py` closes that gap by driving real
+product code:
+
+- **RPC errors.** A `Dispatcher` method that raises with every prohibited marker
+  concatenated into one exception yields only the fixed `desktop.error.internal_failure`
+  envelope; the serialized frame discloses no secret, private path, rule, PID, or raw
+  error. A second case sends marker-bearing request parameters to an unknown method and
+  proves they are not echoed onto the error surface.
+- **Diagnostics.** Every shipped `RpcError` in the public catalogue — internal failure,
+  parse error, invalid request, method not found, invalid params — is scanned as a
+  secondary surface and produces zero findings.
+- **Backup manifest.** The shipped `describe_backup()` disclosure is scanned as a
+  `backup_manifest` surface and is clean.
+- **Snapshots and content routing.** A portable archive is built over a snapshot whose
+  session entry carries authorized user and model content, while the input profile carries
+  a prohibited marker in both an unsent composer draft and a credential field. The returned
+  manifest, the revalidated manifest from `validate_archive`, and the exported
+  `profile/profile.json` are all clean, proving the draft and credential exclusions hold;
+  the archived session entry retains both authorized markers and is byte-identical to the
+  input, proving authorized content survives losslessly.
+
+The routing test states its own premise: it first asserts that the poisoned failure text
+*is* detected on a secondary surface, so the clean envelope that follows is a real result
+rather than an unscanned one.
+
+| Suite | Result |
+|-------|--------|
+| T091 committed-file public-safety scan | **15 passed** |
+| T091 surface-taxonomy contract (T010) | **4 passed** |
+| T091 product-surface routing (new) | **5 passed** |
+| T091 combined | **24 passed** |
+| T091 Ruff format/check on the new file | **PASS** |
+
+## Phase 9 convergence — T092 architecture, default, and generated-contract guards
+
+| Guard | Suite | Result |
+|-------|-------|--------|
+| Gateway-only invocation | `tests/contract/test_tool_gateway.py` | PASS |
+| Event Bus ownership | `tests/contract/test_runtime_events.py`, `tests/contract/test_event_replay_store.py` | PASS |
+| Checkpoint record and schema | `tests/contract/test_checkpoint.py`, `tests/contract/test_checkpoint_sqlite.py` | PASS |
+| Sidecar Host-only / live-store boundary | `tests/contract/test_desktop_boundary.py` | PASS |
+| Default declining portable snapshot provider | `tests/unit/test_host_portable_snapshot.py` | PASS |
+| `StorageConfig` and `RuntimeConfig` defaults | `tests/contract/test_host_config.py` | PASS |
+| Unchanged Web outward contracts | `tests/contract/test_webapi_boundary.py`, `test_web_type_artifacts.py`, and the five `test_web_*_contract.py` suites | PASS |
+| PyInstaller absent from runtime metadata | `tests/contract/test_packaging.py` | PASS |
+
+Combined: **164 passed, 9 skipped**.
+
+The PyInstaller guard was incomplete and is now closed. `test_runtime_dependencies_are_unchanged`
+already bars the freeze tool from `[project]` through closed dependency and optional-dependency
+sets, but nothing asserted the resolved runtime lock. `test_pyinstaller_stays_out_of_runtime_metadata`
+now asserts absence from both `pyproject.toml` and `uv.lock`, and first asserts that the
+build-only input `apps/desktop/sidecar/pyinstaller-build.in` does contain the tool, so the
+guard cannot pass vacuously against a repository that simply never mentions it.
+
+### Honesty
+
+- T091 and T092 are source and contract evidence. They did not run the packaged artifact, a
+  live Electron accessibility tree, or a delivery authority lookup.
+- T091 routes the Desktop surfaces reachable without standing up a Host: the JSON-RPC error
+  envelope, the shipped error catalogue, the backup disclosure, and the portable archive
+  manifest and entries. Renderer-side IPC metadata is TypeScript and is covered by the
+  Desktop Vitest boundary suites rather than by this Python routing scan; audit list
+  projections were not routed because they require a live Host, and remain covered by their
+  own unit contracts.
+- T091 is explicitly not the final documentation scan. T099 must rescan every T096–T098
+  output.
+- The T092 result reflects the local tree. Repository CI remains red for reasons recorded
+  under T090 and belonging to T093/T094.
