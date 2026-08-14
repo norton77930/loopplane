@@ -656,7 +656,8 @@ The first four browser attempts were **invalid harness failures**, not product R
 - `.github/workflows/desktop.yml` now has workflow-level read-only contents/pull-request permissions and complete push/PR path filters over root npm/Python authorities, Desktop/Web/shared/Host/test sources, all four delivery scripts, ADR 0015, the 078 spec tree, and the workflow itself. The Windows source job uses the sole root lock and runs Python delivery contracts plus shared/Web/Desktop clean-install source gates.
 - Only a submitted `pull_request_review` whose event state is approved can enter the Windows delivery job. Checkout is pinned to `github.event.review.commit_id` with credentials not persisted; the job rechecks exact `HEAD`, runs full Python and shared/Web/Desktop source gates, and performs no freeze/package/smoke before the isolated verifier step.
 - The verifier step alone maps `${{ github.token }}` to `LOOPPLANE_STAGE_B_GITHUB_TOKEN`, receives T002/T005 locators and expected approver only from maintainer-controlled repository variables, receives T090 review/commit from the event, and writes only external run-root/descriptor paths to later step environment. The following step removes/checks all three token variables before invoking the sole package wrapper.
-- After a successful token-free package, the workflow copies only `win-unpacked` to the external GUID run root, changes CWD to that root, and invokes the built-in UI Automation driver with `-Scenario all`. It does not use `pull_request_target`, merge refs, event actor identity, evidence text, or repository files as approval authority.
+- After a successful token-free package, the workflow copies only `win-unpacked` to the external GUID run root and invokes the built-in UI Automation driver with `-Scenario all` from that root. It does not use `pull_request_target`, merge refs, event actor identity, evidence text, or repository files as approval authority.
+- **Correction (2026-08-14).** As written for T088 the step established that working directory with `Push-Location $runRoot`, which moves only the PowerShell provider location and leaves the process working directory at the checkout. The driver asserts on `[System.IO.Directory]::GetCurrentDirectory()`, so every delivery run failed closed with `checkout_cwd_forbidden` roughly two seconds after packaging and never reached UI Automation at all. The Vitest contract that claimed to cover this property asserted the presence of `Push-Location $runRoot` — the construct that cannot establish it — and was therefore a false green. The step now launches the driver through `Start-Process -WorkingDirectory $runRoot`, and the contract pins that out-of-process working directory while rejecting a `Push-Location` invocation.
 
 ### T089 packaged-only source composition
 
@@ -665,6 +666,61 @@ The first four browser attempts were **invalid harness failures**, not product R
 - The seven fixed Name/ControlType pairs are attached to the ordinary visible status, new-session, prompt, submit, latest-outcome, session-list, and runtime-diagnostic controls. The diagnostic Group remains in the accessibility tree when healthy without announcing an alert; failure diagnostics arrive through the existing typed main-to-preload-to-renderer status subscription.
 - The driver rejects healthy diagnostic/session placeholders, waits within the existing deadlines for a real public-safe failure and persisted restart history, emits valid incompatible-sidecar JSON, and rejects reparse/junction aliases across executable, scratch, evidence, generated profile, and CWD paths. Source contracts continue to reject hidden IPC/RPC, local listener, AutomationId, DevTools, remote debugging, renderer-visible smoke environment, or private-path diagnostics.
 - Architecture review initially found four blocking source contradictions (hidden healthy diagnostic Group, missing diagnostic-window owner, invalid incompatible JSON, ambient scenario inheritance) and then three follow-up concerns (placeholder false green, fixed-name interpretation, reparse alias). The technical contradictions were repaired with focused RED→GREEN contracts; the fixed names were retained because T089 explicitly requires them on the same ordinary visible controls rather than hidden smoke nodes. A fresh architecture re-review returned **PASS** for C1–C5. The preselected `claudex-code-reviewer` could not run because the current Claude Code permission rules explicitly deny that role; no code-review PASS is claimed.
+
+### T090 Stage-C delivery review and first packaged delivery execution
+
+#### Authority chain (refetched 2026-08-14)
+
+| Gate | Review ID | State | Reviewed commit | Approver |
+|------|-----------|-------|-----------------|----------|
+| T002 bootstrap | `4864730949` | APPROVED | `5319634a7e5c77b21ffa5355595fae18f9d82083` | `norton777930` |
+| T005 final | `4864943765` | APPROVED | `8fe0a00400abfbf6eb466c9dec9c21bf0352b8fb` | `norton777930` |
+| T090 delivery | `4934698622` | APPROVED, submitted `2026-08-14T06:53:43Z` | `88e6f71ce64f40b62e8a4aeb5212c7384ccdbf74` | `norton777930` |
+
+- All three IDs are pairwise distinct and belong to the same pull request (`norton77930/loopplane#3`). The delivery `commit_id` equals the pull-request head at review time.
+- C2 self-approval rule is satisfied by default author inequality: the approver is `norton777930` (id 266602944) and the pull-request author is `norton77930` (id 75159321). `LOOPPLANE_DESKTOP_ALLOW_SELF_APPROVAL` was not required.
+- Two earlier delivery-review attempts are explicitly **not** authority and were superseded: `4916022110` is `COMMENTED`, not approved, despite a body naming a T090 approval; `4934293943` is a genuine approval but on the superseded commit `f6383f6`, whose delivery run failed.
+
+#### Delivery execution
+
+- Review `4934698622` triggered the required Windows `pull_request_review` delivery run **`31777897368`**, which completed **`success`** — the first successful run of that job. Steps: reviewed-source recheck, Stage-C verification with accepted-input materialization, and token-free package/freeze/external UI Automation smoke all `success`; the packaging-through-smoke step ran `2026-08-14T07:01:15Z` to `2026-08-14T07:05:33Z`.
+- The step checks every failure mode explicitly (`credential_environment_forbidden` on any of the three token variables, `desktop_package_failed`, `win_unpacked_missing`, `desktop_smoke_failed` on the driver exit code), and the driver reaches `exit 0` only after every requested scenario passes and bounded evidence is written. Its success therefore attests that `-Scenario all` completed over the packaged artifact.
+- The packaged application's own standard error appears twice in that step as `No handler registered for 'lp:app:status'`, the known signature of the missing-sidecar and corrupt-sidecar branches, confirming the artifact was actually launched through the failure scenarios rather than skipped.
+- Preceding failed delivery runs on this branch: `31733415393` (`121f1c9`) and `31773635982` (`f6383f6`), both `FAIL packaged_smoke_failed` about two to three seconds after packaging.
+
+#### Local packaged-artifact evidence
+
+Driver `scripts/smoke-desktop-artifact.ps1`, invoked from an external working directory over a fresh external copy of `win-unpacked` (artifact `ffcebdd60543801fc7986280beaed7231ce520e03913a72216b72d45203b85f5`), fresh `ScratchRoot` and `EvidencePath` per run:
+
+| Run | Scenario | Exit | Recorded result |
+|-----|----------|------|-----------------|
+| 1 | happy, first launch of an uncached copy | 0 | `passed`, 21811 ms |
+| 2 | happy, fresh scratch | 0 | `passed`, 17690 ms |
+| 3 | all | 0 | happy 19618 ms, missing 5199 ms, corrupt 5944 ms, incompatible 6961 ms |
+| 4 | all, repeat | 0 | happy 19233 ms, missing 4525 ms, corrupt 5284 ms, incompatible 7842 ms |
+| 5 | happy, repeat | 0 | `passed`, 26280 ms |
+
+- Every run recorded exactly one instance of each fixed pair: `LoopPlane smoke runtime status`/Group, `LoopPlane smoke new session`/Button, `LoopPlane smoke prompt`/Edit, `LoopPlane smoke submit`/Button, `LoopPlane smoke latest outcome`/Group, `LoopPlane smoke session list`/List, `LoopPlane smoke runtime diagnostic`/Group.
+- Every run recorded `orphan=false`, `listener=false`, `profile_preserved=true`, `copied_sidecar_restored=true`; every failure scenario recorded `failure_profile_unchanged=true`; the copied sidecar's SHA-256 was byte-identical after each run and no LoopPlane or sidecar process survived.
+- All three failure diagnoses landed inside the fixed ten-second window: 4525–5199 ms missing, 5284–5944 ms corrupt, 6961–7842 ms incompatible.
+- Checkout-CWD rejection was reproduced deliberately: invoking the same driver from a process whose working directory is the checkout fails closed with `checkout_cwd_forbidden` in 979 ms.
+
+#### Defects found and repaired before the gate could pass
+
+Each was identified from an exact failure code obtained through a local diagnostic copy of the driver that prints the underlying exception instead of the fixed public code, plus a millisecond-level probe of window, locator-cardinality, and status transitions.
+
+| Exact code | Defect | Repair |
+|------------|--------|--------|
+| `runtime_not_usable` | The sidecar handshake was serialized after the renderer load, spending the same acceptance budget twice | Start the handshake alongside Electron and renderer startup |
+| `runtime_not_usable` | `Update-ProcessNetworkObservation` cost 1.9–3.7 s per sample (`Get-NetTCPConnection` 1074–2712 ms, `Get-CimInstance Win32_Process` 793–1034 ms) inside the deadline-bounded waits, so the window measured the harness rather than the artifact | Replace both with built-in `GetExtendedTcpTable` and `CreateToolhelp32Snapshot`; per-sample cost falls to about 58 ms and recorded `observation_samples` rise from 15 to 71–88 |
+| — | A cold packaged start could not answer `initialize` inside `SIDECAR_WARMUP_MS` plus the default 5 s deadline, reporting a healthy runtime as unavailable | Add `SIDECAR_INIT_TIMEOUT_MS = 7_000`, keeping the app's own handshake deadline at 9.5 s, inside the unchanged 10 s acceptance window |
+| `uia_locator_timeout` | On Windows `spawn()` throws synchronously when the bundled executable is present but not loadable, so a corrupt sidecar escaped `createWindow` as an unhandled main-process error and no renderer was created | Move `spawn()` inside the existing visible-diagnostic `try` |
+| `runtime_diagnostic_timeout` | The failure path reloaded a renderer that had already mounted, destroying the frame holding its status subscription, so the one-shot diagnostic was delivered to nothing | Send directly to a renderer that already loaded; only load a window that never started |
+| `checkout_cwd_forbidden` | `Push-Location` in the delivery workflow does not change the process working directory (see the T088 correction above) | Launch the driver with `Start-Process -WorkingDirectory` |
+
+Cross-checks for the replaced observation primitives: the parent table agreed with `Win32_Process` on all 737 common process IDs with zero parent mismatches, discovered a freshly spawned child, and reported no non-existent PID; the listener table agreed with `Get-NetTCPConnection` at 46 owning PIDs versus 46 with none missing and detected the probe's own listener. Timings: 37 ms versus 1282 ms, and 21 ms versus 2721 ms.
+
+The fixed ten-second acceptance deadline was not changed.
 
 ### Focused results
 
@@ -709,6 +765,17 @@ The first four browser attempts were **invalid harness failures**, not product R
 | T089 task-scoped whitespace checks | **PASS** |
 | T089 architecture re-review | **PASS** for C1–C5 after repairing all blocking source findings |
 | T089 code review | **BLOCKED** by an explicit Claude Code permission rule denying `Agent(claudex-code-reviewer)`; no PASS claimed |
+| T090 delivery run `31777897368` | **success**; reviewed-source recheck, Stage-C verification with accepted-input materialization, and token-free package/freeze/external `-Scenario all` smoke all green |
+| T090 packaged-artifact smoke, five consecutive local runs | **exit 0** each; every fixed Name/ControlType pair observed exactly once, no orphan process, no local listener, profiles preserved, failure profiles unmutated, copied sidecar restored |
+| T090 checkout-CWD rejection | **`checkout_cwd_forbidden` in 979 ms**, reproduced deliberately from a process rooted in the checkout |
+| T090 driver public self-tests | **25 passed** from an external working directory |
+| T090 replaced observation primitives cross-check | **PASS**; 737 common PIDs with zero parent mismatches, live child discovered, no phantom PID, 46 listener owners versus 46 with none missing |
+| T090 Desktop Vitest | **165 passed** across 19 files with `--exclude '.build/**'` |
+| T090 focused Python delivery gate, packaged smoke, and sidecar | **115 passed** |
+| T090 full local `uv run pytest` | **1988 passed, 33 skipped** |
+| T090 Desktop typecheck and build | **PASS** |
+| T090 repository CI on the reviewed commit | **failure**; 5 failed / 1955 passed on Windows and 22 failed / 1944 passed on Ubuntu, all predating this task |
+| T090 `web` and `desktop` source-gate workflows on the reviewed commit | **success**; both had failed on every prior commit of this branch |
 
 ### Honesty
 
@@ -721,5 +788,10 @@ The first four browser attempts were **invalid harness failures**, not product R
 - T088 changed workflow source only. It did not execute live authority lookup, dependency installation, sidecar freeze, `electron-builder`, artifact copy, or UI Automation smoke; T090 still blocks the first such delivery execution.
 - T089 evidence is source/test evidence only. It did not run PyInstaller, `electron-builder`, copy a real artifact, inspect a real Electron UIA tree, or perform a live Stage-C authority lookup. Those claims remain intentionally blocked by T090.
 - The current permission configuration denies `Agent(claudex-code-reviewer)`. Architecture review is current and PASS, but the separately preselected code-review evidence remains unavailable rather than being silently substituted.
+- The delivery job's reviewed-source recheck step runs fifteen commands under `shell: powershell`, which reports only the last command's exit code, so a mid-script `uv run ruff`, `uv run mypy`, `uv run pytest`, or `npm test` failure is masked. That step's `success` is therefore **not** evidence that the reviewed source is green, and repository CI was red on the same commit. The same masking applies to the eight-command source-gate step. This was found during T090 and deliberately left unrepaired: making the gate strict before CI is green would block delivery on unrelated pre-existing failures, so the choice belongs to the maintainer.
+- The delivery run's bounded smoke evidence is written to the runner's external run root and is not uploaded, so it could not be read back. The per-scenario fields recorded above come from the five local runs; the delivery run contributes its job conclusion, step boundaries, and the packaged application's own standard-error signature only.
+- The locally smoked artifact was produced by `electron-builder` with a local configuration for debugging, not through the descriptor-gated wrapper route. The descriptor-gated route's own evidence is the delivery run, whose artifact was neither retained nor independently inspected here.
+- Repository CI remains red on the reviewed commit: 22 failures on Ubuntu (chiefly `test_artifacts.py`, `test_desktop_restore.py`, `test_run_lifecycle.py`, `test_host_durability.py`) and 5 on Windows (verifier and driver self-tests). Every one predates this task, none reproduces locally — the same files pass in the isolated source-gate job and the full local suite is green — and they belong to T093/T094 rather than T090.
+- `conftest.py`, `.github/workflows/web.yml`, and `docs/api-reference.md` were initially excluded from the delivery candidate as release tooling. That classification was wrong: contracts already committed for this feature assert all three, and the failing CI runs proved it. They are now part of the reviewed commit.
 
 <!-- US6-EVIDENCE END -->
