@@ -1223,20 +1223,36 @@ Both were written first and observed red against the unrepaired tree:
 | Python desktop contracts (delivery gate, packaged smoke, packaging, public safety) | **130 passed** |
 | Renderer build output | `index-*.css` **36.6 kB**, where it previously emitted none |
 | Layout, headless capture at 1440 / 1000 / 700px | three columns / two columns plus bottom strip / single column, no content hidden |
+| Packaged UI Automation smoke, `scripts/smoke-desktop-artifact.ps1 -Scenario all` | **exit 0**; `happy` passed and the three sidecar-fault scenarios diagnosed, each observing all **seven** Name/ControlType pairs, with `orphan=false`, `listener=false`, `profile_preserved=true`, `failure_profile_unchanged=true` and `copied_sidecar_restored=true` throughout |
 
 ### Honesty
 
-- The layout was verified by rendering the built renderer offscreen in a
-  browser, not by launching the packaged Electron application. The transport
-  bridge is absent there, so every capture shows the `unavailable` phase; the
-  full shell still renders, which is what the layout claim rests on.
+- The layout was first verified by rendering the built renderer offscreen in a
+  browser, where the transport bridge is absent so every capture shows the
+  `unavailable` phase. The packaged application was then launched with a live
+  local runtime and confirmed to render the same shell with the runtime in its
+  usable state.
+- **The smoke ran against a hand-assembled package**, not one produced by the
+  normal build-and-package route: a copy of the last local `win-unpacked`
+  outside the checkout, with its `app.asar` repacked around the freshly built
+  renderer. That is enough to prove the renderer satisfies the accessibility
+  contract under real UI Automation with a real sidecar; it is **not** a
+  delivery-route artifact and is not claimed as one.
+- Three earlier smoke attempts failed — `packaged_smoke_failed`,
+  `runtime_not_usable`, and an unresolvable-path error. All three were caused by
+  passing the 8.3 short form of the scratch and artifact paths
+  (`C:\Users\NORTON~1.DEN\...`), which the driver cannot canonicalize. The same
+  package passes the whole matrix once the paths are supplied in full. The
+  `runtime_not_usable` result was **not** the known R16 timing margin, and was
+  briefly misattributed to it before the control run exposed the real cause.
 - The runtime status and the runtime diagnostic can show the same sentence when
   no specific diagnostic is available. That duplication is existing product
   behaviour and was left alone: the diagnostic's text is asserted by the driver
   self-tests, so changing it is not a presentation-scoped change.
-- No packaged smoke was run for this repair. It changes renderer markup, so the
-  seven locators are now guarded by the unit contract above, but a packaged run
-  remains the authority and has not been executed since.
+- The repair changes renderer markup — the top bar wraps the title, status and
+  actions, and the confirm dialogs moved into an overlay. The seven locators are
+  guarded by the unit contract above and were then re-proved end to end by the
+  packaged run recorded in the table.
 
 ## Phase 9 convergence — T095 post-gate packaged re-run
 
