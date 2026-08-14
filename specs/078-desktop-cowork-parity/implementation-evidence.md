@@ -1074,3 +1074,132 @@ margin that load can erase. That is now **R16** in the risk register.
 - The first attempt's failure is a real observation about the margin, not a flake to be
   waved away. It is recorded above and registered as a risk.
 - No acceptance deadline was changed to obtain the passing run.
+
+## Phase 9 convergence — T099 final scan and FR/SC matrix
+
+### Final public-safety and documentation scan
+
+Rerun after every T096–T098 edit, over product, tests, manifests, workflows, ADR and
+evidence, and each newly edited document.
+
+| Scan | Result |
+|------|--------|
+| Committed-file public-safety contract | **15 passed** |
+| Surface-taxonomy contract | **4 passed** |
+| Product-surface routing | **5 passed** |
+| Targeted pattern scan over all 25 files edited in this task | **0 findings** |
+
+The targeted scan looked for the Windows user name, `AppData`, drive-rooted user paths, this
+task's temporary artifact names, GitHub token prefixes, and assignment-shaped credential
+literals. Eight `Bearer` matches were reviewed individually and none is a credential: a
+documented `dev-token` placeholder, three `Bearer <token>` scheme descriptions, the delivery
+verifier's own leak-detector regex, its synthetic `TEST_STAGE_B_TOKEN_VALUE_DO_NOT_LEAK`
+sentinel, and one header built from a variable.
+
+### FR matrix
+
+| Requirements | Implementing surface | Verifying evidence |
+|---|---|---|
+| FR-001–FR-008 local runtime, protocol, trust | Sidecar JSON-RPC V1 with a negotiate-first startup; Electron main owning the child and the typed IPC; renderer sandboxed with context isolation and no node integration | 100-case protocol matrix (below); `test_desktop_rpc_v1.py` **13 passed**; `test_desktop_boundary.py` sidecar Host-only and no-gateway-reach-through; packaged `-Scenario all` opened no listener in any run |
+| FR-009–FR-017 sessions, multi-pane, accessibility | Shared `packages/cowork-presentation` shell, pane workspace with a single-active interactive lease, focus and dismissal helpers | US1/US3/US4 sections above; shared Vitest **29 passed**; Desktop Vitest **165 passed**; Chromium accessibility and reflow matrix inside those suites |
+| FR-018–FR-022 capabilities, agent controls, public safety | Host-authoritative inspection and capability projections; fixed public `desktop.error.*` catalogue | T091 routing scan (5 passed) proving marker-bearing exceptions and parameters never reach the wire; `test_desktop_public_safety*.py` |
+| FR-023–FR-030 profile, workspace, resume | Profile Ownership Lock, validated generations with proof, projects, chooser-bound workspaces | US2 section; profile layout observed in every packaged run (`device-private/profile-owner.lock`, `generations/<id>/{profile,proof}.json`, `generation-storage/<id>/checkpoints.sqlite3`, `current-generation`); restart history asserted by the packaged happy scenario |
+| FR-031–FR-039 audit, backup, restore | Checkpoint-derived audit projection; disclosure-first portable archive; validate / commit / cancel restore lease | US5 section; T091 proved the manifest, the revalidated manifest and the exported profile stay clean while the archived entry retains authorized content byte-identically |
+| FR-040–FR-048 delivery, governance, defaults | Four delivery scripts behind a third external-human review; required Windows CI; PyInstaller build-only | T090 delivery run `31777897368` **success**; T092 guards **164 passed, 9 skipped**; `test_pyinstaller_stays_out_of_runtime_metadata` |
+
+### SC matrix
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| SC-001 local run and protocol containment | **Met** | Packaged happy scenario completes initialization, a submitted prompt, the exact `loopplane-packaged-smoke-ok` marker, shutdown and a relaunch showing restart history — five consecutive T090 runs plus the T095 re-run |
+| SC-002 100 mixed protocol cases | **Met** | `test_serialized_writer_and_100_malformed_matrix` exercises **100** deterministic malformed, unknown, stale, duplicate, cross-session and incompatible cases; failures counted without starting a run |
+| SC-003 three-pane single-active | **Met** | US3 three-pane race: second claim returns `ok:false` with the owning pane id before any Host submit; release then re-acquire succeeds |
+| SC-004 restart and resume | **Met** | Packaged relaunch asserts persisted restart history in the same external profile; profile inventory unchanged for failure scenarios |
+| SC-005 public safety | **Met** | Final scan above: 24 contract tests plus a 0-finding targeted scan over every edited file |
+| SC-006 backup round trip | **Met** | US5 section; T091 proved lossless authorized content with clean metadata and enforced draft/credential exclusions |
+| SC-007 fault matrices | **Met, previously** | US5 T081 Windows and Linux matrices over publication, COW/proof, rollback, Host handover, relink and retained storage |
+| SC-008 keyboard accessibility | **Met** | Shared and Web accessibility suites inside the T094 Vitest runs |
+| SC-009 isolated package and required CI | **Met** | Delivery run `31777897368` success end to end; `desktop` source-gate and delivery jobs both green on the head commit |
+| SC-010 regressions and defaults | **Met** | T093 full Python **1994 passed, 33 skipped**; T094 shared/Web/Desktop **29 / 202 / 165**; T092 default and outward-contract guards green |
+| SC-011 traceability | **Met by this section** | Every FR group and SC above names its evidence; `tasks.md` records task-level FR/SC references |
+| SC-012 human gates | **Met** | Stage A lock-only write; Stage B bootstrap `4864730949` and final `4864943765`; Stage C delivery `4934698622`; no version bump, tag, release or deploy |
+
+### Named delivery evidence
+
+- **Three distinct review identities**, all APPROVED on the same pull request and pairwise
+  distinct: bootstrap `4864730949` on `5319634a…`, final `4864943765` on `8fe0a004…`,
+  delivery `4934698622` on `88e6f71…`.
+- **Immutable locator inputs**: T002 and T005 identities reach the workflow only from
+  maintainer-controlled repository variables; the T090 identity comes only from the
+  `pull_request_review` event; checkout is pinned to `github.event.review.commit_id` with
+  credentials not persisted.
+- **T002-to-T005 full-tree allowlist**: rerun by the verifier; recorded PASS after including
+  the T003 helper, tasks and board paths.
+- **Expected approver and C2 rule**: approver `norton777930` (id 266602944) differs from the
+  pull-request author `norton77930` (id 75159321), so the default inequality rule is
+  satisfied and `LOOPPLANE_DESKTOP_ALLOW_SELF_APPROVAL` was never required.
+- **Credential handling with zero leakage**: `${{ github.token }}` is mapped only in the
+  verifier step; the next step removes and re-checks all three token variables and fails
+  closed on any survivor; both wrappers refuse to run if one is present. The delivery run's
+  logs carry no token, header or raw body, and the verifier carries its own leak detector.
+- **Four scripts and the full Windows trigger**: `verify-desktop-stage-b.ps1`,
+  `build-desktop-package.ps1`, `build-desktop-sidecar.ps1`, `smoke-desktop-artifact.ps1`;
+  `desktop.yml` filters every delivery determinant on push and pull request and enters the
+  delivery job only on an approved submitted review.
+- **Packaged accessibility preflight and external-copy smoke**: every run recorded exactly
+  one instance of each of the seven fixed Name/ControlType pairs before interacting, over a
+  copy outside the checkout, with checkout-CWD rejection reproduced deliberately
+  (`checkout_cwd_forbidden` in 979 ms).
+- **Platform gaps**: the packaged driver is a Windows UI-Automation tool; three of its
+  self-tests exercise Windows-only mechanisms and skip elsewhere. Ubuntu retains 18
+  pre-existing artifact, restore, run-lifecycle and host-durability failures from earlier
+  units. No macOS or Linux packaged artifact is claimed.
+
+### Honesty
+
+- The FR matrix is grouped, not one row per requirement. Task-level FR references remain in
+  `tasks.md`; this section maps each group to the evidence that verifies it.
+- SC-003, SC-006 and SC-007 rest on evidence recorded by earlier tasks in this file and were
+  not re-executed here; they are cited, not re-claimed.
+- SC-010 says regressions preserve or exceed the pre-feature baseline. The local suites do.
+  Repository CI does not: 18 Ubuntu failures predate this unit and remain, and this section
+  does not claim otherwise.
+
+## Phase 9 convergence — T100 final candidate review
+
+Nine commits carry this candidate beyond the previous one (`121f1c9`): the packaged-smoke
+repair, the delivery working-directory repair with `conftest.py` and the web workflow, the
+API reference symbols, the T090 delivery record, the public-safety routing tests, the
+documentation pass, the script portability repairs with the ignore gaps, the git-resolution
+follow-up, and the post-gate re-run record.
+
+They change **32 files**: two workflows, `.gitignore`, `CHANGELOG.md`, eight Desktop app and
+sidecar files, `conftest.py`, nine documents, the four delivery scripts, the two 078 spec
+files, and four test files.
+
+Every required exclusion was asserted against the complete `121f1c9..HEAD` file list and
+holds:
+
+| Excluded | Present in candidate |
+|---|---|
+| `.superpowers/**` | no |
+| `apps/desktop/.build/**` and `apps/*/dist-electron/**` build outputs | no |
+| `apps/*/dist/**` emitted renderer output | no |
+| Unit 082 tree: `specs/082-…`, `GOVERNANCE.md`, `docs/release-process.md`, `docs/guides/**`, `.github/CODEOWNERS`, `.github/workflows/release.yml`, `scripts/release_sync_check.py`, `tests/contract/test_docs_links.py`, `tests/contract/test_release_sync.py` | no |
+| Local profiles, backups, QA artifacts, logs, PIDs, tokens | no |
+
+`CHANGELOG.md` needed care because it carried both this unit's `[Unreleased]` entry and an
+uncommitted Unit 082 entry. Only this unit's hunk was placed in the index, with the working
+tree left byte-identical, so the 082 entry stays uncommitted alongside its six other files.
+
+Three files were initially misclassified as Unit 082 release tooling and excluded —
+`conftest.py`, `.github/workflows/web.yml`, and `docs/api-reference.md`. Contracts already
+committed for this feature assert all three, and the failing CI runs proved it, so they are
+part of the candidate. That correction is recorded rather than quietly applied.
+
+### Honesty
+
+- Unit 082's work remains uncommitted in the working tree across seven files and its
+  untracked additions. Nothing in this candidate touches it.
+- The reviewed Stage-C commit was `88e6f71`; four commits have landed since. A further
+  delivery run would require a new Stage-C review on the current head.
