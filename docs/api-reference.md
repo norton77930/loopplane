@@ -349,7 +349,7 @@ The Host Application Interface that exposes the runtime to host applications.
 - `CapabilityManagementConfig` — default-off durable capability mutation, runtime activation, MCP endpoint policy, schedule-runner, and allowed-context-provider configuration.
 - `LoopPlaneHost` — the host-facing runtime entry point; managed-MCP upsert/delete operations are asynchronous, and `agent_controls(session_id)` returns the owner-routed browser-safe, non-durable execution posture used by unit 077.
 - `RuntimeConfig` — programmatic runtime configuration.
-- `Session` — a host-driven run session.
+- `Session` — a host-driven run session with idempotent asynchronous `aclose()` cleanup.
 - `RunOutcome` — the terminal outcome of a run.
 - `AssembledRuntime` — the assembled runtime components.
 - `assemble` — assemble a runtime from configuration.
@@ -375,6 +375,12 @@ The Host Application Interface that exposes the runtime to host applications.
 - `GenerationExpectation` — expected active-generation durable state for validation.
 - `GenerationValidationResult` — public-safe active-generation validation result.
 - `validate_active_generation` — validate active-generation proof data before Host startup.
+- `DesktopActiveGenerationProvider` — Host-owned read-only active-generation validation provider.
+- `DesktopPortableSnapshotProvider` — Host-owned portable snapshot provider for Desktop storage.
+- `DesktopRuntimeStorageInitializer` — Host-owned Desktop runtime storage initialization provider.
+- `DesktopStorageAuthorityFactory` — retains and validates canonical Desktop generation storage roots.
+- `StorageAuthorityFactory` — factory protocol for acquiring retained storage authority leases.
+- `StorageAuthorityLease` — retained storage-root validation and lifecycle protocol.
 - `PortableSnapshotResult` — result of a portable snapshot export or validation.
 - `PortableSnapshotUnavailable` — raised when portable snapshots are not injected.
 - `UnavailablePortableSnapshotProvider` — default provider that declines portable snapshots.
