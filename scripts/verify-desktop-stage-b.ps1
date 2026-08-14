@@ -327,8 +327,15 @@ function Get-GitExecutable {
     # `git.exe` only resolves on Windows, but the delivery contracts also run under
     # pwsh on Linux, where the application is plain `git`. Bind the application
     # explicitly so a shell alias or function can never stand in for it.
+    # Take the first PATH match: a runner can expose several `git.exe` entries, and
+    # reading `.Source` off the whole set yields one string of joined paths, which is
+    # not a command that exists.
     $name = if ($env:OS -eq 'Windows_NT') { 'git.exe' } else { 'git' }
-    return (Get-Command $name -CommandType Application -ErrorAction Stop).Source
+    $found = @(Get-Command $name -CommandType Application -ErrorAction Stop)
+    if ($found.Count -lt 1) {
+        throw 'git_executable_missing'
+    }
+    return [string]$found[0].Source
 }
 
 function Get-GitBlobSha {
