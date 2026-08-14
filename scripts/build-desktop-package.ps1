@@ -167,7 +167,22 @@ function Assert-DescriptorShape {
 
 function Get-Sha256 {
     param([Parameter(Mandatory = $true)][string] $Path)
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    # Hash with .NET rather than Get-FileHash, which has to be resolved from
+    # Microsoft.PowerShell.Utility at call time and is not available on every runner.
+    $full = (Resolve-Path -LiteralPath $Path).Path
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($full)
+        try {
+            return [System.BitConverter]::ToString(
+                $sha.ComputeHash($stream)
+            ).Replace('-', '').ToLowerInvariant()
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $sha.Dispose()
+    }
 }
 
 function Assert-ExpectedDigest {

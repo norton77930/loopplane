@@ -72,5 +72,9 @@ export default defineConfig({
     globals: true,
     environmentMatchGlobs: [["**/*.test.tsx", "jsdom"]],
     setupFiles: ["./src/test-setup.ts"],
+    // `.build/` holds local delivery scratch, including whole stale copies of this
+    // workspace from packaging runs. Vitest does not read .gitignore, so without
+    // this it collects those copies and reports failures from old sources.
+    exclude: ["**/node_modules/**", "**/dist/**", ".build/**"],
   },
 });

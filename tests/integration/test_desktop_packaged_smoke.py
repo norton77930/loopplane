@@ -75,6 +75,19 @@ FAILURE_SELFTEST_CASES: tuple[str, ...] = (
 )
 
 
+# The driver is a Windows UI-Automation tool, and most of its self-tests are portable
+# enough to run under pwsh on Linux. These three are not: they exercise NTFS
+# junctions, the .NET Framework compiler behind `Add-Type -OutputAssembly`, and the
+# `iphlpapi.dll` TCP listener table, none of which exist on Linux.
+WINDOWS_ONLY_SELFTEST_CASES: frozenset[str] = frozenset(
+    {
+        "reject-reparse-layout",
+        "incompatible-sidecar-restored",
+        "listener-observation-detects-listener",
+    }
+)
+
+
 def _powershell() -> str:
     return "pwsh" if sys.platform != "win32" else "powershell"
 
@@ -144,6 +157,8 @@ def test_driver_uses_only_builtin_uia_and_normal_window_patterns() -> None:
 
 @pytest.mark.parametrize("case", PATH_SELFTEST_CASES + FAILURE_SELFTEST_CASES)
 def test_driver_path_environment_and_failure_selftest(case: str) -> None:
+    if case in WINDOWS_ONLY_SELFTEST_CASES and sys.platform != "win32":
+        pytest.skip(f"{case} exercises a Windows-only mechanism")
     result = _run_selftest(case, Path(tempfile.gettempdir()))
     assert result.returncode == 0, (
         f"SelfTest {case!r} failed with {result.returncode}\n"

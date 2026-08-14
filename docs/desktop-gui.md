@@ -23,9 +23,10 @@ npm test -w @loopplane/desktop
 npm run build -w @loopplane/desktop
 ```
 
-`npm test -w @loopplane/desktop` must not collect `apps/desktop/.build/**`. That directory
-holds local packaging scratch, including older copies of the workspace, and running them
-produces false failures.
+`apps/desktop/.build/` holds local delivery scratch, including whole stale copies of this
+workspace left by packaging runs. Vitest does not read `.gitignore`, so the Desktop Vitest
+config excludes that directory explicitly; without it the runner collects those copies and
+reports failures from old sources.
 
 ## Trust boundary
 

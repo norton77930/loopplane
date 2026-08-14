@@ -251,6 +251,12 @@ describe("external packaged-artifact smoke boundary", () => {
     expect(smoke).toContain("Wait-RuntimeUsable");
     expect(smoke).toContain("AddSeconds(10)");
     expect(smoke).toContain("FileMode]::CreateNew");
-    expect(smoke).toContain("Get-FileHash");
+    // Pin the property — the driver records a SHA-256 digest for the artifact and
+    // for every profile entry — not the cmdlet that computes it. Get-FileHash has
+    // to be resolved from a module at call time and a hosted runner reported it as
+    // not recognized, so the digests are computed with .NET instead.
+    expect(smoke).not.toContain("Get-FileHash -LiteralPath");
+    expect(smoke).toContain("artifact_sha256 = Get-Sha256File");
+    expect(smoke).toContain("[System.Security.Cryptography.SHA256]::Create()");
   });
 });

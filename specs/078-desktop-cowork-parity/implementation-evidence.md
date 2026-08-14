@@ -940,3 +940,86 @@ the external-CWD smoke acceptance rather than a bare tool sequence.
   out of scope here.
 - The architecture audit remains stale in substance. Only a drift marker was added; a real
   re-audit is a separate unit.
+
+## Phase 9 convergence — T093 Python gates
+
+| Gate | Result |
+|------|--------|
+| `uv run ruff format --check .` | **PASS**, 533 files already formatted |
+| `uv run ruff check .` | **PASS** |
+| `uv run mypy` | **PASS**, no issues in 205 source files |
+| Focused: delivery gate, packaged smoke, sidecar | **115 passed** in 167 s |
+| Full `uv run pytest -q` | **1994 passed, 33 skipped, 1 warning** in 563 s |
+| `uv build` | **PASS**, `loopplane-0.4.0.tar.gz` and `loopplane-0.4.0-py3-none-any.whl` |
+
+The single warning is the pre-existing `StarletteDeprecationWarning` from FastAPI's test
+client. No test was rerun in isolation to obtain these numbers.
+
+Two of these gates were red before this task and were repaired as part of it, both by
+closing `.gitignore` gaps rather than by weakening a check:
+
+- `ruff check .` reported one `I001` in `apps/desktop/.build/local-smoke-*/isolated-workspace/`,
+  a stale copy of this workspace left by a local packaging run. That directory and
+  `apps/*/dist-electron/` were untracked but **not** ignored, which also made them a
+  bulk-`git add` hazard. Ignoring them removes the finding without touching the rule set.
+- `uv build` failed with `FileNotFoundError` while the sdist builder walked
+  `.claude/worktrees/082-open-source-release-readiness/tmp/full-long-path/...`, a sibling
+  git worktree checked out inside this tree. Git excluded it only through the local,
+  uncommitted `.git/info/exclude`, which the build backend does not read. `.gitignore` now
+  covers `.claude/worktrees/`, so any contributor with a worktree there can build.
+
+## Phase 9 convergence — T094 JavaScript gates
+
+| Gate | Result |
+|------|--------|
+| Root clean `npm ci` | **PASS** |
+| `@loopplane/cowork-presentation` typecheck | **PASS** |
+| `@loopplane/cowork-presentation` Vitest | **29 passed** |
+| `@loopplane/web` typecheck | **PASS** |
+| `@loopplane/web` Vitest | **202 passed** |
+| `@loopplane/web` build | **PASS** |
+| `@loopplane/desktop` typecheck | **PASS** |
+| `@loopplane/desktop` Vitest | **165 passed** across 19 files |
+| `@loopplane/desktop` build | **PASS** |
+
+The Chromium accessibility and reflow matrix runs inside those suites:
+`packages/cowork-presentation/src/__tests__/accessibility.test.tsx` and
+`apps/web/src/__tests__/AccessibilityStyles.test.ts`. No dependency was upgraded.
+
+The Desktop Vitest run previously needed a manual `--exclude '.build/**'` or it collected
+stale copies of the workspace and reported failures from old sources. That footgun is now
+closed in `apps/desktop/vite.config.ts` rather than documented, so the plain workspace
+command is correct.
+
+## Phase 9 convergence — repository CI failure decomposition
+
+Repository CI had never been green on this branch. Every failure was attributed to a cause
+from its own log rather than inferred, and the pre-existing set was confirmed against run
+`31708217334` on commit `121f1c9`, before any change in this task.
+
+| Failures | Cause | Disposition |
+|----------|-------|-------------|
+| 4 verifier self-tests plus `profile-inventory-detects-mutation` (Windows) | The runner reported `Get-FileHash` as **not recognized**. The scripts called it to hash files, so the delivery verifier failed long after its own checks passed. | The four delivery scripts now compute SHA-256 with the .NET API they already used elsewhere. Digest parity with `Get-FileHash` was verified byte-for-byte. |
+| `delivery-cat-file-binds-git-blob` (Ubuntu) | `Get-Command git.exe` — a Windows-only executable name — while the delivery contracts also run under `pwsh` on Linux. | A portable `Get-GitExecutable` resolves `git.exe` or `git` and still binds `-CommandType Application`, so no alias or function can stand in for it. |
+| `reject-reparse-layout`, `incompatible-sidecar-restored`, `listener-observation-detects-listener` (Ubuntu) | NTFS junctions, the .NET Framework compiler behind `Add-Type -OutputAssembly`, and the `iphlpapi.dll` listener table have no Linux equivalent. The driver is a Windows UI-Automation tool. | Those three cases now skip on non-Windows; the other twenty-two remain portable and continue to run. |
+| `test_api_reference`, `test_fresh_checkout_test_and_web_workflows_use_tracked_authorities` | `docs/api-reference.md`, `conftest.py`, and `.github/workflows/web.yml` were missing from the branch. | Fixed earlier in this unit; both now pass. |
+| 18 POSIX artifact, restore, run-lifecycle, and host-durability failures (Ubuntu) | Pre-existing and outside this unit. They were previously invisible because the missing `conftest.py` turned every `tmp_path` test into an error — 1048 of them on that run — so adding it unmasked them rather than caused them. | **Not repaired here.** They belong to the artifacts and session-lifecycle code of earlier units and need their own unit. |
+
+`apps/desktop/electron/__tests__/packaging.test.ts` asserted `toContain("Get-FileHash")`,
+pinning the mechanism rather than the property, so it would have gone red on a correct fix.
+It now asserts that the driver records a SHA-256 digest and rejects the old call, and both
+new assertions were confirmed red against the previous revision. This is the second guard in
+this unit found asserting a construct instead of a property; the pattern is recorded as R14.
+
+### Honesty
+
+- The delivery-script repairs are verified locally: digest parity, 115 focused tests, and
+  the full suite. Whether they turn the repository CI green can only be confirmed by the
+  next CI run, which had not completed when this was written.
+- The Ubuntu POSIX group is a real, unrepaired failure set. It is recorded here because this
+  unit unmasked it, not because this unit fixed it.
+- WSL was rejected as a reproduction environment for that group: the available distribution
+  runs as root on a DrvFs mount, which changes the very permission semantics those tests
+  assert, so it would have produced a different answer rather than a faithful one.
+- The gate numbers above come from a clean full run taken after every change in this task;
+  an earlier run was discarded because the tree was edited while it was in flight.

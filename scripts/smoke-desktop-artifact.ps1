@@ -217,6 +217,27 @@ function Get-CanonicalPath {
     return [System.IO.Path]::GetFullPath($Path).TrimEnd([char[]]@('\', '/'))
 }
 
+function Get-Sha256File {
+    param([Parameter(Mandatory = $true)][string] $Path)
+
+    # Hash with .NET rather than Get-FileHash, which has to be resolved from
+    # Microsoft.PowerShell.Utility at call time and is not available on every runner.
+    $full = (Resolve-Path -LiteralPath $Path).Path
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($full)
+        try {
+            return [System.BitConverter]::ToString(
+                $sha.ComputeHash($stream)
+            ).Replace('-', '').ToLowerInvariant()
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 function Test-PathInside {
     param(
         [Parameter(Mandatory = $true)][string] $Candidate,
@@ -351,7 +372,7 @@ function Get-ProfileInventory {
         $digest = if ($item.PSIsContainer) {
             '-'
         } else {
-            (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            Get-Sha256File $item.FullName
         }
         $entries.Add($kind + ':' + $relative.Replace('\', '/') + ':' + $digest)
     }
@@ -1511,9 +1532,7 @@ try {
     }
     $evidence = [ordered]@{
         scenario = $Scenario
-        artifact_sha256 = (
-            Get-FileHash -LiteralPath $appPath -Algorithm SHA256
-        ).Hash.ToLowerInvariant()
+        artifact_sha256 = Get-Sha256File $appPath
         results = $results
         state = 'passed'
         elapsed_ms = [int]([datetime]::UtcNow - $started).TotalMilliseconds

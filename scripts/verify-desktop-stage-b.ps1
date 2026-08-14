@@ -304,7 +304,31 @@ function Get-Sha256Bytes {
 
 function Get-Sha256File {
     param([Parameter(Mandatory = $true)][string] $Path)
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    # Hash with .NET rather than Get-FileHash: that cmdlet has to be resolved from
+    # Microsoft.PowerShell.Utility at call time, and a hosted runner reported it as
+    # not recognized, failing the delivery verifier long after its own checks passed.
+    $full = (Resolve-Path -LiteralPath $Path).Path
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($full)
+        try {
+            return [System.BitConverter]::ToString(
+                $sha.ComputeHash($stream)
+            ).Replace('-', '').ToLowerInvariant()
+        } finally {
+            $stream.Dispose()
+        }
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Get-GitExecutable {
+    # `git.exe` only resolves on Windows, but the delivery contracts also run under
+    # pwsh on Linux, where the application is plain `git`. Bind the application
+    # explicitly so a shell alias or function can never stand in for it.
+    $name = if ($env:OS -eq 'Windows_NT') { 'git.exe' } else { 'git' }
+    return (Get-Command $name -CommandType Application -ErrorAction Stop).Source
 }
 
 function Get-GitBlobSha {
@@ -457,7 +481,7 @@ function Get-GitBlobBatch {
     $ordered = [string[]]($unique | ForEach-Object { [string]$_ })
     [Array]::Sort($ordered, [System.StringComparer]::Ordinal)
 
-    $git = (Get-Command git.exe -ErrorAction Stop).Source
+    $git = Get-GitExecutable
     $start = New-Object System.Diagnostics.ProcessStartInfo
     $start.FileName = $git
     $start.Arguments = '-c credential.interactive=never cat-file --batch'
@@ -1156,7 +1180,7 @@ function Invoke-SelfTest {
             $ok = -not $hasDeliveryReview  # freeze must not run without delivery review
         }
         'delivery-cat-file-binds-git-blob' {
-            $git = (Get-Command git.exe -ErrorAction Stop).Source
+            $git = Get-GitExecutable
             $objectIds = [string[]]@(
                 & $git -C $script:RepositoryRoot ls-tree -r HEAD |
                     ForEach-Object {
