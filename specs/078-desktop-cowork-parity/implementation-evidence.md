@@ -1013,9 +1013,16 @@ this unit found asserting a construct instead of a property; the pattern is reco
 
 ### Honesty
 
-- The delivery-script repairs are verified locally: digest parity, 115 focused tests, and
-  the full suite. Whether they turn the repository CI green can only be confirmed by the
-  next CI run, which had not completed when this was written.
+- The delivery-script repairs are confirmed on the runners, not only locally. On the head
+  commit the `web` and `desktop` workflows both pass — `desktop` covers both the push
+  source-gate job and the pull-request one — the Windows `CI` job passes with no failures,
+  and the Ubuntu `CI` job reports exactly **18 failed, 1951 passed, 28 skipped**: eleven in
+  `test_artifacts.py`, four in `test_desktop_restore.py`, two in `test_run_lifecycle.py`,
+  and one in `test_host_durability.py`. Nothing from this unit's contracts remains red.
+- One repair needed a second pass. `Get-GitExecutable` first read `.Source` off the whole
+  `Get-Command` result; a runner exposing three `git.exe` entries on PATH turned that into a
+  single string of joined paths and broke the previously green Windows job. This machine has
+  one `git.exe`, so only the runner could surface it. It now takes the first PATH match.
 - The Ubuntu POSIX group is a real, unrepaired failure set. It is recorded here because this
   unit unmasked it, not because this unit fixed it.
 - WSL was rejected as a reproduction environment for that group: the available distribution
@@ -1023,3 +1030,47 @@ this unit found asserting a construct instead of a property; the pattern is reco
   assert, so it would have produced a different answer rather than a faithful one.
 - The gate numbers above come from a clean full run taken after every change in this task;
   an earlier run was discarded because the tree was edited while it was in flight.
+
+## Phase 9 convergence — T095 post-gate packaged re-run
+
+After the full gates, `apps/desktop` was rebuilt and repackaged, and the resulting
+`win-unpacked` was copied to a fresh location outside the checkout. The packaged executable
+hashes to `ffcebdd60543801fc7986280beaed7231ce520e03913a72216b72d45203b85f5`, byte-identical
+to the artifact T090 accepted, confirming that everything committed since then changed
+scripts, tests and documentation but not the Electron bundle.
+
+`scripts/smoke-desktop-artifact.ps1 -Scenario all`, invoked from an external working
+directory:
+
+| Scenario | State | Elapsed | Pairs | Profile |
+|----------|-------|---------|-------|---------|
+| happy | passed | 19337 ms | 7 | preserved |
+| missing-sidecar | diagnosed | 5361 ms | 7 | preserved, unchanged |
+| corrupt-sidecar | diagnosed | 5774 ms | 7 | preserved, unchanged |
+| incompatible-sidecar | diagnosed | 6794 ms | 7 | preserved, unchanged |
+
+Overall `state=passed`, `orphan=false`, `listener=false`, 38046 ms, and the copied sidecar's
+SHA-256 was byte-identical afterwards. This run also exercises the driver's replacement
+hashing helper end to end.
+
+**The first attempt failed and is recorded rather than discarded.** On the first launch of
+the freshly copied artifact the driver reported `runtime_not_usable`. The probe timeline
+shows why: the window appeared at 5236 ms and the seven locators at 5898 ms, the status was
+still `Starting interaction…` at 9888 ms, and at 10725 ms the diagnostic became
+`Local runtime unavailable`. That is the app's own handshake budget —
+`SIDECAR_WARMUP_MS` plus `SIDECAR_INIT_TIMEOUT_MS`, 9500 ms — expiring because the frozen
+sidecar had not answered `initialize` yet. The second and third launches of the same
+artifact reached a usable runtime at 6618 ms and 5654 ms, and the re-run above passed.
+
+The difference was machine state, not the artifact: the failing attempt ran immediately
+after two full Python suites, a clean `npm ci`, and two `electron-builder` packages, with a
+freshly written 330 MB copy still being scanned. The happy path therefore passes inside a
+margin that load can erase. That is now **R16** in the risk register.
+
+### Honesty
+
+- T095 is a local re-run. The descriptor-gated route's own post-gate evidence would be a
+  fresh delivery run, which requires a new Stage-C review on the current head.
+- The first attempt's failure is a real observation about the margin, not a flake to be
+  waved away. It is recorded above and registered as a risk.
+- No acceptance deadline was changed to obtain the passing run.

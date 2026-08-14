@@ -121,3 +121,11 @@
 - **Why AI errs**: a `run: |` block reads like a script where any failure stops the job, but GitHub reports only the **last** command's exit code and native tools do not raise in PowerShell. A fifteen-command reviewed-source gate can report `success` while `ruff`, `mypy`, `pytest`, and `npm test` all failed inside it.
 - **Mitigation**: check `$LASTEXITCODE` after each command, or split one command per step
 - **Gate**: none today (recorded, unrepaired, maintainer decision) · **Verify**: compare a green multi-command step against the same commands run as their own workflow
+
+## R16 — The packaged smoke passes inside a margin machine load can erase
+
+- **Affected**: `scripts/smoke-desktop-artifact.ps1` happy path; the Windows delivery job
+- **Severity/Likelihood**: Med / Med
+- **Why AI errs**: the gate is green on a quiet machine, so an agent reads it as settled. The happy scenario must reach a usable runtime inside one fixed ten-second deadline, and a cold packaged start spends most of it: first launch of a freshly copied artifact measured 5.2s to a window and never reached usable, while the second and third launches reached it at 6.6s and 5.7s. The app's own handshake budget is `SIDECAR_WARMUP_MS + SIDECAR_INIT_TIMEOUT_MS`; when a loaded machine pushes the frozen sidecar past it, the run reports a healthy runtime as unavailable.
+- **Mitigation**: run the packaged smoke on an otherwise idle machine; do not interpret a single failure as a product defect without the millisecond timeline; keep the handshake budget below the acceptance deadline so the failure is a timeout rather than a hang
+- **Gate**: the delivery job's `-Scenario all` run · **Verify**: `apps/desktop/.build/probe-runtime-usable.ps1` prints window, locator and status transitions with timestamps and distinguishes "slow" from "never"
