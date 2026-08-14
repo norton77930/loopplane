@@ -63,8 +63,19 @@ jobs:
       - name: Python delivery contracts
         shell: powershell
         run: |
-          uv sync --locked
-          uv run pytest tests/contract/test_desktop_delivery_gate.py tests/integration/test_desktop_packaged_smoke.py -q
+          # `shell: powershell` reports only the last command's exit code, so a
+          # bare sequence turns every earlier gate into a no-op. Route each gate
+          # through a guard that fails the step on a non-zero exit.
+          function Assert-Gate {
+            param(
+              [Parameter(Mandatory)][string] $Label,
+              [Parameter(Mandatory)][scriptblock] $Gate
+            )
+            & $Gate
+            if ($LASTEXITCODE -ne 0) { throw ($Label + '_failed') }
+          }
+          Assert-Gate 'uv_sync' { uv sync --locked }
+          Assert-Gate 'python_delivery_contracts' { uv run pytest tests/contract/test_desktop_delivery_gate.py tests/integration/test_desktop_packaged_smoke.py -q }
       - name: JavaScript clean install
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
@@ -74,14 +85,23 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
         shell: powershell
         run: |
-          npm run typecheck -w @loopplane/cowork-presentation
-          npm test -w @loopplane/cowork-presentation -- --run
-          npm run typecheck -w @loopplane/web
-          npm test -w @loopplane/web -- --run
-          npm run build -w @loopplane/web
-          npm run typecheck -w @loopplane/desktop
-          npm test -w @loopplane/desktop -- --run
-          npm run build -w @loopplane/desktop
+          # Every gate must fail the step; see the note on the Python step above.
+          function Assert-Gate {
+            param(
+              [Parameter(Mandatory)][string] $Label,
+              [Parameter(Mandatory)][scriptblock] $Gate
+            )
+            & $Gate
+            if ($LASTEXITCODE -ne 0) { throw ($Label + '_failed') }
+          }
+          Assert-Gate 'presentation_typecheck' { npm run typecheck -w @loopplane/cowork-presentation }
+          Assert-Gate 'presentation_tests' { npm test -w @loopplane/cowork-presentation -- --run }
+          Assert-Gate 'web_typecheck' { npm run typecheck -w @loopplane/web }
+          Assert-Gate 'web_tests' { npm test -w @loopplane/web -- --run }
+          Assert-Gate 'web_build' { npm run build -w @loopplane/web }
+          Assert-Gate 'desktop_typecheck' { npm run typecheck -w @loopplane/desktop }
+          Assert-Gate 'desktop_tests' { npm test -w @loopplane/desktop -- --run }
+          Assert-Gate 'desktop_build' { npm run build -w @loopplane/desktop }
 
   delivery:
     if: >-
@@ -107,25 +127,38 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
         run: |
+          # This step is the delivery gate on the reviewed source. Under
+          # `shell: powershell` only the last command's exit code reaches the
+          # runner, so a bare sequence would let a failing ruff, mypy, pytest,
+          # or npm test through and still report success. Every gate is routed
+          # through a guard that throws on a non-zero exit.
+          function Assert-Gate {
+            param(
+              [Parameter(Mandatory)][string] $Label,
+              [Parameter(Mandatory)][scriptblock] $Gate
+            )
+            & $Gate
+            if ($LASTEXITCODE -ne 0) { throw ($Label + '_failed') }
+          }
           $expected = '${{ github.event.review.commit_id }}'
           $actual = (git rev-parse HEAD).Trim()
           if ($actual -cne $expected) {
             throw 'reviewed_checkout_mismatch'
           }
-          uv sync --locked
-          uv run ruff format --check .
-          uv run ruff check .
-          uv run mypy
-          uv run pytest
-          npm ci
-          npm run typecheck -w @loopplane/cowork-presentation
-          npm test -w @loopplane/cowork-presentation -- --run
-          npm run typecheck -w @loopplane/web
-          npm test -w @loopplane/web -- --run
-          npm run build -w @loopplane/web
-          npm run typecheck -w @loopplane/desktop
-          npm test -w @loopplane/desktop -- --run
-          npm run build -w @loopplane/desktop
+          Assert-Gate 'uv_sync' { uv sync --locked }
+          Assert-Gate 'ruff_format' { uv run ruff format --check . }
+          Assert-Gate 'ruff_check' { uv run ruff check . }
+          Assert-Gate 'mypy' { uv run mypy }
+          Assert-Gate 'pytest' { uv run pytest }
+          Assert-Gate 'npm_ci' { npm ci }
+          Assert-Gate 'presentation_typecheck' { npm run typecheck -w @loopplane/cowork-presentation }
+          Assert-Gate 'presentation_tests' { npm test -w @loopplane/cowork-presentation -- --run }
+          Assert-Gate 'web_typecheck' { npm run typecheck -w @loopplane/web }
+          Assert-Gate 'web_tests' { npm test -w @loopplane/web -- --run }
+          Assert-Gate 'web_build' { npm run build -w @loopplane/web }
+          Assert-Gate 'desktop_typecheck' { npm run typecheck -w @loopplane/desktop }
+          Assert-Gate 'desktop_tests' { npm test -w @loopplane/desktop -- --run }
+          Assert-Gate 'desktop_build' { npm run build -w @loopplane/desktop }
       - name: Verify Stage C and materialize accepted inputs
         shell: powershell
         env:

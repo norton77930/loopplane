@@ -788,7 +788,7 @@ The fixed ten-second acceptance deadline was not changed.
 - T088 changed workflow source only. It did not execute live authority lookup, dependency installation, sidecar freeze, `electron-builder`, artifact copy, or UI Automation smoke; T090 still blocks the first such delivery execution.
 - T089 evidence is source/test evidence only. It did not run PyInstaller, `electron-builder`, copy a real artifact, inspect a real Electron UIA tree, or perform a live Stage-C authority lookup. Those claims remain intentionally blocked by T090.
 - The current permission configuration denies `Agent(claudex-code-reviewer)`. Architecture review is current and PASS, but the separately preselected code-review evidence remains unavailable rather than being silently substituted.
-- The delivery job's reviewed-source recheck step runs fifteen commands under `shell: powershell`, which reports only the last command's exit code, so a mid-script `uv run ruff`, `uv run mypy`, `uv run pytest`, or `npm test` failure is masked. That step's `success` is therefore **not** evidence that the reviewed source is green, and repository CI was red on the same commit. The same masking applies to the eight-command source-gate step. This was found during T090 and deliberately left unrepaired: making the gate strict before CI is green would block delivery on unrelated pre-existing failures, so the choice belongs to the maintainer.
+- The delivery job's reviewed-source recheck step runs fifteen commands under `shell: powershell`, which reports only the last command's exit code, so a mid-script `uv run ruff`, `uv run mypy`, `uv run pytest`, or `npm test` failure is masked. That step's `success` is therefore **not** evidence that the reviewed source is green, and repository CI was red on the same commit. The same masking applies to the eight-command source-gate step. This was found during T090 and deliberately left unrepaired at the time, because making the gate strict while CI was red would have blocked delivery on failures the unit had not yet fixed. Repository CI is now green on both platforms, so the reason to defer is gone and the masking is repaired — see "Delivery gate fail-open repair" below.
 - The delivery run's bounded smoke evidence is written to the runner's external run root and is not uploaded, so it could not be read back. The per-scenario fields recorded above come from the five local runs; the delivery run contributes its job conclusion, step boundaries, and the packaged application's own standard-error signature only.
 - The locally smoked artifact was produced by `electron-builder` with a local configuration for debugging, not through the descriptor-gated wrapper route. The descriptor-gated route's own evidence is the delivery run, whose artifact was neither retained nor independently inspected here.
 - Repository CI was red on the reviewed commit: 22 failures on Ubuntu (chiefly `test_artifacts.py`, `test_desktop_restore.py`, `test_run_lifecycle.py`, `test_host_durability.py`) and 5 on Windows (verifier and driver self-tests). The Windows five and four of the Ubuntu failures were delivery-script defects, repaired during T090. **This entry originally claimed the remaining 18 Ubuntu failures predated this task. That was wrong.** `git log -S` on each failing test name returns this unit's own `e3384bd` ("fix(078): close artifact deletion lifecycle"), so they are 078 regressions, not inherited ones. Their repair is recorded under the POSIX correction below.
@@ -1102,6 +1102,59 @@ contracts that encoded a call shape or a platform sequence the implementation do
   invocation recorded above.
 - The Windows-versus-POSIX close sequence was established by instrumenting an actual run on
   both platforms, not inferred from the source.
+
+## Phase 9 convergence — delivery gate fail-open repair
+
+R15: three `shell: powershell` steps in `.github/workflows/desktop.yml` ran their gates as
+a bare sequence. That shell reports only the **last** command's exit code, so 21 gates could
+fail without failing their step — including every `ruff`, `mypy`, `pytest` and `npm test` in
+the delivery job's reviewed-source recheck. The step's `success` was therefore not evidence
+that the reviewed source was green. It was recorded rather than repaired during T090 because
+tightening the gate while CI was red would have blocked delivery on failures this unit had
+not yet fixed; with CI now green on both platforms that reason no longer holds.
+
+Each gate is now invoked through an `Assert-Gate` guard that throws on a non-zero exit, so a
+failure both fails the step and stops the sequence. The affected steps are `Python delivery
+contracts` (2 gates), `Shared, Web, and Desktop source gates` (8), and `Recheck reviewed
+source before Stage C` (14). The two Stage-C steps already checked `$LASTEXITCODE` and are
+unchanged.
+
+### Guards
+
+Two contracts in `tests/contract/test_desktop_delivery_gate.py` were written first and
+observed RED against the unrepaired workflow, where they named all 21 masked gates:
+
+- `test_powershell_delivery_steps_cannot_swallow_a_failed_gate` asserts the property rather
+  than the mechanism — a bare native gate is allowed only where its own exit code is already
+  the step's. It stays true under any guard implementation.
+- `test_powershell_gate_guard_actually_inspects_the_exit_code` closes the obvious way to
+  satisfy the first one falsely: a wrapper that runs the gate but discards its exit code.
+  It requires the guard's definition to read `$LASTEXITCODE` and to `throw`.
+
+This is the third guard in this unit that had to be checked for asserting a construct instead
+of a property (R14), so both were confirmed RED before the workflow changed.
+
+### Verification
+
+| Gate | Result |
+|------|--------|
+| The two new contracts, before the repair | **RED**, naming all 21 masked gates |
+| `tests/contract/test_desktop_delivery_gate.py` after the repair | **78 passed** |
+| Desktop Vitest `packaging.test.ts` (reads the same workflow) | **9 passed** |
+| Windows PowerShell 5.1 parse of all five extracted `run` blocks | **OK**, zero parse errors |
+| `Assert-Gate` runtime proof under Windows PowerShell 5.1 | a passing gate does not throw; a failing gate throws its label; a later gate does **not** run after an earlier failure; `-w @loopplane/... -- --run` reaches the command verbatim |
+| `uv run ruff format --check .` and `uv run ruff check .` | **PASS** (533 files) |
+| `uv run mypy` | **Success: no issues found in 205 source files** |
+
+### Honesty
+
+- Only the two push/pull-request steps are exercised by the `desktop` workflow on this
+  commit. The `Recheck reviewed source before Stage C` step runs only inside the delivery
+  job, which requires an approved submitted review, so its repaired form is verified by
+  parse, by runtime proof of the identical guard, and by contract — **not** by a live run.
+- The guard is structural: no unit test can execute a workflow step, so it approximates
+  "a failing gate fails the step" by forbidding the shape that cannot. The runtime proof
+  above covers the behaviour the structure stands in for.
 
 ## Phase 9 convergence — T095 post-gate packaged re-run
 

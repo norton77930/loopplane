@@ -43,6 +43,11 @@ VERIFIER_PS1 = REPO_ROOT / "scripts" / "verify-desktop-stage-b.ps1"
 PACKAGE_WRAPPER_PS1 = REPO_ROOT / "scripts" / "build-desktop-package.ps1"
 SIDECAR_WRAPPER_PS1 = REPO_ROOT / "scripts" / "build-desktop-sidecar.ps1"
 WEB_WORKFLOW_YML = REPO_ROOT / ".github" / "workflows" / "web.yml"
+DESKTOP_WORKFLOW_YML = REPO_ROOT / ".github" / "workflows" / "desktop.yml"
+
+# A gate is a native executable: its failure is reported through an exit code,
+# not a terminating PowerShell error.
+_NATIVE_GATE = re.compile(r"^\s*(uv|npm|node|python)\s")
 
 # Cases T004/T085/T086 SelfTest harnesses must implement (name → expect success).
 SELFTEST_CASES: dict[str, bool] = {
@@ -289,6 +294,103 @@ def test_fresh_checkout_test_and_web_workflows_use_tracked_authorities() -> None
     assert "npm run typecheck -w @loopplane/web" in web_workflow
     assert "npm test -w @loopplane/web" in web_workflow
     assert "npm run build -w @loopplane/web" in web_workflow
+
+
+def _powershell_run_blocks(workflow: str) -> list[tuple[str, list[str]]]:
+    """Return ``(step name, run-block lines)`` for every PowerShell step."""
+
+    blocks: list[tuple[str, list[str]]] = []
+    lines = workflow.splitlines()
+    index = 0
+    while index < len(lines):
+        match = re.match(r"^(\s+)- name: (.+)$", lines[index])
+        if match is None:
+            index += 1
+            continue
+        indent, name = match.group(1), match.group(2).strip()
+        step: list[str] = []
+        index += 1
+        while index < len(lines):
+            line = lines[index]
+            if line.strip() and not line.startswith(indent + " "):
+                break
+            step.append(line)
+            index += 1
+        if not any(re.match(r"^\s*shell: powershell\s*$", line) for line in step):
+            continue
+        run_at = next(
+            (
+                position
+                for position, line in enumerate(step)
+                if re.match(r"^\s*run: \|\s*$", line)
+            ),
+            None,
+        )
+        if run_at is None:
+            continue
+        run_indent = len(step[run_at]) - len(step[run_at].lstrip())
+        body: list[str] = []
+        for line in step[run_at + 1 :]:
+            if line.strip() and (len(line) - len(line.lstrip())) <= run_indent:
+                break
+            body.append(line)
+        blocks.append((name, body))
+    return blocks
+
+
+def test_powershell_delivery_steps_cannot_swallow_a_failed_gate() -> None:
+    """No gate in a PowerShell step may fail without failing the step.
+
+    ``shell: powershell`` reports only the *last* command's exit code, so a
+    multi-command step turns every earlier gate into a no-op: a failing
+    ``uv run pytest`` or ``npm test`` still leaves the step green. This asserts
+    the property rather than any particular guard, so it stays true whichever
+    mechanism enforces it: a bare native gate is allowed only where its own exit
+    code is already the step's.
+    """
+
+    workflow = DESKTOP_WORKFLOW_YML.read_text(encoding="utf-8")
+    blocks = _powershell_run_blocks(workflow)
+    assert blocks, "no PowerShell steps found — the parser or the workflow moved"
+
+    unguarded: list[str] = []
+    for name, body in blocks:
+        commands = [
+            line for line in body if line.strip() and not line.strip().startswith("#")
+        ]
+        for position, line in enumerate(commands):
+            if _NATIVE_GATE.match(line) and position != len(commands) - 1:
+                unguarded.append(f"{name}: {line.strip()}")
+    assert not unguarded, (
+        "these gates run before the last command of their step, so a non-zero "
+        "exit is discarded and the step still reports success: " + "; ".join(unguarded)
+    )
+
+
+def test_powershell_gate_guard_actually_inspects_the_exit_code() -> None:
+    """Whatever wraps the gates must fail on a non-zero exit, not merely run.
+
+    Without this, the guard above could be satisfied by a wrapper that swallows
+    the exit code just as silently as the bare sequence it replaced.
+    """
+
+    workflow = DESKTOP_WORKFLOW_YML.read_text(encoding="utf-8")
+    guarded = [
+        (name, body)
+        for name, body in _powershell_run_blocks(workflow)
+        if any("Assert-Gate" in line for line in body)
+    ]
+    assert guarded, "no step delegates its gates to a guard"
+
+    start = workflow.find("function Assert-Gate")
+    assert start != -1, "Assert-Gate is used but never defined"
+    # The definition ends where the first call site begins, which keeps this
+    # independent of whether the guard is written on one line or several.
+    end = workflow.find("Assert-Gate '", start)
+    assert end > start, "Assert-Gate is defined but never called"
+    body = workflow[start:end]
+    assert "$LASTEXITCODE" in body, "Assert-Gate ignores the gate's exit code"
+    assert "throw" in body, "Assert-Gate never fails the step"
 
 
 def _run_selftest(
