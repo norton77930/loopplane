@@ -6,7 +6,8 @@ speaks JSON-RPC V1 over stdio. Unit 078 replaced the reused web renderer with th
 `@loopplane/cowork-presentation` package, so Desktop and Web render from one presentation
 source without copying UI.
 
-The app opens no network port, runs no tool itself (the Host does), and embeds no secret.
+The app opens no network port, runs no tool itself (the Host does), and ships no secret of its
+own. It does store one the user enters — see [Model provider](#model-provider).
 
 ## The gates (automated)
 
@@ -66,6 +67,43 @@ generation-storage/<id>/checkpoints.sqlite3
 
 A second launch against the same root fails closed on the lock rather than sharing state.
 The active generation is validated against its proof before the Host starts.
+
+## Model provider
+
+Settings → **Model provider** is how the app reaches a real model: choose a provider
+(Anthropic, OpenAI, Gemini, OpenRouter, or a local Ollama), enter a model id and an API key,
+save, restart. Before this existed the only route was exporting
+`LOOPPLANE_MODEL=<module>:<attr>` before launching Electron, and without it every prompt
+answered "LoopPlane demo model: no provider is configured." That environment variable still
+works and still takes precedence over nothing — an in-app setting wins, and a packaged-smoke
+scenario wins over both.
+
+**ADR 0016** records the decision, including the deliberate divergence from the position that
+a LoopPlane UI does not collect provider credentials: Web is served across a network to a
+principal who need not own the machine, while Desktop is a local application run by the
+machine's owner with an OS keystore available.
+
+- **Electron main owns the credential.** It encrypts with `safeStorage` (DPAPI / Keychain /
+  libsecret) and refuses to store anything at all when the OS keystore is unavailable rather
+  than falling back to plaintext.
+- **The blob lives outside the profile root**, under `app.getPath("userData")`. Backups
+  assemble from a profile whitelist (`sidecar/archive.py`), so the `"credentials"` exclusion
+  `backup.describe` discloses holds by construction rather than by a rule that could drift.
+  A restored profile therefore arrives without a provider, and the setting has to be entered
+  again on the new machine.
+- **The renderer never receives the key.** `providers.get` answers
+  `{provider, modelId, hasKey, keyHint}`, where the hint is the last four characters at most,
+  and save failures are a fixed enumeration so no OS text or path crosses the boundary.
+- **The sidecar receives it as spawn environment, not as an RPC parameter**, so no method and
+  no capability is added and the versioned stdio protocol is untouched. The sidecar drops the
+  key from `os.environ` once the adapter holds it, so nothing the runtime later spawns
+  inherits it.
+- **Changing a provider relaunches the app.** `RuntimeConfig.model` is frozen and the sidecar
+  holds the profile ownership lock, so a relaunch is the one path that rebuilds both without a
+  partial teardown. A stored key is reused when only the model changes, never across a
+  provider change.
+
+Saving stores the key; it does not verify it. An incorrect key surfaces on the first reply.
 
 ## Profiles and workspaces
 
@@ -139,6 +177,29 @@ Start-Process -FilePath 'powershell.exe' -WorkingDirectory $runRoot -NoNewWindow
     '-Scenario', 'all'
   )
 ```
+
+### Two couplings between the smoke and the UI
+
+Both are easy to break with an ordinary presentation change, and neither fails until a
+packaged run:
+
+1. **The word "usable".** `Wait-RuntimeUsable` matches `/usable/i` against the descendant
+   accessible names of the `LoopPlane smoke runtime status` group and throws
+   `runtime_not_usable` otherwise. The renderer therefore keeps the exact phase sentence as
+   that element's `aria-label` while showing a short human status; `App.test.tsx` pins the
+   word separately from the copy so rewording the UI cannot silently remove it.
+2. **The success marker's location.** The happy path reads the descendant accessible names of
+   the `LoopPlane smoke latest outcome` group until `loopplane-packaged-smoke-ok` appears.
+   That group is the pane body, so the conversation has to keep rendering inside it — a
+   first-run panel that replaces the message list, rather than sitting above it, passes every
+   unit test and fails the smoke.
+
+**Unverified since the composer became multi-line:** the happy path fills the prompt through
+`ValuePattern.SetValue()`, and the prompt changed from `<input>` to `<textarea>`. Chromium
+exposes ValuePattern on both, and `renderer-presentation.test.tsx` pins the properties that
+rests on, but jsdom cannot exercise UI Automation and neither can a headless browser — Chrome
+does not expose page content to a UIA client at all. **The next packaged run is the first
+real check of it; look there first if the happy path fails.**
 
 `-Scenario all` runs the happy path plus missing, corrupt, and incompatible sidecars. Each
 scenario gets a fresh profile, the copied sidecar is restored byte-for-byte afterwards, and
