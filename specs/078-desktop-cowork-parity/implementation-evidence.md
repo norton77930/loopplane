@@ -1430,3 +1430,98 @@ part of the candidate. That correction is recorded rather than quietly applied.
   untracked additions. Nothing in this candidate touches it.
 - The reviewed Stage-C commit was `88e6f71`; four commits have landed since. A further
   delivery run would require a new Stage-C review on the current head.
+
+---
+
+## Phase 10 — post-T100 maintainer-directed additions
+
+After T100 recorded the final candidate, the maintainer directed further work on this
+branch. It is recorded here rather than folded into the earlier phases, and as tasks
+T102–T108 in `tasks.md`, because the spec did not anticipate it and rewriting the earlier
+record would misrepresent when the decisions were made.
+
+### What was added
+
+Seven commits on `4c54569..746541e`, one per task:
+
+| Commit | Task | Change |
+|---|---|---|
+| `343731d` | T102 | In-app model provider configuration. The packaged app previously reached a model only if the operator exported `LOOPPLANE_MODEL`; without it every prompt answered "LoopPlane demo model: no provider is configured." Electron main now owns a `safeStorage`-encrypted credential stored under `app.getPath("userData")`, outside the profile root, so the disclosed `"credentials"` backup exclusion holds by construction. Recorded in **ADR 0016**, Accepted. |
+| `487c35e` | T103 | Conversation pane: single-line `<input>` → growing textarea with IME-aware Enter handling; empty-state chips wired (they had no handler, so every chip was inert) and copy no longer advertises an attach control Desktop lacks; the two permanent health indicators collapsed into one strip carrying session context when healthy. |
+| `77277b1` | T104–T106 | One shared vocabulary replacing `Mode: read_only` / `Lease: not owner`; per-tool consequence text in the approval dialog; sidebar rebuilt around sessions; language and theme selection with zh-TW. |
+| `4d210fd` | T107 | Pane lease given a visual form and an explicit accessible name; fork and regenerate message actions wired. |
+| `5d79a9f` | T108 | `docs/desktop-gui.md`: the provider setting, and the two smoke↔renderer couplings no unit test can catch. |
+| `41f8cbf` | T106 | Backup and restore translated, its public error catalogue moved to translation keys behind a membership check, and the screen given a layout. |
+| `746541e` | — | The `tasks.md` Phase 10 record itself. |
+
+### Boundary and protocol invariants held
+
+- **No sidecar method, capability, or protocol version changed.** The credential reaches the
+  sidecar as spawn environment, not as an RPC parameter. `_DESKTOP_METHOD_NAMES` and
+  `REQUESTED_CAPABILITIES` are untouched, so `tests/integration/test_desktop_sidecar.py`
+  required no edit.
+- **The sidecar import allow-list was widened deliberately**, not routed around.
+  `RUNTIME_ALLOWED_PREFIXES` now admits `loopplane.adapters` for model construction and the
+  provider builders import statically inside their functions, where the AST scan still sees
+  them. An earlier draft used `importlib`, which bought nothing at runtime and only hid a
+  real edge from the audit; constitution VIII asks that a boundary-blurring change update the
+  boundary definition instead. A negative self-check confirmed the guard still rejects a
+  forbidden import.
+- **No runtime change.** `src/loopplane` is untouched by every commit above.
+
+### Gates
+
+Run locally on `746541e` before the Stage-C request: `ruff format --check` (535 files),
+`ruff check`, `mypy` (205 source files, no issues), `pytest` (2025 passed, 33 skipped),
+typecheck across all three TypeScript workspaces, and their suites — Desktop 241, Web 202,
+shared presentation 60 — plus the Desktop build. Light and dark, English and zh-TW checked by
+screenshot at 320/760/1180/1440.
+
+### Stage-C delivery review and packaged run
+
+| Field | Value |
+|---|---|
+| Review ID | `4943212765` |
+| State | `APPROVED` |
+| Reviewer | `norton777930` (COLLABORATOR) |
+| Reviewed commit | `746541e5650091fa73335d157f2b67a5ad984228` |
+| Submitted at | `2026-08-15T07:13:56Z` |
+| Delivery workflow run | `31871417870`, job `94980551638` |
+| Started / completed | `2026-08-15T07:13:59Z` / `2026-08-15T07:26:16Z` |
+| Conclusion | **success** |
+
+This supersedes the note at the end of the T100 section, which recorded that the then-current
+Stage-C review was bound to `88e6f71` and that a further delivery run would need a new review.
+That new review is the one above.
+
+**What the success conclusion establishes, and how.** The delivery job's final step scrubs
+`LOOPPLANE_STAGE_B_GITHUB_TOKEN`, `GH_TOKEN`, and `GITHUB_TOKEN` and throws
+`credential_environment_forbidden` if any survives; runs `build-desktop-package.ps1` from the
+reviewed-source snapshot and throws `desktop_package_failed` on a non-zero exit; copies
+`win-unpacked` outside the checkout; and runs `scripts/smoke-desktop-artifact.ps1 -Scenario
+all` from a real external working directory, throwing `desktop_smoke_failed` on a non-zero
+exit. A `success` conclusion therefore requires all four to have passed.
+
+This closes the one risk carried through the Phase 10 work without evidence: the composer
+changed from `<input>` to `<textarea>`, and the smoke fills the prompt through
+`ValuePattern.SetValue()`. Two attempts to verify it earlier failed for recorded reasons —
+Chromium exposes no page content to a UIA client, so a headless or headed Chrome probe finds
+only the browser's own chrome; and installing Electron for a faithful probe is blocked by
+npm's `allow-scripts` policy, a change to the machine's security posture rather than a build
+step. The packaged run is the first and only real check, and it passed. It equally confirms
+that the literal word `usable` survived in the runtime-status group and that the success
+marker still resolves inside the pane body's accessibility subtree.
+
+### Honesty
+
+- The per-scenario smoke table is in the CI job log, not reproduced here; this record states
+  the job's conclusion and the workflow contract that makes it meaningful, not a table it did
+  not observe.
+- One commit landed after the reviewed commit: `0cfea6f`, which adds
+  `specs/083-desktop-capability-parity/` and one roadmap row. It contains no product source,
+  no test, no script, no workflow, and no delivery determinant, and the packaged artifact was
+  built from the reviewed snapshot rather than the working tree. Whether the candidate line is
+  drawn at `746541e` or at `HEAD` is a maintainer judgment; it is recorded rather than assumed.
+- Unit 082's work remains uncommitted across seven modified files and its untracked
+  additions. Nothing in Phase 10 touches it, and the staged file list was reviewed
+  explicitly before each of the seven commits.
