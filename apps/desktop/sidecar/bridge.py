@@ -449,6 +449,113 @@ _SMOKE_RESPONSES = {
 }
 
 
+DESKTOP_PROVIDER_ENV = "LOOPPLANE_DESKTOP_PROVIDER"
+DESKTOP_MODEL_ID_ENV = "LOOPPLANE_DESKTOP_MODEL_ID"
+DESKTOP_API_KEY_ENV = "LOOPPLANE_DESKTOP_API_KEY"
+
+_UNCONFIGURED_DEMO_TEXT = "LoopPlane demo model: no provider is configured."
+_UNUSABLE_DEMO_TEXT = (
+    "LoopPlane demo model: the configured provider could not be started. "
+    "Check the provider, model id, and key in Settings."
+)
+
+
+# Each builder imports its adapter statically, inside the function. The import
+# statement is what `tests/contract/test_desktop_boundary.py` scans (it walks the
+# whole AST, not only module scope), so the edge is visible to the audit — see
+# ADR 0016 D5, which widened `RUNTIME_ALLOWED_PREFIXES` to admit
+# `loopplane.adapters` for model construction. Keeping the imports inside the
+# functions also keeps them off the module-load path: `main()` answers
+# `initialize` from a lightweight dispatcher before composing anything
+# expensive, and a cold packaged start has a fixed handshake deadline.
+
+
+def _build_anthropic(model_id: str, api_key: str | None) -> Any:
+    from loopplane.adapters.anthropic import AnthropicConfig, AnthropicModel
+
+    return AnthropicModel(AnthropicConfig(model=model_id, api_key=api_key))
+
+
+def _build_openai(model_id: str, api_key: str | None) -> Any:
+    from loopplane.adapters.openai import OpenAIConfig, OpenAIModel
+
+    return OpenAIModel(OpenAIConfig(model=model_id, api_key=api_key))
+
+
+def _build_gemini(model_id: str, api_key: str | None) -> Any:
+    from loopplane.adapters.gemini import GeminiConfig, GeminiModel
+
+    return GeminiModel(GeminiConfig(model=model_id, api_key=api_key))
+
+
+def _build_openrouter(model_id: str, api_key: str | None) -> Any:
+    from loopplane.adapters.openai_compat import openrouter_model
+
+    return openrouter_model(model_id, api_key=api_key)
+
+
+def _build_ollama(model_id: str, _api_key: str | None) -> Any:
+    from loopplane.adapters.openai_compat import ollama_model
+
+    return ollama_model(model_id)
+
+
+class DesktopProvider:
+    """One provider the in-app setting can select.
+
+    A plain class, not a dataclass: ``tests/integration/test_desktop_sidecar.py``
+    loads this module through ``spec_from_file_location`` without registering it
+    in ``sys.modules``, and ``dataclasses`` resolves ``cls.__module__`` there.
+    """
+
+    __slots__ = ("build", "requires_key")
+
+    def __init__(
+        self, build: Callable[[str, str | None], Any], requires_key: bool
+    ) -> None:
+        self.build = build
+        self.requires_key = requires_key
+
+
+DESKTOP_PROVIDERS: Mapping[str, DesktopProvider] = {
+    "anthropic": DesktopProvider(build=_build_anthropic, requires_key=True),
+    "openai": DesktopProvider(build=_build_openai, requires_key=True),
+    "gemini": DesktopProvider(build=_build_gemini, requires_key=True),
+    "openrouter": DesktopProvider(build=_build_openrouter, requires_key=True),
+    "ollama": DesktopProvider(build=_build_ollama, requires_key=False),
+}
+
+
+def build_desktop_provider_model(
+    provider: str | None, model_id: str | None, api_key: str | None
+) -> Any:
+    """Build the adapter for an in-app provider setting, or ``None``.
+
+    Every failure — unknown provider, blank field, missing adapter package, a
+    constructor that raises — returns ``None`` so the caller can degrade to the
+    demo model. Nothing is logged and nothing is re-raised: the inputs include a
+    credential, and no operator is watching this process.
+    """
+
+    from loopplane.model import ModelBoundary
+
+    spec = DESKTOP_PROVIDERS.get((provider or "").strip())
+    if spec is None:
+        return None
+    model_id = (model_id or "").strip()
+    if not model_id:
+        return None
+    api_key = (api_key or "").strip() or None
+    if spec.requires_key and api_key is None:
+        return None
+
+    try:
+        model = spec.build(model_id, api_key)
+    except Exception:
+        return None
+    return model if isinstance(model, ModelBoundary) else None
+
+
 def select_desktop_model(env: Mapping[str, str]) -> Any:
     """Use a bounded scripted model only for an accepted packaged-smoke scenario."""
 
@@ -459,14 +566,28 @@ def select_desktop_model(env: Mapping[str, str]) -> Any:
         from loopplane.model import ModelBoundary, TextIncrement, TokenUsage, TurnEnd
 
         class DemoModel:
+            def __init__(self, text: str = _UNCONFIGURED_DEMO_TEXT) -> None:
+                self._text = text
+
             def context_capacity(self) -> int:
                 return 1_000_000
 
             async def stream_turn(self, _request: Any) -> Any:
-                yield TextIncrement(
-                    text="LoopPlane demo model: no provider is configured."
-                )
+                yield TextIncrement(text=self._text)
                 yield TurnEnd(stop_reason="end-turn", usage=TokenUsage())
+
+        # An in-app provider setting outranks the operator-only builder
+        # reference; the packaged smoke scenario above outranks both.
+        provider = env.get(DESKTOP_PROVIDER_ENV)
+        if (provider or "").strip():
+            configured = build_desktop_provider_model(
+                provider,
+                env.get(DESKTOP_MODEL_ID_ENV),
+                env.get(DESKTOP_API_KEY_ENV),
+            )
+            return (
+                configured if configured is not None else DemoModel(_UNUSABLE_DEMO_TEXT)
+            )
 
         reference = env.get("LOOPPLANE_MODEL")
         if not reference or ":" not in reference:
@@ -526,6 +647,10 @@ def main() -> None:  # pragma: no cover - real stdio entry (manual smoke)
     except ValueError:
         sys.stderr.write("sidecar smoke configuration failed\n")
         sys.exit(2)
+    # The adapter holds the credential as a constructor argument and never reads
+    # the environment again, so drop it here: anything this process later spawns
+    # — a shell tool, a git worktree command — would otherwise inherit the key.
+    os.environ.pop(DESKTOP_API_KEY_ENV, None)
 
     profile = Path(
         os.environ.get("LOOPPLANE_PROFILE_ROOT")

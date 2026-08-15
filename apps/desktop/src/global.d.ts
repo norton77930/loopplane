@@ -155,6 +155,16 @@ export type LoopPlaneDesktopApi = {
     ): Promise<RestoreCommitResult>;
     cancelRestore(restoreToken: string): Promise<void>;
   };
+  providers: {
+    get(): Promise<ProviderView | null>;
+    save(input: {
+      provider: string;
+      modelId: string;
+      apiKey: string | null;
+    }): Promise<ProviderSaveResult>;
+    clear(): Promise<{ ok: true }>;
+    restart(): Promise<{ ok: true }>;
+  };
   interaction: {
     submit(
       subscriptionId: string,
@@ -177,6 +187,26 @@ export type LoopPlaneDesktopApi = {
     ): () => void;
   };
 };
+
+/** The renderer's view of the stored provider setting — never the key itself. */
+export type ProviderView = {
+  provider: string;
+  modelId: string;
+  hasKey: boolean;
+  keyHint: string | null;
+};
+
+export type ProviderSaveResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | "encryption_unavailable"
+        | "invalid_provider"
+        | "invalid_model_id"
+        | "missing_key"
+        | "write_failed";
+    };
 
 declare global {
   interface Window {

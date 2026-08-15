@@ -5,9 +5,18 @@ import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { app, BrowserWindow, dialog, ipcMain, session } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, session } from "electron";
 
 import { registerDesktopIpcHandlers } from "./ipc-handlers";
+import {
+  clearProviderConfig,
+  nodeCredentialFileIo,
+  providerSpawnEnv,
+  publicProviderView,
+  readProviderConfig,
+  writeProviderConfig,
+  type VaultDeps,
+} from "./provider-credentials";
 import { SidecarRpcClient } from "./sidecar-rpc";
 import { resolveSidecar, type SidecarSpawn } from "./sidecar-spawn";
 import {
@@ -116,6 +125,18 @@ async function teardownRuntime(
   await runtime.shutdownPromise;
 }
 
+/**
+ * The credential vault's Electron-provided inputs. Built per call because
+ * `app.getPath` is only meaningful once the app is ready.
+ */
+function vaultDeps(): VaultDeps {
+  return {
+    vault: safeStorage,
+    io: nodeCredentialFileIo(),
+    userDataDir: app.getPath("userData"),
+  };
+}
+
 function createWindow(
   smoke: PackagedSmokeOptions | null,
   rendererReady: Promise<void> = Promise.resolve(),
@@ -141,6 +162,10 @@ function createWindow(
       stdio: ["pipe", "pipe", "inherit"],
       env: {
         ...process.env,
+        // The in-app provider setting, decrypted here and handed to the sidecar
+        // for this process only. A packaged smoke run stays on its scripted
+        // model, so it never reads a real credential.
+        ...(smoke ? {} : providerSpawnEnv(readProviderConfig(vaultDeps()))),
         LOOPPLANE_PROFILE_ROOT:
           smoke?.profileRoot ??
           (app.isPackaged
@@ -353,6 +378,17 @@ function createWindow(
         chooseDirectory,
         chooseBackupDestination,
         chooseRestoreSource,
+        providerVault: {
+          get: () => publicProviderView(readProviderConfig(vaultDeps())),
+          save: (input) => writeProviderConfig(vaultDeps(), input),
+          clear: () => {
+            clearProviderConfig(vaultDeps());
+          },
+          relaunch: () => {
+            app.relaunch();
+            app.quit();
+          },
+        },
       });
 
     runtime.disposeHandlers = bindHandlers();

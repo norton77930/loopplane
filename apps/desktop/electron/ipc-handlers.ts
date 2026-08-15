@@ -12,6 +12,11 @@ import {
   type DesktopPublicError,
 } from "./backup-restore-ipc";
 import { IPC } from "./ipc-channels";
+import type {
+  ProviderConfig,
+  PublicProviderView,
+  SaveResult,
+} from "./provider-credentials";
 import {
   assertTrustedSender,
   type IpcEventLike,
@@ -495,6 +500,20 @@ export type RegisterHandlersOptions = {
   chooseBackupDestination?: FileChooser;
   /** Main-owned native open picker; the renderer never receives its path. */
   chooseRestoreSource?: FileChooser;
+  /**
+   * Main-owned provider credential vault. Kept behind a port so this module
+   * stays free of `electron` and `node:fs`: the key is decrypted only in main,
+   * and only `get()`'s public view is allowed to answer the renderer.
+   */
+  providerVault?: ProviderVaultPort;
+};
+
+export type ProviderVaultPort = {
+  get(): PublicProviderView | null;
+  save(input: ProviderConfig): SaveResult;
+  clear(): void;
+  /** Relaunch the app so a new provider setting reaches a fresh sidecar. */
+  relaunch(): void;
 };
 
 /**
@@ -540,6 +559,10 @@ export function registerDesktopIpcHandlers(options: RegisterHandlersOptions): ()
     IPC.restoreValidate,
     IPC.restoreCommit,
     IPC.restoreCancel,
+    IPC.providersGet,
+    IPC.providersSave,
+    IPC.providersClear,
+    IPC.providersRestart,
   ];
 
   for (const ch of channels) {
@@ -579,6 +602,41 @@ export function registerDesktopIpcHandlers(options: RegisterHandlersOptions): ()
     } catch (err) {
       fail(err);
     }
+  });
+
+  // Provider settings (Unit A). These four never reach the sidecar over RPC:
+  // main owns the credential, and the sidecar receives it as spawn environment
+  // on the next launch. Nothing here returns the key.
+  ipcMain.handle(IPC.providersGet, async (event) => {
+    guard(event);
+    return options.providerVault ? options.providerVault.get() : null;
+  });
+
+  ipcMain.handle(IPC.providersSave, async (event, raw) => {
+    guard(event);
+    const input = exactInput(raw, ["provider", "modelId", "apiKey"]);
+    const provider = requireString(input, "provider");
+    const modelId = requireString(input, "modelId");
+    const apiKey = typeof input.apiKey === "string" ? input.apiKey : null;
+    if (!options.providerVault) {
+      return { ok: false, reason: "encryption_unavailable" } satisfies SaveResult;
+    }
+    return options.providerVault.save({ provider, modelId, apiKey });
+  });
+
+  ipcMain.handle(IPC.providersClear, async (event) => {
+    guard(event);
+    options.providerVault?.clear();
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC.providersRestart, async (event) => {
+    guard(event);
+    // A provider change only takes effect in a fresh sidecar, and the sidecar
+    // holds the profile ownership lock; relaunching the app is the one path
+    // that releases it without a partial teardown.
+    options.providerVault?.relaunch();
+    return { ok: true };
   });
 
   ipcMain.handle(IPC.sessionCreateInteractive, async (event, raw) => {

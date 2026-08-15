@@ -281,6 +281,104 @@
   align-self: auto;
 }
 
+/* ---- Provider settings -------------------------------------------------- */
+
+/* The unconfigured app can only answer with a placeholder, so say so above the
+   conversation. A banner, never a replacement: the packaged smoke reads its
+   success marker out of this pane. */
+.provider-setup-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px var(--shell-gutter) 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 13px;
+}
+
+.provider-setup-banner span {
+  flex: 1;
+  min-width: 0;
+}
+
+.provider-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 34rem;
+}
+
+.provider-current {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  overflow-wrap: anywhere;
+}
+
+.provider-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.provider-field input,
+.provider-field select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.provider-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.provider-actions button.primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+.provider-failure {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.provider-restart {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.provider-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
 /* ---- Backup and restore ------------------------------------------------- */
 
 .backup-restore-view {

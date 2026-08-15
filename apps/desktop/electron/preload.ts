@@ -143,6 +143,23 @@ const loopplaneDesktop = Object.freeze({
     cancelRestore: (restoreToken: string): Promise<void> =>
       invokeBackupRestore(IPC.restoreCancel, { restoreToken }).then(() => undefined),
   }),
+  // Provider settings. `get` answers with a public view only — the stored key
+  // never crosses this boundary in either direction except on an explicit save.
+  providers: Object.freeze({
+    get: (): Promise<unknown> => ipcRenderer.invoke(IPC.providersGet),
+    save: (input: {
+      provider: string;
+      modelId: string;
+      apiKey: string | null;
+    }): Promise<unknown> =>
+      ipcRenderer.invoke(IPC.providersSave, {
+        provider: input.provider,
+        modelId: input.modelId,
+        apiKey: input.apiKey,
+      }),
+    clear: (): Promise<unknown> => ipcRenderer.invoke(IPC.providersClear),
+    restart: (): Promise<unknown> => ipcRenderer.invoke(IPC.providersRestart),
+  }),
   interaction: Object.freeze({
     submit: (
       subscriptionId: string,

@@ -15,7 +15,10 @@ import {
   TRUSTED_HANDLER_OPTIONS,
 } from "../../electron/__tests__/helpers";
 import { IPC } from "../../electron/ipc-channels";
-import { registerDesktopIpcHandlers } from "../../electron/ipc-handlers";
+import {
+  registerDesktopIpcHandlers,
+  type ProviderVaultPort,
+} from "../../electron/ipc-handlers";
 import { SidecarRpcClient } from "../../electron/sidecar-rpc";
 import type { IpcEventLike } from "../../electron/window-security";
 import {
@@ -25,6 +28,7 @@ import {
   isTrustedRendererUrl,
 } from "../../electron/window-security";
 
+const FAKE_KEY = "sk-sample-value-4f2a";
 const desktopRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 describe("bundled CSP and main composition", () => {
@@ -270,3 +274,155 @@ describe("typed IPC handlers", () => {
     });
   });
 });
+
+describe("provider settings IPC", () => {
+  const PROVIDER_CHANNELS = [
+    IPC.providersGet,
+    IPC.providersSave,
+    IPC.providersClear,
+    IPC.providersRestart,
+  ] as const;
+
+  function registerWithVault(vault?: ProviderVaultPort) {
+    const handlers = new Map<
+      string,
+      (event: IpcEventLike, ...args: unknown[]) => unknown | Promise<unknown>
+    >();
+    const ipcMain = {
+      handle(
+        channel: string,
+        listener: (
+          event: IpcEventLike,
+          ...args: unknown[]
+        ) => unknown | Promise<unknown>,
+      ) {
+        handlers.set(channel, listener);
+      },
+      removeHandler(channel: string) {
+        handlers.delete(channel);
+      },
+    };
+    // The provider handlers never reach the sidecar, so an unstarted client is
+    // enough: touching it at all would be the defect this asserts against.
+    const rpc = new SidecarRpcClient({ child: createChildProcessDouble() });
+    registerDesktopIpcHandlers({
+      ...TRUSTED_HANDLER_OPTIONS,
+      ipcMain,
+      rpc,
+      ...(vault ? { providerVault: vault } : {}),
+    });
+    return handlers;
+  }
+
+  const trusted = () =>
+    createIpcSenderFrom(
+      createWebContentsDouble({ url: "file:///app/dist/index.html" }),
+    );
+  const untrusted = () =>
+    createIpcSenderFrom(createWebContentsDouble({ url: "https://evil.example" }));
+
+  it.each(PROVIDER_CHANNELS)("rejects an untrusted sender on %s", async (channel) => {
+    const handlers = registerWithVault(stubVault());
+
+    await expect(
+      handlers.get(channel)!(untrusted(), {
+        provider: "anthropic",
+        modelId: "m",
+        apiKey: FAKE_KEY,
+      }),
+    ).rejects.toThrow(/untrusted/i);
+  });
+
+  it("answers get with a public view that carries no key", async () => {
+    const handlers = registerWithVault(stubVault());
+
+    const view = await handlers.get(IPC.providersGet)!(trusted());
+
+    expect(view).toEqual({
+      provider: "anthropic",
+      modelId: "claude-x",
+      hasKey: true,
+      keyHint: "…4f2a",
+    });
+    expect(JSON.stringify(view)).not.toContain(FAKE_KEY);
+  });
+
+  it("passes a validated save through to the vault", async () => {
+    const vault = stubVault();
+    const handlers = registerWithVault(vault);
+
+    await expect(
+      handlers.get(IPC.providersSave)!(trusted(), {
+        provider: "anthropic",
+        modelId: "claude-x",
+        apiKey: FAKE_KEY,
+      }),
+    ).resolves.toEqual({ ok: true });
+    expect(vault.saved).toEqual([
+      { provider: "anthropic", modelId: "claude-x", apiKey: FAKE_KEY },
+    ]);
+  });
+
+  it.each([
+    ["an unexpected extra key", { provider: "a", modelId: "m", apiKey: null, x: 1 }],
+    ["a missing key field", { provider: "a", modelId: "m" }],
+    ["a blank provider", { provider: "  ", modelId: "m", apiKey: null }],
+  ])("rejects a save with %s", async (_label, payload) => {
+    const handlers = registerWithVault(stubVault());
+
+    await expect(
+      handlers.get(IPC.providersSave)!(trusted(), payload),
+    ).rejects.toThrow();
+  });
+
+  it("relaunches only when asked", async () => {
+    const vault = stubVault();
+    const handlers = registerWithVault(vault);
+
+    await handlers.get(IPC.providersGet)!(trusted());
+    expect(vault.relaunches).toBe(0);
+
+    await handlers.get(IPC.providersRestart)!(trusted());
+    expect(vault.relaunches).toBe(1);
+  });
+
+  it("degrades safely when no vault is wired", async () => {
+    const handlers = registerWithVault();
+
+    await expect(handlers.get(IPC.providersGet)!(trusted())).resolves.toBeNull();
+    await expect(
+      handlers.get(IPC.providersSave)!(trusted(), {
+        provider: "anthropic",
+        modelId: "claude-x",
+        apiKey: FAKE_KEY,
+      }),
+    ).resolves.toEqual({ ok: false, reason: "encryption_unavailable" });
+  });
+});
+
+function stubVault(): ProviderVaultPort & {
+  saved: unknown[];
+  relaunches: number;
+} {
+  const saved: unknown[] = [];
+  return {
+    saved,
+    relaunches: 0,
+    get: () => ({
+      provider: "anthropic",
+      modelId: "claude-x",
+      hasKey: true,
+      keyHint: "…4f2a",
+    }),
+    save(input) {
+      saved.push(input);
+      return { ok: true };
+    },
+    clear() {
+      /* nothing stored in the stub */
+    },
+    relaunch() {
+      this.relaunches += 1;
+    },
+  };
+}

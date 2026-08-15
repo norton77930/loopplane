@@ -28,6 +28,13 @@ RUNTIME_ALLOWED_PREFIXES: tuple[str, ...] = (
     # Host construction only: model boundary objects fed into RuntimeConfig
     # (e.g. ScriptedModel for credential-free demo / packaged smoke).
     "loopplane.model",
+    # Model construction only (ADR 0016 D5): the provider adapters an in-app
+    # provider setting selects. These are the embedder-facing constructors this
+    # audit's `loopplane.model` entry already blesses, reached by name instead of
+    # through the caller. Desktop previously loaded them with `importlib` to stay
+    # off this list, which left a real edge invisible to the scan; naming the
+    # prefix keeps the rule a description of the system (constitution VII/VIII).
+    "loopplane.adapters",
 )
 
 # TYPE_CHECKING-only extras (keep empty for now; host/events cover typing).

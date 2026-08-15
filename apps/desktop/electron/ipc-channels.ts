@@ -39,6 +39,14 @@ export const IPC = {
   restoreValidate: "lp:restore:validate",
   restoreCommit: "lp:restore:commit",
   restoreCancel: "lp:restore:cancel",
+  /**
+   * Provider settings (Unit A). Main owns the credential; only a public view of
+   * it ever answers `providersGet`.
+   */
+  providersGet: "lp:providers:get",
+  providersSave: "lp:providers:save",
+  providersClear: "lp:providers:clear",
+  providersRestart: "lp:providers:restart",
   /** Main -> renderer push (not invoke). */
   statusEvent: "lp:app:statusEvent",
   interactionEvent: "lp:interaction:event",

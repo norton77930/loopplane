@@ -32,7 +32,12 @@ import { errored, initialState, reduce, userPrompt } from "@web/state/chat";
 import type { RawEvent } from "@web/api/types";
 
 import { BackupRestoreView } from "./components/BackupRestoreView";
+import {
+  ProviderSettings,
+  type ProviderSettingsPort,
+} from "./components/ProviderSettings";
 import { SessionSidebar } from "./components/SessionSidebar";
+import type { ProviderView } from "./global";
 import type {
   ProjectView,
   SessionSummaryView,
@@ -86,6 +91,9 @@ export function App({
   const [agentControls, setAgentControls] = useState<PresentationAgentControls | null>(null);
   const [capabilities, setCapabilities] = useState<PresentationCapability[] | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTabId, setSettingsTabId] = useState("capabilities");
+  const [providerView, setProviderView] = useState<ProviderView | null>(null);
+  const [providerLoaded, setProviderLoaded] = useState(false);
   const [showBackupRestore, setShowBackupRestore] = useState(false);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -128,6 +136,28 @@ export function App({
       void transport?.dispose?.();
     };
   }, [transport]);
+
+  // Whether a model provider is set up. Main answers with a public view only;
+  // the stored key never reaches the renderer.
+  const refreshProvider = useCallback(async () => {
+    const providers = window.loopplaneDesktop?.providers;
+    if (!providers) {
+      setProviderLoaded(true);
+      return;
+    }
+    try {
+      const view = await providers.get();
+      if (mounted.current) setProviderView(view);
+    } catch {
+      /* an unreadable setting reads the same as none */
+    } finally {
+      if (mounted.current) setProviderLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshProvider();
+  }, [refreshProvider]);
 
   useEffect(() => {
     const api = window.loopplaneDesktop;
@@ -468,6 +498,22 @@ export function App({
     }
   })();
 
+  // Refresh the local view after a save so the banner clears without a restart.
+  const providerSettingsPort: ProviderSettingsPort = {
+    get: async () => window.loopplaneDesktop?.providers?.get() ?? null,
+    save: async (input) => {
+      const result = await window.loopplaneDesktop!.providers.save(input);
+      await refreshProvider();
+      return result;
+    },
+    clear: async () => {
+      const result = await window.loopplaneDesktop!.providers.clear();
+      await refreshProvider();
+      return result;
+    },
+    restart: async () => window.loopplaneDesktop!.providers.restart(),
+  };
+
   const leftSidebar = (
     <SessionSidebar
       sessions={sessions}
@@ -574,6 +620,27 @@ export function App({
                 </button>
               </div>
             </div>
+          </div>
+        )}
+        {providerLoaded && providerView === null && (
+          // A banner, never a replacement for the conversation: the packaged
+          // smoke reads its success marker out of this pane's accessibility
+          // subtree, so the message list has to keep rendering here.
+          <div className="provider-setup-banner" role="status">
+            <span>
+              No model provider is set up, so replies are placeholders.
+            </span>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                setSettingsTabId("providers");
+                setShowBackupRestore(false);
+                setShowSettings(true);
+              }}
+            >
+              Set up a provider
+            </button>
           </div>
         )}
         <MessageList
@@ -742,14 +809,18 @@ export function App({
             categoriesLabel="Settings categories"
             backLabel="Back to chat"
             tabs={[
+              { id: "providers", label: "Model provider" },
               { id: "capabilities", label: "Capabilities" },
               { id: "agent-controls", label: "Agent controls" },
             ]}
+            initialTabId={settingsTabId}
             capabilities={capabilities}
             onCapabilityAction={invokeCapabilityAction}
             onBack={() => setShowSettings(false)}
             renderTab={(tab) =>
-              tab === "agent-controls" ? (
+              tab === "providers" ? (
+                <ProviderSettings port={providerSettingsPort} />
+              ) : tab === "agent-controls" ? (
                 <AgentControlsSettings
                   projection={null}
                   hostProjection={agentControls}
