@@ -2,23 +2,6 @@
  * Desktop composition: multi-pane shell + single active lease (T031/T045/T053).
  */
 
-/**
- * Starter prompts for the empty state. Desktop has no attach control, so the
- * shared default — which offers to summarize an attachment — would be a chip for
- * something the user cannot do. What Desktop does have is a bound folder, so the
- * prompts differ by whether one is chosen.
- */
-const WORKSPACE_EXAMPLES = [
-  "What does this project do?",
-  "Which files changed most recently?",
-  "List the tools you can use",
-] as const;
-
-const NO_WORKSPACE_EXAMPLES = [
-  "What can you help me with?",
-  "List the tools you can use",
-  "What happens when you edit a file?",
-] as const;
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -53,6 +36,7 @@ import { QuestionDialog } from "@web/components/QuestionDialog";
 import { errored, initialState, reduce, userPrompt } from "@web/state/chat";
 import type { RawEvent } from "@web/api/types";
 
+import { useTranslation } from "./i18n";
 import { BackupRestoreView } from "./components/BackupRestoreView";
 import {
   ProviderSettings,
@@ -66,6 +50,24 @@ import type {
   SidecarTransport,
   WorkspaceView,
 } from "./sidecar";
+
+/**
+ * Starter prompts for the empty state. Desktop has no attach control, so the
+ * shared default — which offers to summarize an attachment — would be a chip for
+ * something the user cannot do. What Desktop does have is a bound folder, so the
+ * prompts differ by whether one is chosen.
+ */
+const WORKSPACE_EXAMPLE_KEYS = [
+  "example.whatProject",
+  "example.recentFiles",
+  "example.listTools",
+] as const;
+
+const NO_WORKSPACE_EXAMPLE_KEYS = [
+  "example.whatHelp",
+  "example.listTools",
+  "example.whenEdit",
+] as const;
 
 export type DesktopShellPhase =
   | "ready"
@@ -123,6 +125,7 @@ export function App({
   const [runtimeDiagnostic, setRuntimeDiagnostic] = useState<string | null>(null);
   /** Renderer-transient one-run draft; only Host acceptance clears it. */
   const [permissionModeDraft, setPermissionModeDraft] = useState<string | null>(null);
+  const { t } = useTranslation();
   const mounted = useRef(true);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const runActive = useRef(false);
@@ -186,7 +189,7 @@ export function App({
     const api = window.loopplaneDesktop;
     if (!api?.app?.subscribeStatus) {
       if (!transport) {
-        setRuntimeDiagnostic("Local runtime unavailable.");
+        setRuntimeDiagnostic(t("runtime.unavailable"));
       }
       return;
     }
@@ -211,7 +214,7 @@ export function App({
       const diagnostic =
         typeof publicDiagnostic === "string" && publicDiagnostic.trim()
           ? publicDiagnostic
-          : "Local runtime unavailable. Restart LoopPlane.";
+          : t("runtime.unavailableRestart");
       setPhase(
         diagnostic.toLocaleLowerCase().includes("incompatible")
           ? "incompatible"
@@ -509,9 +512,9 @@ export function App({
       case "starting":
         return "Starting interaction…";
       case "running":
-        return "Running…";
+        return t("status.running");
       case "cancelling":
-        return "Cancelling…";
+        return t("status.cancelling");
       case "outcome":
         return outcomeLabel ? `Outcome: ${outcomeLabel}` : "Run finished.";
       case "error":
@@ -568,6 +571,14 @@ export function App({
         void transport?.chooseAndRelinkWorkspace(id).then(refreshLists);
       }}
       onSelectWorkspace={setSelectedWorkspaceId}
+      onOpenSettings={() => {
+        setShowBackupRestore(false);
+        setShowSettings(true);
+      }}
+      onOpenBackup={() => {
+        setShowSettings(false);
+        setShowBackupRestore(true);
+      }}
     />
   );
 
@@ -575,34 +586,35 @@ export function App({
     workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null;
   const activeSessionTitle =
     sessions.find((session) => session.session_id === activeSessionId)?.title ??
-    "New session";
+    t("header.newSession");
   const runtimeBroken =
     phase === "unavailable" || phase === "incompatible" || phase === "error";
-  const permissionPosture = permissionPostureLabel(agentControls);
+  const postureKey = permissionPostureLabel(agentControls);
+  const permissionPosture = postureKey ? t(postureKey) : null;
 
   /** The header shows this; `statusText` stays the accessible name (see C1). */
   const shortStatusText = (() => {
     switch (phase) {
       case "unavailable":
       case "incompatible":
-        return "Runtime unavailable";
+        return t("status.unavailable");
       case "starting":
-        return "Starting…";
+        return t("status.starting");
       case "running":
         return "Running…";
       case "cancelling":
         return "Cancelling…";
       case "error":
-        return "Disconnected";
+        return t("status.disconnected");
       case "outcome":
         // A clean finish needs no label. Any other terminal reason is something
         // the user should see, so it stays visible rather than being smoothed
         // into "Finished"; the exact reason also remains in Inspection.
         return !outcomeLabel || outcomeLabel === "natural-completion"
-          ? "Finished"
+          ? t("status.finished")
           : `Stopped: ${outcomeLabel}`;
       default:
-        return "Ready";
+        return t("status.ready");
     }
   })();
 
@@ -636,25 +648,13 @@ export function App({
               {shortStatusText}
             </span>
           </div>
-          <div className="desktop-topbar-actions">
-            <button type="button" onClick={() => setShowSettings(true)}>
-              Settings
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowSettings(false);
-                setShowBackupRestore(true);
-              }}
-            >
-              Backup and restore
-            </button>
-          </div>
+          {/* Settings and Backup moved to the sidebar footer, next to the
+              workspace they belong with; the header is the session's row. */}
         </header>
         <RuntimeUnavailable active={runtimeBroken}>
           {runtimeBroken ? (
             phase === "error" ? (
-              (runtimeDiagnostic ?? "Disconnected — please retry.")
+              (runtimeDiagnostic ?? t("runtime.retry"))
             ) : (
               (runtimeDiagnostic ?? statusText)
             )
@@ -715,7 +715,7 @@ export function App({
           // subtree, so the message list has to keep rendering here.
           <div className="provider-setup-banner" role="status">
             <span>
-              No model provider is set up, so replies are placeholders.
+              {t("provider.bannerText")}
             </span>
             <button
               type="button"
@@ -726,18 +726,18 @@ export function App({
                 setShowSettings(true);
               }}
             >
-              Set up a provider
+              {t("provider.bannerAction")}
             </button>
           </div>
         )}
         <MessageList
           entries={state.entries}
           loading={phase === "running" || phase === "starting"}
-          examples={boundWorkspace ? WORKSPACE_EXAMPLES : NO_WORKSPACE_EXAMPLES}
+          examples={(boundWorkspace ? WORKSPACE_EXAMPLE_KEYS : NO_WORKSPACE_EXAMPLE_KEYS).map((key) => t(key))}
           emptyHint={
             boundWorkspace
-              ? `Ask about ${boundWorkspace.label}, or choose a starting point.`
-              : "Ask a question, or bind a folder for LoopPlane to work in."
+              ? t("empty.hintFolder", { folder: boundWorkspace.label })
+              : t("empty.hintNoFolder")
           }
           onExample={(prompt) => {
             setInput(prompt);
@@ -793,7 +793,7 @@ export function App({
             aria-label="LoopPlane smoke prompt"
             ref={promptRef}
             rows={1}
-            placeholder="Message LoopPlane…"
+            placeholder={t("composer.placeholder")}
             value={input}
             disabled={blocked || !transport}
             onChange={(event) => {
@@ -811,7 +811,7 @@ export function App({
             aria-label="LoopPlane smoke submit"
             disabled={blocked || !transport}
           >
-            Send
+            {t("composer.send")}
           </button>
           <button
             type="button"
@@ -822,7 +822,7 @@ export function App({
             }
             onClick={() => cancelRun()}
           >
-            Cancel
+            {t("composer.cancel")}
           </button>
         </form>
       </main>
@@ -873,6 +873,26 @@ export function App({
             title={focusedPane?.title}
             mode={focusedPane?.mode ?? "read_only"}
             leaseOwner={Boolean(focusedPane?.leaseOwner)}
+            otherPaneHoldsLease={Boolean(
+              paneWorkspace.leaseOwnerPaneId &&
+                paneWorkspace.leaseOwnerPaneId !== focusedPane?.paneId,
+            )}
+            onRequestInteractive={
+              focusedPane
+                ? () => {
+                    setPaneWorkspace((ws) => {
+                      const result = claimLease(ws, focusedPane.paneId);
+                      if (!result.ok) {
+                        setOutcomeLabel(
+                          `Busy: pane ${result.ownerPaneId ?? "?"} holds the lease`,
+                        );
+                        return ws;
+                      }
+                      return result.state;
+                    });
+                  }
+                : undefined
+            }
             inspection={inspection}
             agentControls={agentControls}
             capabilities={capabilities}
@@ -918,7 +938,7 @@ export function App({
             categoriesLabel="Settings categories"
             backLabel="Back to chat"
             tabs={[
-              { id: "providers", label: "Model provider" },
+              { id: "providers", label: t("provider.tab") },
               { id: "capabilities", label: "Capabilities" },
               { id: "agent-controls", label: "Agent controls" },
             ]}

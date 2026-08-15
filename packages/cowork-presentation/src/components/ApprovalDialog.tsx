@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 
 import { dismissOnEscape, focusElement, restoreFocus } from "../focus";
+import { useTranslation } from "../i18n/i18n";
+import { toolConsequence } from "../vocabulary";
 
 export type ApprovalDecision =
   | { allow: false }
@@ -21,6 +23,8 @@ export function ApprovalDialog({
   fallbackFocus,
 }: ApprovalDialogProps) {
   const allowRef = useRef<HTMLButtonElement>(null);
+  const { t } = useTranslation();
+  const consequenceKey = toolConsequence(toolName);
 
   useEffect(() => {
     focusElement(allowRef.current);
@@ -44,16 +48,24 @@ export function ApprovalDialog({
           dismissOnEscape(event, () => onDecide({ allow: false }), returnFocus, fallbackFocus);
         }}
       >
-        <p>Approve tool {toolName}?</p>
+        {/* The tool's own name stays visible — someone who knows the runtime
+            should not have to work out which tool this is — but it is no longer
+            the whole question. */}
+        <p className="cowork-approval-question">
+          {t("approval.question")} <code>{toolName}</code>?
+        </p>
+        {consequenceKey && (
+          <p className="cowork-approval-consequence">{t(consequenceKey)}</p>
+        )}
         <div className="cowork-dialog-actions">
           <button ref={allowRef} type="button" onClick={() => decide({ allow: true, scope: "once" })}>
-            Allow
+            {t("approval.allow")}
           </button>
           <button type="button" onClick={() => decide({ allow: false })}>
-            Deny
+            {t("approval.deny")}
           </button>
           <button type="button" onClick={() => decide({ allow: true, scope: "session" })}>
-            Always allow this session
+            {t("approval.alwaysAllow")}
           </button>
         </div>
       </div>

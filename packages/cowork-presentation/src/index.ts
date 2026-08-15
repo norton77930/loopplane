@@ -35,7 +35,23 @@ export {
   resetTextareaHeight,
   shouldSubmitOnKey,
 } from "./composer";
-export { ASKS_FIRST_POSTURE, permissionPostureLabel } from "./vocabulary";
+export {
+  ASKS_FIRST_POSTURE,
+  paneReadOnlyReason,
+  paneStateLabel,
+  permissionPostureLabel,
+  toolConsequence,
+} from "./vocabulary";
+export {
+  applyTheme,
+  initTheme,
+  persistTheme,
+  resolveTheme,
+  storedTheme,
+  systemTheme,
+  toggleTheme,
+} from "./theme";
+export type { StoredTheme, Theme } from "./theme";
 export { CoworkShell } from "./components/CoworkShell";
 export type { CoworkShellProps } from "./components/CoworkShell";
 export { RuntimeUnavailable } from "./components/RuntimeUnavailable";

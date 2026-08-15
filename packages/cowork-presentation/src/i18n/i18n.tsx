@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { VOCABULARY_EN } from "../vocabulary";
+
 export type TranslationMessages = Record<string, Record<string, string>>;
 
 export interface Translation {
@@ -10,6 +12,8 @@ export interface Translation {
 
 const fallbackMessages: TranslationMessages = {
   en: {
+    // Consequence wording shared by every host (see ../vocabulary).
+    ...VOCABULARY_EN,
     "navigation.label": "Session navigation",
     "navigation.close": "Close session navigation",
     "inspection.panel": "Inspection panel",
@@ -80,7 +84,16 @@ const fallbackMessages: TranslationMessages = {
 };
 
 function lookup(messages: TranslationMessages, key: string, locale: string): string {
-  return messages[locale]?.[key] ?? messages.en?.[key] ?? key;
+  // The shared vocabulary is the last layer, not part of the default map: a host
+  // that passes its own `messages` replaces the defaults entirely, and without
+  // this a component like ApprovalDialog would render "approval.alwaysAllow" to
+  // any host that had not copied those keys into its own dictionary.
+  return (
+    messages[locale]?.[key] ??
+    messages.en?.[key] ??
+    VOCABULARY_EN[key] ??
+    key
+  );
 }
 
 const I18nContext = createContext<Translation>({

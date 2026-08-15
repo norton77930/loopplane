@@ -193,28 +193,37 @@
   border-right: 1px solid var(--border);
 }
 
-.session-sidebar section {
+.sidebar-top {
   display: flex;
-  min-width: 0;
+  flex: none;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+.sidebar-new-session {
+  width: 100%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar-search {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 9px;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
 }
 
 .sidebar-section-header {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.sidebar-section-header h2 {
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
 }
 
 .sidebar-section-header button {
@@ -230,6 +239,159 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* The session list is the one thing here that grows; everything else keeps its
+   size so the list gets the column. */
+.session-sidebar > ul[data-testid="session-list"] {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.session-group-heading {
+  padding: 10px 9px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Three buttons on every row competed with the titles. They collapse to zero
+   width rather than only fading: at `opacity: 0` they still occupy the row, so
+   every title stayed truncated to a few characters for a control nobody was
+   looking at. They remain in the accessibility tree and in keyboard order, and
+   `:focus-within` expands them for anyone arriving without a mouse. */
+.session-row-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    max-width 120ms ease,
+    opacity 120ms ease;
+}
+
+.session-row:hover .session-row-actions,
+.session-row:focus-within .session-row-actions {
+  max-width: 160px;
+  opacity: 1;
+}
+
+.session-row-actions button {
+  flex: none;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+/* Without hover there is no way to reveal them, so they stay. */
+@media (hover: none) {
+  .session-row-actions {
+    max-width: 160px;
+    opacity: 1;
+  }
+}
+
+.sidebar-projects,
+.sidebar-workspaces {
+  flex: none;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.sidebar-projects > summary,
+.sidebar-workspaces > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sidebar-projects > summary:hover,
+.sidebar-workspaces > summary:hover {
+  background: var(--bg-elev);
+}
+
+.sidebar-count {
+  margin-left: auto;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.sidebar-footer {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-workspaces > summary {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.workspace-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-workspaces > summary .availability {
+  margin-left: auto;
+  flex: none;
+}
+
+.sidebar-footer-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sidebar-footer-actions button {
+  flex: 1 1 auto;
+  font-size: 12px;
+  padding: 5px 9px;
+}
+
+.sidebar-footer-prefs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-theme-toggle {
+  flex: none;
+  width: 32px;
+  padding: 5px 0;
+  text-align: center;
+}
+
+.sidebar-language {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
 }
 
 .session-sidebar li {

@@ -43,9 +43,14 @@ describe("Desktop multi-pane shell (T049/T053)", () => {
     );
 
     expect(screen.getByRole("status").textContent).toMatch(/read-only/i);
-    expect(screen.getByTestId("inspection-sidebar").textContent).toContain(
-      "not owner",
-    );
+    // The sidebar reports the same fact in the same words as the banner rather
+    // than "Mode: read_only" / "Lease: not owner"; the raw values stay on hover.
+    const sidebar = screen.getByTestId("inspection-sidebar");
+    expect(sidebar.textContent).toContain("Read-only");
+    expect(sidebar.textContent).not.toContain("not owner");
+    expect(
+      screen.getByTitle("mode=read_only lease_owner=false"),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByText("Make interactive"));
     expect(onRequestInteractive).toHaveBeenCalledWith("p2");
   });

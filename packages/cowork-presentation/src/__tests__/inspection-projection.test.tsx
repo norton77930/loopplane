@@ -43,7 +43,10 @@ describe("InspectionSidebar host projections", () => {
     expect(screen.getAllByText("Unpriced")).toHaveLength(2);
     expect(screen.getAllByText("Unavailable")).toHaveLength(2);
     expect(screen.getByText("Read only")).toBeInTheDocument();
-    expect(screen.getByText("plan")).toBeInTheDocument();
+    // The accepted run's mode is `plan`; the sidebar states what that means for
+    // the next run rather than printing the mode id, which is kept on hover.
+    expect(screen.getByText("Planning only — no changes")).toBeInTheDocument();
+    expect(screen.getByTitle("plan")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/secret|C:\\Users|private-rule/i);
   });
 
