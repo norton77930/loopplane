@@ -5,11 +5,14 @@
  * (Web's wrappers supply their own maps), and both apps persist the choice under
  * the same key, so one switch changes everything. This file only covers the
  * chrome Desktop owns: the sidebar, the header, the composer, the first-run
- * guidance and the provider settings.
+ * guidance, the provider settings, and backup and restore.
  *
- * Not covered yet: backup and restore. Its disclosure text is safety-critical
- * wording that should be translated deliberately rather than in bulk, so it
- * stays English until it gets that pass.
+ * The backup disclosure and the public error catalogue are translated literally
+ * rather than smoothed. That screen is the one place a person is told what
+ * leaves their machine and what cannot be recovered, and the error keys are a
+ * fixed set the sidecar is allowed to surface — `BackupRestoreView` checks
+ * membership before looking one up, so an unrecognized key can never render as
+ * itself.
  */
 
 import {
@@ -85,6 +88,64 @@ const en: Record<string, string> = {
   "runtime.unavailableRestart": "Local runtime unavailable. Restart LoopPlane.",
   "runtime.retry": "Disconnected — please retry.",
 
+  // Backup and restore. The disclosure is the one place in this application
+  // where a person is told what leaves their machine and what cannot be
+  // recovered, so the English is kept exactly as it was and the translation is
+  // literal rather than smoothed.
+  "backup.back": "Back to chat",
+  "backup.title": "Backup and restore",
+  "backup.createHeading": "Create a portable backup",
+  "backup.disclosureContents":
+    "The archive is not application-encrypted. Full session history, including user, model, and tool conversation content, and eligible artifacts are preserved losslessly. They may contain credentials, secrets, personal data, absolute paths, or copied workspace excerpts.",
+  "backup.disclosureExclusions":
+    "Unsent drafts are excluded and cannot be recovered. LoopPlane-owned provider credentials or tokens, private capability configuration, private workspace path mappings, logs, raw internal errors, PIDs, caches, transient run state, and arbitrary workspace contents are also excluded.",
+  "backup.disclosureDestination":
+    "Choose and protect the destination through the operating system. Integrity hashes detect corruption but do not encrypt or authenticate the archive, or protect it from someone who can rewrite the complete archive.",
+  "backup.acknowledge": "I understand this backup is unencrypted",
+  "backup.chooseDestination": "Choose backup destination",
+  "backup.creating": "Creating backup…",
+  "backup.cancelled": "Backup cancelled.",
+  "backup.complete": "Backup complete.",
+  "backup.unavailable": "Backup and restore unavailable.",
+
+  "restore.heading": "Restore a portable backup",
+  "restore.choose": "Choose backup to restore",
+  "restore.preview": "Restore preview",
+  "restore.reservationActive": "Restore reservation active.",
+  "restore.projects": "Projects",
+  "restore.sessions": "Sessions",
+  "restore.artifacts": "Artifacts",
+  "restore.draftsExcluded": "Unsent drafts excluded",
+  "restore.relinkRequired": "Workspace relink required",
+  "restore.replaceProfile": "Replace this profile",
+  "restore.commit": "Commit restore",
+  "restore.cancel": "Cancel restore",
+  "restore.validating": "Validating backup…",
+  "restore.selectionCancelled": "Restore selection cancelled.",
+  "restore.restoring": "Restoring profile…",
+  "restore.complete": "Restore complete. Workspace relink required.",
+  "restore.cancelling": "Cancelling restore…",
+  "restore.reservationCancelled": "Restore reservation cancelled.",
+
+  "desktop.error.invalid_params": "The request was invalid.",
+  "backup.error.unsafe_archive": "This backup cannot be used safely.",
+  "backup.error.incompatible": "This backup is incompatible. Contact support.",
+  "backup.error.integrity_failed": "Backup integrity validation failed.",
+  "backup.error.limit_exceeded": "This backup exceeds restore safety limits.",
+  "backup.error.profile_busy": "The profile is busy. Wait and try again.",
+  "backup.error.insufficient_space":
+    "There is insufficient space. Free space and retry.",
+  "restore.error.durability_unsupported":
+    "Restore is not supported on this storage. Contact support.",
+  "restore.error.publication_failed_retryable":
+    "Restore could not be published. Retry.",
+  "restore.error.publication_failed_restart":
+    "Restore state is uncertain. Restart the runtime.",
+  "restore.error.rolled_back": "Restore was rolled back. Retry.",
+  "backup.error.cancelled": "The operation was cancelled.",
+  "desktop.error.internal_failure":
+    "An internal failure occurred. Restart the runtime.",
+
   "example.whatProject": "What does this project do?",
   "example.recentFiles": "Which files changed most recently?",
   "example.listTools": "List the tools you can use",
@@ -147,6 +208,58 @@ const zhTW: Record<string, string> = {
   "runtime.unavailable": "本機執行環境無法使用。",
   "runtime.unavailableRestart": "本機執行環境無法使用,請重新啟動 LoopPlane。",
   "runtime.retry": "已中斷連線 —— 請重試。",
+
+  // 備份與還原。這段揭露文字是整個應用程式裡唯一告訴使用者「什麼會離開這台
+  // 電腦、什麼救不回來」的地方,所以逐句直譯,不做語氣上的軟化。
+  "backup.back": "回到對話",
+  "backup.title": "備份與還原",
+  "backup.createHeading": "建立可攜備份",
+  "backup.disclosureContents":
+    "這個封存檔沒有經過應用程式加密。完整的工作階段歷史 —— 包含你、模型與工具的對話內容,以及符合條件的產出物 —— 都會被無損保留。這些內容可能包含憑證、機密、個人資料、絕對路徑,或是從工作區複製出來的片段。",
+  "backup.disclosureExclusions":
+    "尚未送出的草稿不會被包含,也無法還原回來。LoopPlane 自己保管的供應商憑證或權杖、私有的功能設定、私有的工作區路徑對應、日誌、原始內部錯誤、行程編號、快取、暫時的執行狀態,以及任意的工作區內容,同樣不會被包含。",
+  "backup.disclosureDestination":
+    "請透過作業系統選擇並保護存放位置。完整性雜湊只能偵測檔案是否損毀,不會加密或驗證這個封存檔,也擋不住有能力整份重寫它的人。",
+  "backup.acknowledge": "我了解這份備份沒有加密",
+  "backup.chooseDestination": "選擇備份存放位置",
+  "backup.creating": "正在建立備份…",
+  "backup.cancelled": "已取消建立備份。",
+  "backup.complete": "備份完成。",
+  "backup.unavailable": "目前無法使用備份與還原。",
+
+  "restore.heading": "從可攜備份還原",
+  "restore.choose": "選擇要還原的備份",
+  "restore.preview": "還原預覽",
+  "restore.reservationActive": "還原保留中。",
+  "restore.projects": "專案",
+  "restore.sessions": "工作階段",
+  "restore.artifacts": "產出物",
+  "restore.draftsExcluded": "不含尚未送出的草稿",
+  "restore.relinkRequired": "還原後需要重新連結工作區",
+  "restore.replaceProfile": "取代目前的設定檔",
+  "restore.commit": "確定還原",
+  "restore.cancel": "取消還原",
+  "restore.validating": "正在驗證備份…",
+  "restore.selectionCancelled": "已取消選擇要還原的備份。",
+  "restore.restoring": "正在還原設定檔…",
+  "restore.complete": "還原完成。需要重新連結工作區。",
+  "restore.cancelling": "正在取消還原…",
+  "restore.reservationCancelled": "已取消還原保留。",
+
+  "desktop.error.invalid_params": "這個請求無效。",
+  "backup.error.unsafe_archive": "這份備份無法安全使用。",
+  "backup.error.incompatible": "這份備份不相容。請聯絡支援。",
+  "backup.error.integrity_failed": "備份的完整性驗證失敗。",
+  "backup.error.limit_exceeded": "這份備份超出還原的安全上限。",
+  "backup.error.profile_busy": "設定檔正在使用中。請稍候再試一次。",
+  "backup.error.insufficient_space": "空間不足。請先釋出空間再試一次。",
+  "restore.error.durability_unsupported": "這個儲存位置不支援還原。請聯絡支援。",
+  "restore.error.publication_failed_retryable": "還原沒有完成。請再試一次。",
+  "restore.error.publication_failed_restart":
+    "還原後的狀態無法確定。請重新啟動執行環境。",
+  "restore.error.rolled_back": "還原已復原到原本的狀態。請再試一次。",
+  "backup.error.cancelled": "操作已取消。",
+  "desktop.error.internal_failure": "發生內部錯誤。請重新啟動執行環境。",
 
   "example.whatProject": "這個專案是做什麼的?",
   "example.recentFiles": "最近改動過哪些檔案?",

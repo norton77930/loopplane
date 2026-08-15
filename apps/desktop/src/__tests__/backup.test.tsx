@@ -190,4 +190,34 @@ describe("Desktop backup and restore view", () => {
     expect(alert).not.toHaveTextContent("raw private failure");
     expect(alert).not.toHaveTextContent("X:\\private\\restore.zip");
   });
+
+  it("falls back rather than printing an unrecognized message key", async () => {
+    // These strings are now translation keys. A key the sidecar introduces later
+    // must not reach the lookup, which would render the identifier itself —
+    // "backup.error.some_new_case" on screen instead of a sentence.
+    const unknown = Object.assign(new Error("raw private failure"), {
+      desktop: {
+        category: "internal",
+        messageKey: "backup.error.some_future_case",
+        retryable: false,
+      },
+    });
+    const backup = installDesktopApi({
+      chooseAndValidateRestore: vi.fn().mockRejectedValue(unknown),
+    });
+    render(<App transport={stubTransport()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Backup and restore" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose backup to restore" }),
+    );
+    await waitFor(() =>
+      expect(backup.chooseAndValidateRestore).toHaveBeenCalledOnce(),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/internal failure/i);
+    expect(alert).not.toHaveTextContent("some_future_case");
+    expect(alert).not.toHaveTextContent("backup.error");
+  });
 });
