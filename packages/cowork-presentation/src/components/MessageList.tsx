@@ -7,11 +7,14 @@ import { useTranslation } from "../i18n/i18n";
 import type { ConversationEntry } from "../state/chat";
 
 const BOTTOM_THRESHOLD = 40;
+/** Web's starter prompts; a host with different affordances passes its own. */
 const EXAMPLES = [
   "Summarize the attached file",
   "Explain what this project does",
   "List the available tools",
 ];
+const EMPTY_HINT =
+  "Ask about your workspace, attach a file, or choose a starting point.";
 
 export interface MessageListProps {
   entries: ConversationEntry[];
@@ -21,6 +24,14 @@ export interface MessageListProps {
   onFork?: (sequence: number) => void;
   onAttachReference?: (reference: string) => void;
   loading?: boolean;
+  /**
+   * Starter prompts for the empty state. Defaults to Web's set, which offers to
+   * summarize an attachment — a host without an attach control passes its own
+   * rather than showing a chip for something the user cannot do.
+   */
+  examples?: readonly string[];
+  /** The line under the empty-state title. Defaults to Web's copy. */
+  emptyHint?: string;
 }
 
 export function MessageList({
@@ -31,6 +42,8 @@ export function MessageList({
   onFork,
   onAttachReference,
   loading,
+  examples = EXAMPLES,
+  emptyHint = EMPTY_HINT,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
@@ -62,7 +75,7 @@ export function MessageList({
       onScroll={onScroll}
     >
       {loading && entries.length === 0 ? <Skeleton /> : entries.length === 0 ? (
-        <EmptyState onExample={onExample} />
+        <EmptyState onExample={onExample} examples={examples} hint={emptyHint} />
       ) : (
         entries.map((entry, index) => (
           <Entry
@@ -92,19 +105,36 @@ export function MessageList({
   );
 }
 
-function EmptyState({ onExample }: { onExample?: (prompt: string) => void }) {
+function EmptyState({
+  onExample,
+  examples,
+  hint,
+}: {
+  onExample?: (prompt: string) => void;
+  examples: readonly string[];
+  hint: string;
+}) {
   const { t } = useTranslation();
   return (
     <div className="empty-state">
       <h2 className="empty-title">{t("empty.title")}</h2>
-      <p className="empty-description">Ask about your workspace, attach a file, or choose a starting point.</p>
-      <div className="empty-examples">
-        {EXAMPLES.map((example) => (
-          <button key={example} type="button" className="example-chip" onClick={() => onExample?.(example)}>
-            {example}
-          </button>
-        ))}
-      </div>
+      <p className="empty-description">{hint}</p>
+      {/* A chip with no handler is a button that does nothing, so a host that
+          does not wire `onExample` gets no chips rather than dead ones. */}
+      {onExample && (
+        <div className="empty-examples">
+          {examples.map((example) => (
+            <button
+              key={example}
+              type="button"
+              className="example-chip"
+              onClick={() => onExample(example)}
+            >
+              {example}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

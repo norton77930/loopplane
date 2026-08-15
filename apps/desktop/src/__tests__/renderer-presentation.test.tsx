@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { App } from "../App";
 import type { SidecarTransport } from "../sidecar";
@@ -105,5 +105,39 @@ describe("packaged smoke locators", () => {
           `smoke to drive it; found ${matches.length}`,
       ).toBe(1);
     }
+  });
+
+  it("keeps the prompt programmatically settable after the multi-line change", () => {
+    // The smoke fills the prompt through UI Automation's ValuePattern
+    // (`$prompt.SetValue(...)`, scripts/smoke-desktop-artifact.ps1). jsdom cannot
+    // exercise UIA, so this pins the properties that pattern rests on: a real
+    // form control that reports a value and accepts one set from outside a user
+    // gesture. Chromium exposes ValuePattern on `textarea` as it did on `input`,
+    // but only a packaged smoke run proves that end to end.
+    render(<App transport={stubTransport()} />);
+
+    const prompt = screen.getByRole("textbox", { name: "LoopPlane smoke prompt" });
+
+    expect(prompt.tagName).toBe("TEXTAREA");
+    expect(prompt).not.toBeDisabled();
+    fireEvent.change(prompt, { target: { value: "loopplane packaged smoke" } });
+    expect((prompt as HTMLTextAreaElement).value).toBe("loopplane packaged smoke");
+  });
+
+  it("sends on Enter but not while an input method is composing", () => {
+    // Enter accepts a candidate in Chinese, Japanese and Korean input; sending
+    // there would fire off a half-finished word.
+    render(<App transport={stubTransport()} />);
+    const prompt = screen.getByRole("textbox", { name: "LoopPlane smoke prompt" });
+    fireEvent.change(prompt, { target: { value: "你好" } });
+
+    fireEvent.keyDown(prompt, { key: "Enter", isComposing: true });
+    expect((prompt as HTMLTextAreaElement).value).toBe("你好");
+
+    fireEvent.keyDown(prompt, { key: "Enter", shiftKey: true });
+    expect((prompt as HTMLTextAreaElement).value).toBe("你好");
+
+    fireEvent.keyDown(prompt, { key: "Enter" });
+    expect((prompt as HTMLTextAreaElement).value).toBe("");
   });
 });

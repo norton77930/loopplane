@@ -97,7 +97,7 @@ describe("App (desktop single-session composition, T031)", () => {
     await waitFor(() => expect(screen.getByText("hi there")).toBeInTheDocument());
     expect(screen.getByText("hello")).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByTestId("runtime-status").textContent).toMatch(/Outcome|finished/i),
+      expect(screen.getByTestId("runtime-status").textContent).toMatch(/finished/i),
     );
   });
 
@@ -214,8 +214,15 @@ describe("App (desktop single-session composition, T031)", () => {
         statusHandler?.({ method: "runtime.state", params: { state: "ready" } });
       });
       await waitFor(() =>
-        expect(screen.getByTestId("runtime-status")).toHaveTextContent(/usable/i),
+        expect(screen.getByTestId("runtime-status")).toHaveTextContent(/ready/i),
       );
+      // The visible text is the short human form, but `Wait-RuntimeUsable` in
+      // scripts/smoke-desktop-artifact.ps1 matches /usable/ against this group's
+      // descendant accessible names. Losing that word fails the packaged smoke
+      // with `runtime_not_usable`, so it is pinned separately from the copy.
+      expect(
+        screen.getByRole("status", { name: /usable/i }),
+      ).toBeInTheDocument();
     } finally {
       window.loopplaneDesktop = previousApi;
     }

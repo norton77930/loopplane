@@ -29,6 +29,13 @@ export {
   releaseLease,
   setPaneDraft,
 } from "./panes/state";
+export {
+  COMPOSER_MAX_HEIGHT,
+  growTextarea,
+  resetTextareaHeight,
+  shouldSubmitOnKey,
+} from "./composer";
+export { ASKS_FIRST_POSTURE, permissionPostureLabel } from "./vocabulary";
 export { CoworkShell } from "./components/CoworkShell";
 export type { CoworkShellProps } from "./components/CoworkShell";
 export { RuntimeUnavailable } from "./components/RuntimeUnavailable";

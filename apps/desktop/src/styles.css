@@ -36,10 +36,16 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* The session's name, which is the one thing in this row that changes. It gets
+   the weight; the status and the actions sit below it in the hierarchy. */
 .desktop-topbar h1 {
   margin: 0;
+  min-width: 0;
+  flex: 0 1 auto;
   font-size: 15px;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -94,6 +100,32 @@
   white-space: nowrap;
 }
 
+/* ---- Session context strip ---------------------------------------------- */
+
+/* The runtime-diagnostic group carries this when nothing is wrong (see
+   RuntimeUnavailable): which folder the agent is pointed at, which model
+   answers, and how much it may do without asking. */
+.session-context {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.session-context-item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-item + .session-context-item::before {
+  content: "·";
+  margin-right: 10px;
+  color: var(--border-strong);
+}
+
 .app > .messages,
 .app > .empty-state {
   flex: 1;
@@ -110,25 +142,34 @@
   );
   margin: 0 auto 14px;
   padding: 8px;
-  align-items: center;
+  /* flex-end, not center: the box grows downward with the text, so the buttons
+     stay pinned to the last line rather than drifting to the middle. */
+  align-items: flex-end;
   border: 1px solid var(--border-strong);
   border-radius: 18px;
   background: var(--bg-elev);
   box-shadow: var(--shadow);
 }
 
-.app > .composer input {
+.app > .composer textarea {
   flex: 1;
   min-width: 0;
   border: 0;
   border-radius: 12px;
   padding: 8px 10px;
   font: inherit;
+  line-height: 1.5;
   background: transparent;
   color: var(--text);
+  /* One row until the content asks for more; `growTextarea` sets an explicit
+     height from there, and `resize: none` keeps the drag handle from fighting
+     it. Past the cap the textarea scrolls inside the surface. */
+  resize: none;
+  overflow-y: auto;
+  max-height: 200px;
 }
 
-.app > .composer input:focus-visible {
+.app > .composer textarea:focus-visible {
   outline: 0;
   box-shadow: none;
 }

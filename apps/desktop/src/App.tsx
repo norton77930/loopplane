@@ -2,6 +2,24 @@
  * Desktop composition: multi-pane shell + single active lease (T031/T045/T053).
  */
 
+/**
+ * Starter prompts for the empty state. Desktop has no attach control, so the
+ * shared default — which offers to summarize an attachment — would be a chip for
+ * something the user cannot do. What Desktop does have is a bound folder, so the
+ * prompts differ by whether one is chosen.
+ */
+const WORKSPACE_EXAMPLES = [
+  "What does this project do?",
+  "Which files changed most recently?",
+  "List the tools you can use",
+] as const;
+
+const NO_WORKSPACE_EXAMPLES = [
+  "What can you help me with?",
+  "List the tools you can use",
+  "What happens when you edit a file?",
+] as const;
+
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -13,11 +31,15 @@ import {
   createEmptyWorkspace,
   focusPane,
   getFocusedPane,
+  growTextarea,
   InspectionSidebar,
+  resetTextareaHeight,
   RuntimeUnavailable,
   openPane,
+  permissionPostureLabel,
   releaseLease,
   setPaneDraft,
+  shouldSubmitOnKey,
   type AuditEntry,
   type PaneWorkspaceState,
   type PresentationAgentControls,
@@ -102,6 +124,7 @@ export function App({
   /** Renderer-transient one-run draft; only Host acceptance clears it. */
   const [permissionModeDraft, setPermissionModeDraft] = useState<string | null>(null);
   const mounted = useRef(true);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   const runActive = useRef(false);
   const pendingApproval = state.pendingApproval;
   const pendingQuestion = state.pendingQuestion;
@@ -548,10 +571,56 @@ export function App({
     />
   );
 
+  const boundWorkspace =
+    workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null;
+  const activeSessionTitle =
+    sessions.find((session) => session.session_id === activeSessionId)?.title ??
+    "New session";
+  const runtimeBroken =
+    phase === "unavailable" || phase === "incompatible" || phase === "error";
+  const permissionPosture = permissionPostureLabel(agentControls);
+
+  /** The header shows this; `statusText` stays the accessible name (see C1). */
+  const shortStatusText = (() => {
+    switch (phase) {
+      case "unavailable":
+      case "incompatible":
+        return "Runtime unavailable";
+      case "starting":
+        return "Starting…";
+      case "running":
+        return "Running…";
+      case "cancelling":
+        return "Cancelling…";
+      case "error":
+        return "Disconnected";
+      case "outcome":
+        // A clean finish needs no label. Any other terminal reason is something
+        // the user should see, so it stays visible rather than being smoothed
+        // into "Finished"; the exact reason also remains in Inspection.
+        return !outcomeLabel || outcomeLabel === "natural-completion"
+          ? "Finished"
+          : `Stopped: ${outcomeLabel}`;
+      default:
+        return "Ready";
+    }
+  })();
+
+  function submitPrompt(): void {
+    if (blocked || !transport) return;
+    void send(input);
+    setInput("");
+    resetTextareaHeight(promptRef.current);
+    transport?.clearDraft?.();
+  }
+
   const mainBody = (
       <main className="app">
         <header className="desktop-topbar">
-          <h1>LoopPlane Desktop</h1>
+          {/* The session, not the application. The app's own name belongs to the
+              window title; repeating it here spends the most prominent line in
+              the pane on something that never changes. */}
+          <h1>{activeSessionTitle}</h1>
           <div
             className="runtime-status"
             role="group"
@@ -559,7 +628,13 @@ export function App({
             aria-live="polite"
             data-testid="runtime-status"
           >
-            <span role="status">{statusText}</span>
+            {/* `aria-label` carries the exact phase sentence, which is also what
+                the packaged smoke reads: `Wait-RuntimeUsable` matches /usable/
+                against this group's descendant accessible names. The visible
+                text is the short form a person actually wants. */}
+            <span role="status" aria-label={statusText}>
+              {shortStatusText}
+            </span>
           </div>
           <div className="desktop-topbar-actions">
             <button type="button" onClick={() => setShowSettings(true)}>
@@ -576,18 +651,30 @@ export function App({
             </button>
           </div>
         </header>
-        <RuntimeUnavailable
-          active={
-            phase === "unavailable" ||
-            phase === "incompatible" ||
-            phase === "error"
-          }
-        >
-          {phase === "error"
-            ? runtimeDiagnostic ?? "Disconnected — please retry."
-            : phase === "unavailable" || phase === "incompatible"
-              ? runtimeDiagnostic ?? statusText
-              : "No runtime diagnostic."}
+        <RuntimeUnavailable active={runtimeBroken}>
+          {runtimeBroken ? (
+            phase === "error" ? (
+              (runtimeDiagnostic ?? "Disconnected — please retry.")
+            ) : (
+              (runtimeDiagnostic ?? statusText)
+            )
+          ) : (
+            // Healthy: the strip carries what the agent is about to act on —
+            // which folder, which model, and how much it may do without asking.
+            <span className="session-context">
+              <span className="session-context-item">
+                {boundWorkspace ? `⌂ ${boundWorkspace.label}` : "No folder bound"}
+              </span>
+              {providerView && (
+                <span className="session-context-item">
+                  {providerView.modelId}
+                </span>
+              )}
+              {permissionPosture && (
+                <span className="session-context-item">{permissionPosture}</span>
+              )}
+            </span>
+          )}
         </RuntimeUnavailable>
         {confirmDeleteId && (
           <div className="modal-backdrop">
@@ -646,6 +733,17 @@ export function App({
         <MessageList
           entries={state.entries}
           loading={phase === "running" || phase === "starting"}
+          examples={boundWorkspace ? WORKSPACE_EXAMPLES : NO_WORKSPACE_EXAMPLES}
+          emptyHint={
+            boundWorkspace
+              ? `Ask about ${boundWorkspace.label}, or choose a starting point.`
+              : "Ask a question, or bind a folder for LoopPlane to work in."
+          }
+          onExample={(prompt) => {
+            setInput(prompt);
+            promptRef.current?.focus();
+            growTextarea(promptRef.current);
+          }}
         />
         {pendingApproval && (
           <ApprovalDialog
@@ -685,17 +783,28 @@ export function App({
           className="composer"
           onSubmit={(event) => {
             event.preventDefault();
-            void send(input);
-            setInput("");
-            transport?.clearDraft?.();
+            submitPrompt();
           }}
         >
-          <input
+          <textarea
+            // `aria-label` is a fixed packaged-smoke locator, and the smoke fills
+            // it through UI Automation's ValuePattern, which a textarea exposes
+            // the same way the former input did.
             aria-label="LoopPlane smoke prompt"
+            ref={promptRef}
+            rows={1}
             placeholder="Message LoopPlane…"
             value={input}
             disabled={blocked || !transport}
-            onChange={(event) => setInput(event.target.value)}
+            onChange={(event) => {
+              setInput(event.target.value);
+              growTextarea(promptRef.current);
+            }}
+            onKeyDown={(event) => {
+              if (!shouldSubmitOnKey(event)) return;
+              event.preventDefault();
+              submitPrompt();
+            }}
           />
           <button
             type="submit"
