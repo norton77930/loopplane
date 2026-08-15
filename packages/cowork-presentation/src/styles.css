@@ -603,6 +603,16 @@ body {
     border: 2px solid Highlight;
     forced-color-adjust: none;
   }
+
+  /* Forced colours flatten the accent fill, so the lease indicator keeps its
+     meaning through shape: solid ring versus dashed. */
+  .pane-tab-indicator {
+    border-color: CanvasText;
+  }
+
+  .pane-tab [data-lease-owner="true"] .pane-tab-indicator {
+    background: CanvasText;
+  }
 }
 
 /* ---- Cowork pane workspace layout (078). ---------------------------------
@@ -630,12 +640,45 @@ body {
 }
 
 .pane-tab [role="tab"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   border-radius: 999px;
   padding: 4px 12px;
   font-size: 13px;
   background: transparent;
   border-color: transparent;
   color: var(--text-muted);
+}
+
+/* The single interactive lease is what this whole shell exists for, and it used
+   to be a "● " glued to the front of the title. It gets a real indicator: solid
+   for the pane that can act, a hollow ring for one that can only watch. The
+   words live in the tab's `aria-label`, so nothing is conveyed by colour alone
+   to a screen reader — and `forced-colors` keeps the two distinguishable by
+   shape when the palette is replaced. */
+.pane-tab-indicator {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+}
+
+.pane-tab [data-lease-owner="true"] .pane-tab-indicator {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.pane-tab [data-mode="read_only"] .pane-tab-indicator {
+  border-style: dashed;
+}
+
+.pane-tab-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pane-tab [role="tab"]:hover { background: var(--accent-soft); }
 .pane-tab [aria-selected="true"] {

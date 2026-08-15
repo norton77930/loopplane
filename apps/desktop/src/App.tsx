@@ -618,6 +618,16 @@ export function App({
     }
   })();
 
+  /** The prompt a "regenerate" would resend; null when there is nothing to. */
+  const lastUserPrompt =
+    [...state.entries].reverse().find((entry) => entry.kind === "user")?.text ??
+    null;
+
+  function regenerate(): void {
+    if (!lastUserPrompt || blocked || !transport) return;
+    void send(lastUserPrompt);
+  }
+
   function submitPrompt(): void {
     if (blocked || !transport) return;
     void send(input);
@@ -744,6 +754,19 @@ export function App({
             promptRef.current?.focus();
             growTextarea(promptRef.current);
           }}
+          // The shared list has supported these since it was extracted; Desktop
+          // simply never passed them, so the controls were hidden.
+          onFork={
+            activeSessionId && transport
+              ? (sequence) => {
+                  void transport
+                    .forkSession(activeSessionId, true, sequence)
+                    .then(refreshLists);
+                }
+              : undefined
+          }
+          onRegenerate={lastUserPrompt && !blocked ? regenerate : undefined}
+          canRegenerate={Boolean(lastUserPrompt) && !blocked}
         />
         {pendingApproval && (
           <ApprovalDialog

@@ -86,6 +86,28 @@ describe("App (desktop single-session composition, T031)", () => {
     expect(answerQuestion).toHaveBeenCalledWith("question-1", ["A"]);
   });
 
+  it("offers the message actions the shared list already supported", async () => {
+    // MessageList has carried Fork and Regenerate since it was extracted;
+    // Desktop passed neither, so both controls were simply absent.
+    const transport = stubTransport([
+      { type: "assistant-output-increment", payload: { text: "an answer", turn_index: 0 } },
+      { type: "run-terminated", payload: { reason: "natural-completion", turns_taken: 1 } },
+    ]);
+    render(<App transport={transport} />);
+    fireEvent.change(screen.getByLabelText("LoopPlane smoke prompt"), {
+      target: { value: "first question" },
+    });
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() => expect(screen.getByText("an answer")).toBeInTheDocument());
+
+    // Regenerate resends the last user prompt rather than an empty turn.
+    fireEvent.click(await screen.findByText("Regenerate"));
+
+    await waitFor(() =>
+      expect(screen.getAllByText("first question").length).toBeGreaterThan(1),
+    );
+  });
+
   it("renders a streamed run over the sidecar transport", async () => {
     const transport = stubTransport([
       { type: "assistant-output-increment", payload: { text: "hi there", turn_index: 0 } },

@@ -9,8 +9,10 @@ import { useRef, type KeyboardEvent, type ReactNode } from "react";
 export const PACKAGED_SMOKE_SUCCESS_MARKER = "loopplane-packaged-smoke-ok";
 
 import { focusElement } from "../focus";
+import { useTranslation } from "../i18n/i18n";
 import { getFocusedPane } from "../panes/state";
 import type { PaneWorkspaceState } from "../panes/types";
+import { paneStateLabel } from "../vocabulary";
 
 export type CoworkShellProps = {
   workspace: PaneWorkspaceState;
@@ -36,6 +38,7 @@ export function CoworkShell({
   ownerCloseNeedsConfirm = true,
   onConfirmOwnerClose,
 }: CoworkShellProps) {
+  const { t } = useTranslation();
   const focused = getFocusedPane(workspace);
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const paneIds = workspace.order.filter((paneId) =>
@@ -96,12 +99,19 @@ export function CoworkShell({
                   ref={(element) => {
                     tabRefs.current[paneId] = element;
                   }}
+                  // The state was carried by a "● " prefix and a
+                  // " (read-only)" suffix inside the label, which put it in the
+                  // accessible name by accident and made it a footnote visually.
+                  // It is now an indicator with an explicit name, so a screen
+                  // reader hears the same sentence the sidebar shows.
+                  aria-label={`${pane.title} — ${t(
+                    paneStateLabel(pane.mode, pane.leaseOwner),
+                  )}`}
                   onClick={() => onFocusPane(paneId)}
                   onKeyDown={(event) => onPaneKeyDown(event, paneId)}
                 >
-                  {pane.leaseOwner ? "● " : ""}
-                  {pane.title}
-                  {pane.mode === "read_only" ? " (read-only)" : ""}
+                  <span className="pane-tab-indicator" aria-hidden="true" />
+                  <span className="pane-tab-title">{pane.title}</span>
                 </button>
                 <button
                   type="button"
@@ -126,16 +136,16 @@ export function CoworkShell({
         </div>
         {focused && focused.mode === "read_only" && (
           <div className="pane-banner" role="status">
-            This pane is read-only.
+            {t("pane.readOnlyBanner")}
             {workspace.leaseOwnerPaneId &&
               workspace.leaseOwnerPaneId !== focused.paneId && (
-                <> Another pane holds the active interaction.</>
+                <> {t("pane.otherRunning")}</>
               )}{" "}
             <button
               type="button"
               onClick={() => onRequestInteractive(focused.paneId)}
             >
-              Make interactive
+              {t("pane.takeOver")}
             </button>
           </div>
         )}

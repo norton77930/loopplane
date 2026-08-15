@@ -51,8 +51,41 @@ describe("Desktop multi-pane shell (T049/T053)", () => {
     expect(
       screen.getByTitle("mode=read_only lease_owner=false"),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Make interactive"));
+    // The banner and the sidebar now offer the same action in the same words.
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Take over" })[0]!,
+    );
     expect(onRequestInteractive).toHaveBeenCalledWith("p2");
+  });
+
+  it("names each tab's state instead of decorating its title", () => {
+    let ws = createEmptyWorkspace();
+    ws = openPane(ws, { paneId: "p1", sessionId: "s1", title: "Owner" });
+    ws = openPane(ws, { paneId: "p2", sessionId: "s2", title: "Watcher" });
+    ws = claimLease(ws, "p1").state;
+
+    render(
+      <CoworkShell
+        workspace={ws}
+        onFocusPane={() => undefined}
+        onClosePane={() => undefined}
+        onRequestInteractive={() => undefined}
+      >
+        <div>body</div>
+      </CoworkShell>,
+    );
+
+    // The lease used to be a "● " prefix and a " (read-only)" suffix inside the
+    // label, so a screen reader heard punctuation and a sighted reader saw a
+    // footnote. The words are the accessible name; the dot is decoration.
+    expect(
+      screen.getByRole("tab", { name: "Owner — Driving this session" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: "Watcher — Read-only" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Owner").textContent).toBe("Owner");
+    expect(document.body.textContent).not.toContain("(read-only)");
   });
 
   it("marks lease owner tab and rejects second submit via canSubmit semantics", () => {

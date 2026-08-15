@@ -173,6 +173,7 @@ const zhTW: Record<string, string> = {
   "pane.otherRunning": "另一個分頁正在執行。",
   "pane.noneRunning": "目前沒有分頁在執行。",
   "pane.takeOver": "接手",
+  "pane.readOnlyBanner": "這個分頁是唯讀的。",
   "pane.thisPane": "這個分頁",
 
   "inspection.heading": "檢視",

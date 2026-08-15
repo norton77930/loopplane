@@ -124,6 +124,7 @@ export const VOCABULARY_EN: Record<string, string> = {
   "pane.otherRunning": "Another pane is running.",
   "pane.noneRunning": "No pane is running yet.",
   "pane.takeOver": "Take over",
+  "pane.readOnlyBanner": "This pane is read-only.",
   "pane.thisPane": "This pane",
 
   "inspection.heading": "Inspection",

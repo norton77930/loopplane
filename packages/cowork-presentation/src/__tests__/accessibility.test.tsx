@@ -103,8 +103,11 @@ describe("focus helpers (T050 unit subset)", () => {
       </CoworkShell>,
     );
 
-    const first = screen.getByRole("tab", { name: "One (read-only)" });
-    const second = screen.getByRole("tab", { name: "Two (read-only)" });
+    // The tab's state used to reach the accessible name by accident, as a
+    // " (read-only)" suffix inside the visible label. It is now an explicit
+    // `aria-label`, so the name is a sentence rather than a decorated title.
+    const first = screen.getByRole("tab", { name: "One — Read-only" });
+    const second = screen.getByRole("tab", { name: "Two — Read-only" });
     first.focus();
     fireEvent.keyDown(first, { key: "ArrowRight" });
 
