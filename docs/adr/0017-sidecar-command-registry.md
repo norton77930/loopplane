@@ -1,7 +1,8 @@
 # ADR 0017: The Desktop sidecar may import `loopplane.commands`
 
-- **Status**: **Proposed** (2026-08-19) — the maintainer decided at the unit-083 Wave 6 boundary
-  gate to admit the module; this ADR records that boundary-definition update per Constitution VIII.
+- **Status**: **Accepted** (2026-08-20) — the maintainer decided at the unit-083 Wave 6 boundary
+  gate to admit the module and accepted this record at unit completion; this ADR records that
+  boundary-definition update per Constitution VIII.
 - **Deciders**: LoopPlane maintainer.
 - **Supersedes / superseded by**: Supersedes nothing. It widens, by exactly one module, the sidecar
   import allow-list that ADR 0015 established and ADR 0016 (D5) last widened.
