@@ -17,6 +17,8 @@ from typing import Any
 
 import pytest
 
+from tests.helpers.public_safety import all_prohibited_secondary_markers
+
 SIDECAR = Path(__file__).resolve().parents[2] / "apps" / "desktop" / "sidecar"
 sys.path.insert(0, str(SIDECAR))
 
@@ -26,7 +28,7 @@ from protocol import RpcError  # noqa: E402
 
 pytestmark = pytest.mark.anyio
 
-POISON_TEXT = r"Traceback C:\Users\hidden\ledger bearer sk-live-key"
+POISON_TEXT = " | ".join(all_prohibited_secondary_markers())
 
 
 class _FakeHost:

@@ -24,6 +24,11 @@ from loopplane.host.capabilities import (
     ManagedSkill,
     ManagedSkillDetail,
 )
+from tests.helpers.public_safety import (
+    LOOPPLANE_PATH_MARKER,
+    LOOPPLANE_SECRET_MARKER,
+    all_prohibited_secondary_markers,
+)
 
 SIDECAR = Path(__file__).resolve().parents[2] / "apps" / "desktop" / "sidecar"
 sys.path.insert(0, str(SIDECAR))
@@ -35,10 +40,18 @@ from protocol import RpcError  # noqa: E402
 
 pytestmark = pytest.mark.anyio
 
-POISON_URL = "https://user:token-abc123@10.77.0.5:9999/internal/secret-path"
-POISON_TEXT = r"Traceback C:\Users\hidden\profile bearer sk-live-key"
+POISON_URL = (
+    f"https://user:{LOOPPLANE_SECRET_MARKER}@synthetic-host/{LOOPPLANE_PATH_MARKER}"
+)
+POISON_TEXT = " | ".join(all_prohibited_secondary_markers())
 POISON_OWNER = "principal-hidden-9"
-_MARKERS = ("token-abc123", "10.77.0.5", "secret-path", "hidden", "sk-live-key")
+# Single-line probes only: `_assert_marker_free` scans `str(payload)`, and a
+# marker containing a newline could never match its escaped repr form.
+_MARKERS = (
+    *(m for m in all_prohibited_secondary_markers() if "\n" not in m),
+    "lp-synth-internal-stack",
+    POISON_OWNER,
+)
 
 
 def _mcp(status: str = "unavailable") -> ManagedMcpConfiguration:

@@ -23,6 +23,7 @@ from loopplane.host.capabilities import (
     SessionContextBinding,
     WorkspaceContext,
 )
+from tests.helpers.public_safety import all_prohibited_secondary_markers
 
 SIDECAR = Path(__file__).resolve().parents[2] / "apps" / "desktop" / "sidecar"
 sys.path.insert(0, str(SIDECAR))
@@ -34,9 +35,15 @@ from protocol import RpcError  # noqa: E402
 
 pytestmark = pytest.mark.anyio
 
-POISON_TEXT = r"Traceback C:\Users\hidden\profile bearer sk-live-key"
+POISON_TEXT = " | ".join(all_prohibited_secondary_markers())
 POISON_OWNER = "principal-hidden-9"
-_MARKERS = ("hidden", "sk-live-key", POISON_OWNER)
+# Single-line probes only: `_assert_marker_free` scans `str(payload)`, and a
+# marker containing a newline could never match its escaped repr form.
+_MARKERS = (
+    *(m for m in all_prohibited_secondary_markers() if "\n" not in m),
+    "lp-synth-internal-stack",
+    POISON_OWNER,
+)
 
 
 def _ok(resource_id: str, message: str = "saved") -> CapabilityOperationResult:
