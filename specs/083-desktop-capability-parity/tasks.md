@@ -97,7 +97,8 @@
 - [x] T039 Verify reversibility: revert the unit's commits on a scratch branch and confirm Desktop behavior and the Web suites match today's tree (SC-008)
   - **DONE 2026-08-19:** `git revert ea741f6` on a scratch branch produced a tree byte-identical to pre-083 (`git diff 2aa46e3 HEAD --stat` empty); on the reverted tree the Desktop (23 files), Web (58), and presentation (11) Vitest suites and the desktop pytest subset (237 passed) were all green. Branch deleted, never pushed.
   - Note 2026-08-16: the unit is still uncommitted, so there are no commits to revert; "reverted" state IS current HEAD, which 078's Verified evidence and green CI already prove. Equivalent evidence today: additive-only change set (all six registries, channels, tabs enumerable from `git status`/`git diff`), `src/loopplane` diff empty (T036). Run the literal scratch-branch revert after the commits exist (maintainer authorization).
-- [ ] T040 Request the packaged delivery run and confirm `scripts/smoke-desktop-artifact.ps1 -Scenario all` passes with all seven locators resolving exactly once (SC-005)
+- [x] T040 Request the packaged delivery run and confirm `scripts/smoke-desktop-artifact.ps1 -Scenario all` passes with all seven locators resolving exactly once (SC-005)
+  - **DONE 2026-08-19:** maintainer Stage-C approval on exact commit `9b42cab` triggered delivery run 32265836163 - source recheck, Stage-C verification, and "Token-free package, freeze, and external UI Automation smoke" (`-Scenario all`, exit-0-or-throw wrapper) all succeeded. An earlier run on `f7e2b88` failed its source recheck on the public-safety scan; fixed by `9b42cab` before this run.
 - [ ] T041 Request maintainer completion approval; only after fresh evidence transition 083 to Verified in `docs/loopplane-agent-board.md`. Do not commit, tag, version, release, sign, or deploy without separate authorization
 
 ---
