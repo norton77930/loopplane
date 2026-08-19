@@ -12,6 +12,7 @@ import {
   type DesktopPublicError,
 } from "./backup-restore-ipc";
 import { IPC } from "./ipc-channels";
+import { buildProviderCatalog } from "./provider-catalog";
 import type {
   ProviderConfig,
   PublicProviderView,
@@ -554,6 +555,37 @@ export function registerDesktopIpcHandlers(options: RegisterHandlersOptions): ()
     IPC.capabilitiesList,
     IPC.capabilitiesInvokeAction,
     IPC.auditList,
+    IPC.costGet,
+    IPC.capabilityMcpList,
+    IPC.capabilityMcpGet,
+    IPC.capabilityMcpUpsert,
+    IPC.capabilityMcpReconnect,
+    IPC.capabilityMcpDelete,
+    IPC.capabilitySkillList,
+    IPC.capabilitySkillGet,
+    IPC.capabilitySkillWrite,
+    IPC.capabilitySkillImport,
+    IPC.capabilitySkillDelete,
+    IPC.capabilityMemoryList,
+    IPC.capabilityMemoryGet,
+    IPC.capabilityMemoryWrite,
+    IPC.capabilityMemoryDelete,
+    IPC.governanceScheduleList,
+    IPC.governanceScheduleGet,
+    IPC.governanceScheduleUpsert,
+    IPC.governanceScheduleEnable,
+    IPC.governanceScheduleDisable,
+    IPC.governanceScheduleRunNow,
+    IPC.governanceScheduleDelete,
+    IPC.governanceContextList,
+    IPC.governanceContextGet,
+    IPC.governanceContextUpsert,
+    IPC.governanceContextBind,
+    IPC.governanceContextDelete,
+    IPC.governanceModelDefaultGet,
+    IPC.governanceModelDefaultSet,
+    IPC.governanceModelDefaultClear,
+    IPC.commandExecute,
     IPC.backupDescribe,
     IPC.backupCreate,
     IPC.restoreValidate,
@@ -563,6 +595,7 @@ export function registerDesktopIpcHandlers(options: RegisterHandlersOptions): ()
     IPC.providersSave,
     IPC.providersClear,
     IPC.providersRestart,
+    IPC.providersCatalog,
   ];
 
   for (const ch of channels) {
@@ -637,6 +670,16 @@ export function registerDesktopIpcHandlers(options: RegisterHandlersOptions): ()
     // that releases it without a partial teardown.
     options.providerVault?.relaunch();
     return { ok: true };
+  });
+
+  ipcMain.handle(IPC.providersCatalog, async (event) => {
+    guard(event);
+    // Two-field projection on purpose: the catalog module never sees the key
+    // hint, and without a vault the curated lists still answer (no marking).
+    const view = options.providerVault ? options.providerVault.get() : null;
+    return buildProviderCatalog(
+      view ? { provider: view.provider, modelId: view.modelId } : null,
+    );
   });
 
   ipcMain.handle(IPC.sessionCreateInteractive, async (event, raw) => {
@@ -1237,6 +1280,426 @@ export function registerDesktopIpcHandlers(options: RegisterHandlersOptions): ()
     guard(event);
     try {
       return await rpc.request("capabilities.list", {});
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.costGet, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    try {
+      return await rpc.request("cost.get", {
+        session_id:
+          typeof params.sessionId === "string"
+            ? params.sessionId
+            : params.session_id ?? null,
+      });
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  // 083 Wave 4: capability management. Reads forward verbatim ids; every
+  // mutation carries a main-generated mutation id — renderer-supplied ids
+  // never reach the sidecar (FR-017).
+  ipcMain.handle(IPC.capabilityMcpList, async (event) => {
+    guard(event);
+    try {
+      return await rpc.request("mcp.list", {});
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilityMcpGet, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const mcpId = requireString({ mcp_id: params.mcpId }, "mcp_id");
+    try {
+      return await rpc.request("mcp.get", { mcp_id: mcpId });
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilityMcpUpsert, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    try {
+      return await rpc.request(
+        "mcp.upsert",
+        {
+          name: params.name,
+          transport: params.transport,
+          url: params.url,
+        },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilityMcpReconnect, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const mcpId = requireString({ mcp_id: params.mcpId }, "mcp_id");
+    try {
+      return await rpc.request(
+        "mcp.reconnect",
+        { mcp_id: mcpId },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilityMcpDelete, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const mcpId = requireString({ mcp_id: params.mcpId }, "mcp_id");
+    try {
+      return await rpc.request(
+        "mcp.delete",
+        { mcp_id: mcpId },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilitySkillList, async (event) => {
+    guard(event);
+    try {
+      return await rpc.request("skill.list", {});
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilitySkillGet, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const skillId = requireString({ skill_id: params.skillId }, "skill_id");
+    try {
+      return await rpc.request("skill.get", { skill_id: skillId });
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilitySkillWrite, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    try {
+      return await rpc.request(
+        "skill.write",
+        {
+          name: params.name,
+          description: params.description,
+          instructions: params.instructions,
+        },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilitySkillImport, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    try {
+      return await rpc.request(
+        "skill.import",
+        {
+          name: params.name,
+          description: params.description,
+          instructions: params.instructions,
+        },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilitySkillDelete, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const skillId = requireString({ skill_id: params.skillId }, "skill_id");
+    try {
+      return await rpc.request(
+        "skill.delete",
+        { skill_id: skillId },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilityMemoryList, async (event) => {
+    guard(event);
+    try {
+      return await rpc.request("memory.list", {});
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilityMemoryGet, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const memoryId = requireString({ memory_id: params.memoryId }, "memory_id");
+    try {
+      return await rpc.request("memory.get", { memory_id: memoryId });
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilityMemoryWrite, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    try {
+      return await rpc.request(
+        "memory.write",
+        {
+          name: params.name,
+          kind: params.kind,
+          description: params.description,
+          content: params.content,
+        },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.capabilityMemoryDelete, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const memoryId = requireString({ memory_id: params.memoryId }, "memory_id");
+    try {
+      return await rpc.request(
+        "memory.delete",
+        { memory_id: memoryId },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  // 083 Wave 5: governance surface (schedules / contexts / model default).
+  ipcMain.handle(IPC.governanceScheduleList, async (event) => {
+    guard(event);
+    try {
+      return await rpc.request("schedule.list", {});
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.governanceScheduleGet, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const scheduleId = requireString(
+      { schedule_id: params.scheduleId },
+      "schedule_id",
+    );
+    try {
+      return await rpc.request("schedule.get", { schedule_id: scheduleId });
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.governanceScheduleUpsert, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    try {
+      return await rpc.request(
+        "schedule.upsert",
+        {
+          name: params.name,
+          description: params.description,
+          trigger: params.trigger,
+          instruction: params.instruction,
+          enabled: params.enabled,
+        },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  const scheduleAction =
+    (method: string) => async (event: IpcEventLike, raw: unknown) => {
+      guard(event);
+      const params = asRecord(raw);
+      const scheduleId = requireString(
+        { schedule_id: params.scheduleId },
+        "schedule_id",
+      );
+      try {
+        return await rpc.request(
+          method,
+          { schedule_id: scheduleId },
+          { mutationId: rpc.newMutationId() },
+        );
+      } catch (err) {
+        fail(err);
+      }
+    };
+
+  ipcMain.handle(IPC.governanceScheduleEnable, scheduleAction("schedule.enable"));
+  ipcMain.handle(
+    IPC.governanceScheduleDisable,
+    scheduleAction("schedule.disable"),
+  );
+  ipcMain.handle(IPC.governanceScheduleRunNow, scheduleAction("schedule.runNow"));
+  ipcMain.handle(IPC.governanceScheduleDelete, scheduleAction("schedule.delete"));
+
+  ipcMain.handle(IPC.governanceContextList, async (event) => {
+    guard(event);
+    try {
+      return await rpc.request("context.list", {});
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.governanceContextGet, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const contextId = requireString(
+      { context_id: params.contextId },
+      "context_id",
+    );
+    try {
+      return await rpc.request("context.get", { context_id: contextId });
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.governanceContextUpsert, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    try {
+      return await rpc.request(
+        "context.upsert",
+        {
+          name: params.name,
+          description: params.description,
+          workspace_label: params.workspaceLabel ?? params.workspace_label,
+        },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.governanceContextBind, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const sessionId = requireString(
+      { session_id: params.sessionId },
+      "session_id",
+    );
+    const contextId = requireString(
+      { context_id: params.contextId },
+      "context_id",
+    );
+    try {
+      return await rpc.request(
+        "context.bind",
+        { session_id: sessionId, context_id: contextId },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.governanceContextDelete, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const contextId = requireString(
+      { context_id: params.contextId },
+      "context_id",
+    );
+    try {
+      return await rpc.request(
+        "context.delete",
+        { context_id: contextId },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.governanceModelDefaultGet, async (event) => {
+    guard(event);
+    try {
+      return await rpc.request("modelDefault.get", {});
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.governanceModelDefaultSet, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const modelId = requireString({ model_id: params.modelId }, "model_id");
+    try {
+      return await rpc.request(
+        "modelDefault.set",
+        { model_id: modelId },
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  ipcMain.handle(IPC.governanceModelDefaultClear, async (event) => {
+    guard(event);
+    try {
+      return await rpc.request(
+        "modelDefault.clear",
+        {},
+        { mutationId: rpc.newMutationId() },
+      );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+  // 083 Wave 6 (ADR 0017): backend slash commands over the shared registry.
+  ipcMain.handle(IPC.commandExecute, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const text = requireString({ text: params.text }, "text");
+    try {
+      return await rpc.request(
+        "command.execute",
+        {
+          text,
+          session_id:
+            typeof params.sessionId === "string" ? params.sessionId : null,
+        },
+        { mutationId: rpc.newMutationId() },
+      );
     } catch (err) {
       fail(err);
     }

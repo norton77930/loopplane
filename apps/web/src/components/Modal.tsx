@@ -1,32 +1,3 @@
-import { type ReactNode } from "react";
-
-import { useFocusTrap } from "../hooks/useFocusTrap";
-
-// A true modal (unit 032, FR-001): a dimming backdrop + a focus-trapped panel with
-// role="dialog" + aria-modal. Esc and a backdrop click call onClose; focus is restored to the
-// opener when it unmounts (via useFocusTrap).
-export function Modal({
-  onClose,
-  label,
-  children,
-}: {
-  onClose: () => void;
-  label: string;
-  children: ReactNode;
-}) {
-  const ref = useFocusTrap<HTMLDivElement>(onClose);
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        ref={ref}
-        onClick={(event) => event.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
+// Moved to the shared presentation package in 083 Wave 3; this re-export keeps
+// every existing Web import path (and its tests) pointing at the same modal.
+export { Modal } from "@loopplane/cowork-presentation";

@@ -118,6 +118,142 @@ const loopplaneDesktop = Object.freeze({
         action,
       }),
   }),
+  cost: Object.freeze({
+    get: (sessionId: string | null): Promise<unknown> =>
+      ipcRenderer.invoke(IPC.costGet, { sessionId }),
+  }),
+  capabilityManagement: Object.freeze({
+    mcp: Object.freeze({
+      list: (): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilityMcpList),
+      get: (mcpId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilityMcpGet, { mcpId }),
+      upsert: (input: {
+        name: string;
+        transport: string;
+        url: string;
+      }): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilityMcpUpsert, {
+          name: input.name,
+          transport: input.transport,
+          url: input.url,
+        }),
+      reconnect: (mcpId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilityMcpReconnect, { mcpId }),
+      remove: (mcpId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilityMcpDelete, { mcpId }),
+    }),
+    skills: Object.freeze({
+      list: (): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilitySkillList),
+      get: (skillId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilitySkillGet, { skillId }),
+      write: (input: {
+        name: string;
+        description: string;
+        instructions: string;
+      }): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilitySkillWrite, {
+          name: input.name,
+          description: input.description,
+          instructions: input.instructions,
+        }),
+      import: (input: {
+        name: string;
+        description: string;
+        instructions: string;
+      }): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilitySkillImport, {
+          name: input.name,
+          description: input.description,
+          instructions: input.instructions,
+        }),
+      remove: (skillId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilitySkillDelete, { skillId }),
+    }),
+    memory: Object.freeze({
+      list: (): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilityMemoryList),
+      get: (memoryId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilityMemoryGet, { memoryId }),
+      write: (input: {
+        name: string;
+        kind: string;
+        description: string;
+        content: string;
+      }): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilityMemoryWrite, {
+          name: input.name,
+          kind: input.kind,
+          description: input.description,
+          content: input.content,
+        }),
+      remove: (memoryId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilityMemoryDelete, { memoryId }),
+    }),
+  }),
+  governance: Object.freeze({
+    schedules: Object.freeze({
+      list: (): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceScheduleList),
+      get: (scheduleId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceScheduleGet, { scheduleId }),
+      upsert: (input: {
+        name: string;
+        description: string;
+        trigger: string;
+        instruction: string;
+        enabled: boolean;
+      }): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceScheduleUpsert, {
+          name: input.name,
+          description: input.description,
+          trigger: input.trigger,
+          instruction: input.instruction,
+          enabled: input.enabled,
+        }),
+      enable: (scheduleId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceScheduleEnable, { scheduleId }),
+      disable: (scheduleId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceScheduleDisable, { scheduleId }),
+      runNow: (scheduleId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceScheduleRunNow, { scheduleId }),
+      remove: (scheduleId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceScheduleDelete, { scheduleId }),
+    }),
+    contexts: Object.freeze({
+      list: (): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceContextList),
+      get: (contextId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceContextGet, { contextId }),
+      upsert: (input: {
+        name: string;
+        description: string;
+        workspace_label: string;
+      }): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceContextUpsert, {
+          name: input.name,
+          description: input.description,
+          workspaceLabel: input.workspace_label,
+        }),
+      bind: (sessionId: string, contextId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceContextBind, { sessionId, contextId }),
+      remove: (contextId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceContextDelete, { contextId }),
+    }),
+    modelDefault: Object.freeze({
+      get: (): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceModelDefaultGet),
+      set: (modelId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceModelDefaultSet, { modelId }),
+      clear: (): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.governanceModelDefaultClear),
+    }),
+  }),
+  command: Object.freeze({
+    execute: (text: string, sessionId: string | null): Promise<unknown> =>
+      ipcRenderer.invoke(IPC.commandExecute, { text, sessionId }),
+  }),
   audit: Object.freeze({
     list: (sessionId: string, cursor?: string, limit?: number) =>
       ipcRenderer.invoke(IPC.auditList, {
@@ -159,6 +295,7 @@ const loopplaneDesktop = Object.freeze({
       }),
     clear: (): Promise<unknown> => ipcRenderer.invoke(IPC.providersClear),
     restart: (): Promise<unknown> => ipcRenderer.invoke(IPC.providersRestart),
+    catalog: (): Promise<unknown> => ipcRenderer.invoke(IPC.providersCatalog),
   }),
   interaction: Object.freeze({
     submit: (

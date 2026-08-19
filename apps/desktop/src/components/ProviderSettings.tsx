@@ -12,7 +12,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { ProviderSaveResult, ProviderView } from "../global";
+import type {
+  ProviderCatalogEntry,
+  ProviderSaveResult,
+  ProviderView,
+} from "../global";
+import { useTranslation } from "../i18n";
 
 export type ProviderSettingsPort = {
   get(): Promise<ProviderView | null>;
@@ -23,6 +28,7 @@ export type ProviderSettingsPort = {
   }): Promise<ProviderSaveResult>;
   clear(): Promise<unknown>;
   restart(): Promise<unknown>;
+  catalog(): Promise<ProviderCatalogEntry[]>;
 };
 
 type ProviderOption = {
@@ -64,8 +70,17 @@ function optionFor(providerId: string): ProviderOption {
   return PROVIDERS.find((p) => p.id === providerId) ?? PROVIDERS[0]!;
 }
 
-export function ProviderSettings({ port }: { port: ProviderSettingsPort }) {
+export function ProviderSettings({
+  port,
+  runActive = false,
+}: {
+  port: ProviderSettingsPort;
+  /** A provider switch relaunches the app, so it waits out an active run. */
+  runActive?: boolean;
+}) {
+  const { t } = useTranslation();
   const [stored, setStored] = useState<ProviderView | null>(null);
+  const [catalog, setCatalog] = useState<ProviderCatalogEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [provider, setProvider] = useState("anthropic");
   const [modelId, setModelId] = useState("");
@@ -81,6 +96,13 @@ export function ProviderSettings({ port }: { port: ProviderSettingsPort }) {
       setProvider(current.provider);
       setModelId(current.modelId);
     }
+    // The catalog is a typing aid; failing to load it must not block the
+    // screen, so it degrades to an empty list.
+    try {
+      setCatalog(await port.catalog());
+    } catch {
+      setCatalog([]);
+    }
     setLoaded(true);
   }, [port]);
 
@@ -91,7 +113,7 @@ export function ProviderSettings({ port }: { port: ProviderSettingsPort }) {
   const option = optionFor(provider);
   const needsKey = !option.keyless;
 
-  async function save(): Promise<void> {
+  async function save(): Promise<boolean> {
     // The IPC boundary rejects a blank field outright rather than answering with
     // a reason, so check here first: otherwise an empty Model box produces a
     // rejected promise and a screen that silently does nothing.
@@ -99,14 +121,14 @@ export function ProviderSettings({ port }: { port: ProviderSettingsPort }) {
     const trimmedKey = apiKey.trim();
     if (!trimmedModel) {
       setFailure(FAILURE_MESSAGES.invalid_model_id!);
-      return;
+      return false;
     }
     // A stored key is reused only for the same provider, so switching provider
     // with an empty box is a local failure, not a round trip.
     const reusable = Boolean(stored?.hasKey && stored.provider === provider);
     if (needsKey && !trimmedKey && !reusable) {
       setFailure(FAILURE_MESSAGES.missing_key!);
-      return;
+      return false;
     }
 
     setBusy(true);
@@ -121,7 +143,7 @@ export function ProviderSettings({ port }: { port: ProviderSettingsPort }) {
         setSaved(true);
         setApiKey("");
         await refresh();
-        return;
+        return true;
       }
       setFailure(
         FAILURE_MESSAGES[result.reason] ??
@@ -133,6 +155,18 @@ export function ProviderSettings({ port }: { port: ProviderSettingsPort }) {
       setFailure("The provider settings could not be saved.");
     } finally {
       setBusy(false);
+    }
+    return false;
+  }
+
+  /**
+   * One-step switch (083 W2-A): the existing save (stored key reused) then
+   * the existing restart. The restart only follows a successful save.
+   */
+  async function saveAndRestart(): Promise<void> {
+    const ok = await save();
+    if (ok) {
+      await port.restart();
     }
   }
 
@@ -184,9 +218,19 @@ export function ProviderSettings({ port }: { port: ProviderSettingsPort }) {
           value={modelId}
           disabled={busy}
           placeholder={option.example}
+          list="provider-model-catalog"
           onChange={(event) => setModelId(event.target.value)}
         />
       </label>
+      {/* A typing aid, never a gate: free-form ids stay valid, and an
+          unknown provider simply has no options. */}
+      <datalist id="provider-model-catalog">
+        {(catalog.find((entry) => entry.provider === provider)?.models ?? []).map(
+          (model) => (
+            <option key={model.id} value={model.id} />
+          ),
+        )}
+      </datalist>
 
       {needsKey && (
         <label className="provider-field">
@@ -212,12 +256,25 @@ export function ProviderSettings({ port }: { port: ProviderSettingsPort }) {
         <button type="button" className="primary" disabled={busy} onClick={() => void save()}>
           Save
         </button>
+        <button
+          type="button"
+          disabled={busy || runActive}
+          onClick={() => void saveAndRestart()}
+        >
+          {t("provider.saveRestart")}
+        </button>
         {stored && (
           <button type="button" disabled={busy} onClick={() => void remove()}>
             Remove
           </button>
         )}
       </div>
+
+      {runActive && (
+        <p className="provider-run-blocked" role="status">
+          {t("provider.runBlocked")}
+        </p>
+      )}
 
       {saved && (
         <p className="provider-restart" role="status">

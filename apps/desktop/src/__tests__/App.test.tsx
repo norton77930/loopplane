@@ -9,7 +9,12 @@ import type {
   WorkspaceContext,
 } from "@web/api/types";
 
-import { App } from "../App";
+import {
+  App,
+  monthlyCostLineText,
+  narrowCostPart,
+  sessionCostStripText,
+} from "../App";
 import type { SidecarTransport } from "../sidecar";
 
 function stubTransport(
@@ -339,5 +344,113 @@ describe("App (desktop single-session composition, T031)", () => {
     await waitFor(() =>
       expect(screen.getByText("generated hello")).toBeInTheDocument(),
     );
+  });
+});
+
+describe("cost visibility (083 Wave 1)", () => {
+  afterEach(() => {
+    delete (window as { loopplaneDesktop?: unknown }).loopplaneDesktop;
+  });
+
+  function mockCost(result: unknown) {
+    const get = vi.fn(async () => result);
+    (window as { loopplaneDesktop?: unknown }).loopplaneDesktop = {
+      cost: { get },
+    };
+    return get;
+  }
+
+  it("shows the priced session spend verbatim in the context strip", async () => {
+    const get = mockCost({
+      session: { status: "priced", usd: "0.123456" },
+      monthly: { status: "available", usd: "12.50" },
+    });
+    render(<App transport={stubTransport([])} resumeSessionId="s-cost" />);
+    await waitFor(() =>
+      expect(screen.getByTestId("session-cost")).toHaveTextContent("$0.123456"),
+    );
+    expect(get).toHaveBeenCalledWith("s-cost");
+  });
+
+  it("renders an unpriced session as its own state, never as $0", async () => {
+    mockCost({
+      session: { status: "unpriced", usd: "0" },
+      monthly: { status: "unavailable", usd: null },
+    });
+    render(<App transport={stubTransport([])} resumeSessionId="s-cost" />);
+    await waitFor(() =>
+      expect(screen.getByTestId("session-cost").textContent).toBeTruthy(),
+    );
+    expect(screen.getByTestId("session-cost").textContent).not.toContain("$");
+  });
+
+  it("clamps unknown cost payloads instead of rendering them", () => {
+    expect(narrowCostPart({ status: "DROP TABLE", usd: "1" })).toBeNull();
+    expect(narrowCostPart("garbage")).toBeNull();
+    expect(narrowCostPart({ status: "priced", usd: 3 })).toEqual({
+      status: "priced",
+      usd: null,
+    });
+  });
+
+  it("keeps the four session states textually distinct", () => {
+    const t = (key: string) => key;
+    const texts = [
+      sessionCostStripText({ status: "priced", usd: "0" }, t),
+      sessionCostStripText({ status: "partially_unpriced", usd: "0" }, t),
+      sessionCostStripText({ status: "unpriced", usd: "0" }, t),
+      sessionCostStripText({ status: "unavailable", usd: null }, t),
+    ];
+    expect(new Set(texts).size).toBe(4);
+    expect(texts[2]).not.toContain("$");
+  });
+
+  it("labels the month-to-date line and its absence", () => {
+    const t = (key: string) => key;
+    expect(monthlyCostLineText({ status: "available", usd: "12.50" }, t)).toBe(
+      "cost.monthly: $12.50",
+    );
+    expect(monthlyCostLineText({ status: "unavailable", usd: null }, t)).toBe(
+      "cost.monthlyUnavailable",
+    );
+    expect(monthlyCostLineText(null, t)).toBeNull();
+  });
+});
+
+describe("host commands (083 Wave 6)", () => {
+  afterEach(() => {
+    delete (window as { loopplaneDesktop?: unknown }).loopplaneDesktop;
+  });
+
+  it("answers a leading slash locally without starting a run", async () => {
+    const execute = vi.fn(async () => ({ kind: "ok", text: "session: 0.25" }));
+    (window as { loopplaneDesktop?: unknown }).loopplaneDesktop = {
+      command: { execute },
+    };
+    const runSpy = vi.fn(async function* () {});
+    const transport = {
+      ...stubTransport([]),
+      run: runSpy,
+    } as unknown as SidecarTransport;
+    render(<App transport={transport} resumeSessionId="s-cmd" />);
+    fireEvent.change(screen.getByLabelText("LoopPlane smoke prompt"), {
+      target: { value: "/cost" },
+    });
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() =>
+      expect(screen.getByText("session: 0.25")).toBeInTheDocument(),
+    );
+    expect(execute).toHaveBeenCalledWith("/cost", "s-cmd");
+    expect(runSpy).not.toHaveBeenCalled();
+    expect(screen.getByText("/cost")).toBeInTheDocument();
+  });
+
+  it("shows the command hint on a leading slash and none otherwise", () => {
+    render(<App transport={stubTransport([])} />);
+    const prompt = screen.getByLabelText("LoopPlane smoke prompt");
+    fireEvent.change(prompt, { target: { value: "/" } });
+    expect(screen.getByText(/\/cost/)).toBeInTheDocument();
+    fireEvent.change(prompt, { target: { value: "hello" } });
+    expect(screen.queryByText(/\/cost/)).toBeNull();
   });
 });

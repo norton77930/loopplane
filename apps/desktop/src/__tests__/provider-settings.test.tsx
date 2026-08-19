@@ -26,6 +26,7 @@ function port(
       this.restarts += 1;
       return { ok: true } as const;
     },
+    catalog: async () => [],
   };
   return Object.assign(base, overrides);
 }
@@ -73,7 +74,7 @@ describe("ProviderSettings", () => {
     fireEvent.change(screen.getByLabelText(/api key/i), {
       target: { value: ` ${FAKE_KEY} ` },
     });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     await waitFor(() =>
       expect(p.saves).toEqual([
@@ -95,7 +96,7 @@ describe("ProviderSettings", () => {
     fireEvent.change(screen.getByLabelText(/model/i), {
       target: { value: "llama3" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     await waitFor(() =>
       expect(p.saves).toEqual([
@@ -127,7 +128,7 @@ describe("ProviderSettings", () => {
     fireEvent.change(screen.getByLabelText(/api key/i), {
       target: { value: FAKE_KEY },
     });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(pattern);
     expect(screen.getByRole("alert").textContent ?? "").not.toContain(reason);
@@ -147,7 +148,7 @@ describe("ProviderSettings", () => {
     fireEvent.change(await screen.findByLabelText(/api key/i), {
       target: { value: FAKE_KEY },
     });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/model id/i);
     expect(p.saves).toEqual([]);
@@ -160,7 +161,7 @@ describe("ProviderSettings", () => {
     fireEvent.change(await screen.findByLabelText(/model/i), {
       target: { value: "claude-x" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/needs an api key/i);
     expect(p.saves).toEqual([]);
@@ -180,7 +181,7 @@ describe("ProviderSettings", () => {
     fireEvent.change(await screen.findByLabelText(/model/i), {
       target: { value: "claude-new" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     await waitFor(() =>
       expect(p.saves).toEqual([
@@ -206,7 +207,7 @@ describe("ProviderSettings", () => {
     fireEvent.change(screen.getByLabelText(/model/i), {
       target: { value: "gpt-x" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/needs an api key/i);
     expect(p.saves).toEqual([]);
@@ -226,7 +227,7 @@ describe("ProviderSettings", () => {
     fireEvent.change(screen.getByLabelText(/api key/i), {
       target: { value: FAKE_KEY },
     });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/could not be saved/i);
@@ -238,7 +239,7 @@ describe("ProviderSettings", () => {
     render(<ProviderSettings port={p} />);
 
     expect(
-      screen.queryByRole("button", { name: /restart/i }),
+      screen.queryByRole("button", { name: /restart loopplane/i }),
     ).not.toBeInTheDocument();
 
     fireEvent.change(await screen.findByLabelText(/model/i), {
@@ -247,9 +248,9 @@ describe("ProviderSettings", () => {
     fireEvent.change(screen.getByLabelText(/api key/i), {
       target: { value: FAKE_KEY },
     });
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
 
-    const restart = await screen.findByRole("button", { name: /restart/i });
+    const restart = await screen.findByRole("button", { name: /restart loopplane/i });
     fireEvent.click(restart);
 
     await waitFor(() => expect(p.restarts).toBe(1));
@@ -282,5 +283,90 @@ describe("ProviderSettings", () => {
     fireEvent.click(await screen.findByRole("button", { name: /remove/i }));
 
     await waitFor(() => expect(clear).toHaveBeenCalled());
+  });
+});
+
+describe("ProviderSettings one-step model switch (083 W2-A)", () => {
+  const CATALOG = [
+    {
+      provider: "anthropic",
+      models: [
+        { id: "claude-opus-5", current: false },
+        { id: "claude-sonnet-5", current: true },
+      ],
+    },
+    { provider: "openai", models: [{ id: "gpt-4o", current: false }] },
+  ];
+
+  it("offers the selected provider's catalog as datalist options", async () => {
+    render(<ProviderSettings port={port({ catalog: async () => CATALOG })} />);
+
+    const model = await screen.findByLabelText(/model/i);
+    await waitFor(() =>
+      expect(document.querySelectorAll("datalist option").length).toBeGreaterThan(0),
+    );
+    const values = [...document.querySelectorAll("datalist option")].map(
+      (o) => (o as HTMLOptionElement).value,
+    );
+    expect(values).toContain("claude-opus-5");
+    // gpt-4o belongs to openai, which is not the selected provider.
+    expect(values).not.toContain("gpt-4o");
+    expect(model.getAttribute("list")).toBe(
+      document.querySelector("datalist")?.id,
+    );
+  });
+
+  it("renders no options when the catalog has nothing for the provider", async () => {
+    render(<ProviderSettings port={port({ catalog: async () => [] })} />);
+
+    await screen.findByLabelText(/model/i);
+    expect(document.querySelectorAll("datalist option")).toHaveLength(0);
+  });
+
+  it("saves then restarts in one step, reusing the stored key", async () => {
+    const p = port({
+      get: async () => ({
+        provider: "anthropic",
+        modelId: "claude-x",
+        hasKey: true,
+        keyHint: "…4f2a",
+      }),
+      catalog: async () => CATALOG,
+    });
+    render(<ProviderSettings port={p} />);
+
+    const model = await screen.findByLabelText(/model/i);
+    fireEvent.change(model, { target: { value: "claude-opus-5" } });
+    fireEvent.click(screen.getByRole("button", { name: /save & restart/i }));
+
+    await waitFor(() => expect(p.restarts).toBe(1));
+    // The empty key box reuses the stored key: apiKey travels as null.
+    expect(p.saves).toEqual([
+      { provider: "anthropic", modelId: "claude-opus-5", apiKey: null },
+    ]);
+  });
+
+  it("does not restart when the save is refused locally", async () => {
+    const p = port({ catalog: async () => CATALOG });
+    render(<ProviderSettings port={p} />);
+
+    // No stored key and an empty key box: the local missing_key check refuses.
+    const model = await screen.findByLabelText(/model/i);
+    fireEvent.change(model, { target: { value: "claude-opus-5" } });
+    fireEvent.click(screen.getByRole("button", { name: /save & restart/i }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(p.restarts).toBe(0);
+    expect(p.saves).toEqual([]);
+  });
+
+  it("disables the one-step action while a run is in flight", async () => {
+    render(
+      <ProviderSettings port={port({ catalog: async () => CATALOG })} runActive />,
+    );
+
+    const button = await screen.findByRole("button", { name: /save & restart/i });
+    expect(button).toBeDisabled();
+    expect(screen.getByText(/current run/i)).toBeInTheDocument();
   });
 });

@@ -188,6 +188,7 @@ def build_rpc_dispatcher(
     principal_id: str | None = None,
     runtime_config: RuntimeConfig | None = None,
     runtime_owner: DesktopRuntimeOwner | None = None,
+    configured_model_id: str | None = None,
 ) -> object:
     """Compose dispatcher + Host-only methods after bootstrap."""
 
@@ -195,6 +196,10 @@ def build_rpc_dispatcher(
     from interaction import InteractionLease
     from methods.audit import AuditMethods
     from methods.backup import BackupMethods
+    from methods.capability import CapabilityMethods
+    from methods.command import CommandMethods
+    from methods.cost import CostMethods
+    from methods.governance import GovernanceMethods
     from methods.inspection import InspectionMethods
     from methods.interaction import InteractionMethods
     from methods.projects import ProjectMethods
@@ -301,6 +306,40 @@ def build_rpc_dispatcher(
             principal_id=principal_id,
             principal_provider=current_principal,
             mutation_lease=mut_lease,
+            configured_model_id=configured_model_id,
+        ).handlers()
+    )
+    handlers.update(
+        CostMethods(
+            host_for_methods,  # type: ignore[arg-type]
+            principal_id=principal_id,
+            principal_provider=current_principal,
+        ).handlers()
+    )
+    handlers.update(
+        CapabilityMethods(
+            host_for_methods,  # type: ignore[arg-type]
+            principal_id=principal_id,
+            principal_provider=current_principal,
+            mutation_lease=mut_lease,
+        ).handlers()
+    )
+    handlers.update(
+        GovernanceMethods(
+            host_for_methods,  # type: ignore[arg-type]
+            principal_id=principal_id,
+            principal_provider=current_principal,
+            mutation_lease=mut_lease,
+            configured_model_id=configured_model_id,
+        ).handlers()
+    )
+    handlers.update(
+        CommandMethods(
+            host_for_methods,  # type: ignore[arg-type]
+            principal_id=principal_id,
+            principal_provider=current_principal,
+            mutation_lease=mut_lease,
+            configured_model_id=configured_model_id,
         ).handlers()
     )
     handlers.update(
@@ -388,11 +427,30 @@ _DESKTOP_METHOD_NAMES = (
     "backup.describe",
     "capabilities.invokeAction",
     "capabilities.list",
+    "command.execute",
+    "context.bind",
+    "context.delete",
+    "context.get",
+    "context.list",
+    "context.upsert",
+    "cost.get",
     "inspection.get",
     "interaction.answerApproval",
     "interaction.answerQuestion",
     "interaction.cancel",
     "interaction.submit",
+    "mcp.delete",
+    "mcp.get",
+    "mcp.list",
+    "mcp.reconnect",
+    "mcp.upsert",
+    "memory.delete",
+    "memory.get",
+    "memory.list",
+    "memory.write",
+    "modelDefault.clear",
+    "modelDefault.get",
+    "modelDefault.set",
     "project.assignSession",
     "project.create",
     "project.list",
@@ -401,6 +459,13 @@ _DESKTOP_METHOD_NAMES = (
     "restore.cancel",
     "restore.commit",
     "restore.validate",
+    "schedule.delete",
+    "schedule.disable",
+    "schedule.enable",
+    "schedule.get",
+    "schedule.list",
+    "schedule.runNow",
+    "schedule.upsert",
     "session.createInteractive",
     "session.delete",
     "session.fork",
@@ -410,6 +475,11 @@ _DESKTOP_METHOD_NAMES = (
     "session.rename",
     "session.resumeInteractive",
     "session.setStarred",
+    "skill.delete",
+    "skill.get",
+    "skill.import",
+    "skill.list",
+    "skill.write",
     "workspace.bind",
     "workspace.list",
     "workspace.relink",
@@ -695,6 +765,9 @@ def main() -> None:  # pragma: no cover - real stdio entry (manual smoke)
         principal_id=profile_state.principal_id,
         runtime_config=config,
         runtime_owner=owner,
+        configured_model_id=(
+            (os.environ.get(DESKTOP_MODEL_ID_ENV) or "").strip() or None
+        ),
     )
     dispatcher.state.initialized = True  # type: ignore[attr-defined]
 

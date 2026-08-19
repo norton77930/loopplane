@@ -133,5 +133,52 @@ export type {
   SessionCost,
   WorkspaceContext,
 } from "./components/settings/AgentControlsSettings";
+// 083 Wave 3: the six Web settings panels behind narrow service ports (FR-020),
+// plus the modal primitives and settings helpers they render with. apps/web
+// adapts its ApiClient to these ports and re-exports the moved primitives.
+export { Modal } from "./components/Modal";
+export { useFocusTrap } from "./hooks/useFocusTrap";
+export {
+  CapabilityDetail,
+} from "./components/settings/CapabilityDetail";
+export type { CapabilityDetailField } from "./components/settings/CapabilityDetail";
+export { EmptySection } from "./components/settings/EmptySection";
+export { McpSettings } from "./components/settings/McpSettings";
+export type {
+  CapabilityActionResult,
+  McpDetail,
+  McpRecord,
+  McpSettingsService,
+} from "./components/settings/McpSettings";
+export { MemorySettings } from "./components/settings/MemorySettings";
+export type {
+  MemoryDetail,
+  MemoryRecord,
+  MemorySettingsService,
+} from "./components/settings/MemorySettings";
+export { SkillSettings } from "./components/settings/SkillSettings";
+export type {
+  SkillDefinition,
+  SkillDetail,
+  SkillRecord,
+  SkillSettingsService,
+} from "./components/settings/SkillSettings";
+export { ScheduleSettings } from "./components/settings/ScheduleSettings";
+export type {
+  ScheduleDetail,
+  ScheduleRecord,
+  ScheduleSettingsService,
+} from "./components/settings/ScheduleSettings";
+export { WorkspaceSettings } from "./components/settings/WorkspaceSettings";
+export type {
+  WorkspaceContextRecord,
+  WorkspaceSettingsService,
+} from "./components/settings/WorkspaceSettings";
+export { ModelDefaultSettings } from "./components/settings/ModelDefaultSettings";
+export type {
+  ModelCatalogEntry,
+  ModelDefaultSettingsService,
+  ModelDefaultView,
+} from "./components/settings/ModelDefaultSettings";
 export { PresentationI18nProvider, useTranslation } from "./i18n/i18n";
 export type { Translation, TranslationMessages } from "./i18n/i18n";

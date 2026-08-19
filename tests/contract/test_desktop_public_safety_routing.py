@@ -126,6 +126,386 @@ def test_fixed_public_error_catalogue_is_secondary_safe() -> None:
     assert scan_secondary_surfaces(payloads) == []
 
 
+@pytest.mark.anyio
+async def test_cost_projection_discloses_no_marker_bearing_host_state() -> None:
+    """083: marker-bearing host failures degrade to explicit absence on the wire."""
+
+    from methods.cost import CostMethods
+
+    class _Summary:
+        session_id = "s-1"
+        principal_id = "principal-opaque"
+
+    class _PoisonedHost:
+        def list_sessions(self) -> tuple[Any, ...]:
+            return (_Summary(),)
+
+        def session_cost(self, session_id: str) -> None:
+            raise RuntimeError(POISONED)
+
+        def agent_controls(self, session_id: str) -> None:
+            raise RuntimeError(POISONED)
+
+        def monthly_spend(self, principal_id: str) -> None:
+            raise RuntimeError(POISONED)
+
+    methods = CostMethods(_PoisonedHost(), principal_id="principal-opaque")  # type: ignore[arg-type]
+    dispatcher = await _initialized(methods.handlers())
+    responses = await dispatcher.handle_frame(
+        _frame("r-cost", "cost.get", {"session_id": "s-1"})
+    )
+
+    assert responses
+    text = json.dumps(responses[0], ensure_ascii=False)
+    assert_secondary_surface_clean(SurfacePayload(kind="status", text=text))
+    assert responses[0]["result"]["session"] == {"status": "unavailable", "usd": None}
+    assert responses[0]["result"]["monthly"] == {"status": "unavailable", "usd": None}
+    assert "principal-opaque" not in text
+
+
+@pytest.mark.anyio
+async def test_cost_projection_clamps_marker_bearing_pricing_vocabulary() -> None:
+    """083: an unexpected pricing literal is clamped, never echoed to the wire."""
+
+    from decimal import Decimal
+
+    from methods.cost import CostMethods
+
+    class _Summary:
+        session_id = "s-1"
+        principal_id = None
+
+    class _Budget:
+        pricing = POISONED
+
+    class _Projection:
+        budget = _Budget()
+
+    class _WeirdHost:
+        def list_sessions(self) -> tuple[Any, ...]:
+            return (_Summary(),)
+
+        def session_cost(self, session_id: str) -> Decimal:
+            return Decimal("1.5")
+
+        def agent_controls(self, session_id: str) -> Any:
+            return _Projection()
+
+        def monthly_spend(self, principal_id: str) -> None:
+            return None
+
+    methods = CostMethods(_WeirdHost())  # type: ignore[arg-type]
+    dispatcher = await _initialized(methods.handlers())
+    responses = await dispatcher.handle_frame(
+        _frame("r-cost-2", "cost.get", {"session_id": "s-1"})
+    )
+
+    assert responses
+    text = json.dumps(responses[0], ensure_ascii=False)
+    assert_secondary_surface_clean(SurfacePayload(kind="status", text=text))
+    assert responses[0]["result"]["session"] == {"status": "unknown", "usd": "1.5"}
+
+
+@pytest.mark.anyio
+async def test_capability_projections_disclose_no_endpoint_credential_or_owner() -> (
+    None
+):
+    """083 Wave 4: MCP / skill / memory projections are marker-free allowlists."""
+
+    from methods.capability import CapabilityMethods
+
+    class _Record:
+        def __init__(self, **fields: Any) -> None:
+            for key, value in fields.items():
+                setattr(self, key, value)
+
+    poisoned_mcp = _Record(
+        id="mcp-1",
+        name="internal",
+        status="unavailable",
+        tool_count=1,
+        transport="http",
+        url=f"https://user:{POISONED}@host/{POISONED}",
+        tools=("alpha",),
+        problem=POISONED,
+        owner_id=POISONED,
+        scope="owned",
+        actions=("open",),
+    )
+    poisoned_skill = _Record(
+        id="skill-1",
+        name="notes",
+        description="notes",
+        source=POISONED,
+        problem=POISONED,
+        status="available",
+        scope="owned",
+        actions=("open",),
+        instructions="write",
+    )
+    poisoned_memory = _Record(
+        id="memory-1",
+        name="prefs",
+        kind="user",
+        description="prefs",
+        snippet="dark",
+        problem=POISONED,
+        status="available",
+        scope="owned",
+        actions=("open",),
+        content="dark theme",
+    )
+
+    class _PoisonedHost:
+        def list_managed_mcp(self, principal_id: str | None = None) -> tuple[Any, ...]:
+            return (poisoned_mcp,)
+
+        def get_managed_mcp(
+            self, mcp_id: str, *, principal_id: str | None = None
+        ) -> Any:
+            return poisoned_mcp
+
+        def list_managed_skills(
+            self, principal_id: str | None = None
+        ) -> tuple[Any, ...]:
+            return (poisoned_skill,)
+
+        def get_managed_skill(
+            self, skill_id: str, *, principal_id: str | None = None
+        ) -> Any:
+            return poisoned_skill
+
+        def list_managed_memory(
+            self, *, principal_id: str | None = None
+        ) -> tuple[Any, ...]:
+            return (poisoned_memory,)
+
+        def get_managed_memory(
+            self, memory_id: str, *, principal_id: str | None = None
+        ) -> Any:
+            return poisoned_memory
+
+    methods = CapabilityMethods(_PoisonedHost())  # type: ignore[arg-type]
+    dispatcher = await _initialized(methods.handlers())
+    for req_id, (method, params) in enumerate(
+        (
+            ("mcp.list", {}),
+            ("mcp.get", {"mcp_id": "mcp-1"}),
+            ("skill.list", {}),
+            ("skill.get", {"skill_id": "skill-1"}),
+            ("memory.list", {}),
+            ("memory.get", {"memory_id": "memory-1"}),
+        )
+    ):
+        responses = await dispatcher.handle_frame(
+            _frame(f"r-cap-{req_id}", method, params)
+        )
+        assert responses, method
+        text = json.dumps(responses[0], ensure_ascii=False)
+        assert_secondary_surface_clean(SurfacePayload(kind="status", text=text))
+
+
+@pytest.mark.anyio
+async def test_capability_mutation_failure_discloses_no_marker() -> None:
+    """083 Wave 4: a raising mutation answers the catalogue, not the raw error."""
+
+    from methods.capability import CapabilityMethods
+
+    class _BrokenHost:
+        async def upsert_managed_mcp(self, **kwargs: Any) -> Any:
+            raise RuntimeError(POISONED)
+
+        def write_managed_memory(self, **kwargs: Any) -> Any:
+            raise RuntimeError(POISONED)
+
+    methods = CapabilityMethods(_BrokenHost())  # type: ignore[arg-type]
+    dispatcher = await _initialized(methods.handlers())
+    for req_id, (method, params) in enumerate(
+        (
+            (
+                "mcp.upsert",
+                {
+                    "mutation_id": "m-1",
+                    "name": "srv",
+                    "transport": "http",
+                    "url": "https://mcp.example",
+                },
+            ),
+            (
+                "memory.write",
+                {
+                    "mutation_id": "m-2",
+                    "name": "prefs",
+                    "kind": "user",
+                    "description": "",
+                    "content": "dark",
+                },
+            ),
+        )
+    ):
+        responses = await dispatcher.handle_frame(
+            _frame(f"r-cap-mut-{req_id}", method, params)
+        )
+        assert responses, method
+        text = json.dumps(responses[0], ensure_ascii=False)
+        assert_secondary_surface_clean(SurfacePayload(kind="rpc_error", text=text))
+        assert (
+            responses[0]["error"]["data"]["messageKey"] == "desktop.error.unavailable"
+        )
+
+
+@pytest.mark.anyio
+async def test_governance_projections_disclose_no_owner_or_problem() -> None:
+    """083 Wave 5: schedule / context / model-default projections are marker-free."""
+
+    from methods.governance import GovernanceMethods
+
+    class _Record:
+        def __init__(self, **fields: Any) -> None:
+            for key, value in fields.items():
+                setattr(self, key, value)
+
+    poisoned_schedule = _Record(
+        id="schedule-1",
+        name="daily",
+        description="daily",
+        trigger="0 9 * * *",
+        enabled=True,
+        instruction="refresh",
+        status="disabled",
+        problem=POISONED,
+        owner_id=POISONED,
+        scope="owned",
+        actions=("open",),
+    )
+    poisoned_context = _Record(
+        id="context-1",
+        name="Docs",
+        description="docs",
+        workspace_label="docs-repo",
+        status="available",
+        problem=POISONED,
+        owner_id=POISONED,
+        scope="owned",
+        actions=("open",),
+    )
+    poisoned_default = _Record(
+        model_id="model-x",
+        label="Model X",
+        status="available",
+        problem=POISONED,
+    )
+
+    class _PoisonedHost:
+        def list_managed_schedules(
+            self, principal_id: str | None = None
+        ) -> tuple[Any, ...]:
+            return (poisoned_schedule,)
+
+        def get_managed_schedule(
+            self, schedule_id: str, *, principal_id: str | None = None
+        ) -> Any:
+            return poisoned_schedule
+
+        def list_workspace_contexts(
+            self, principal_id: str | None = None
+        ) -> tuple[Any, ...]:
+            return (poisoned_context,)
+
+        def get_workspace_context(
+            self, context_id: str, *, principal_id: str | None = None
+        ) -> Any:
+            return poisoned_context
+
+        def model_default(
+            self, principal_id: str | None = None, *, available_models: Any = None
+        ) -> Any:
+            return poisoned_default
+
+        def upsert_managed_schedule(self, **kwargs: Any) -> Any:
+            raise RuntimeError(POISONED)
+
+    methods = GovernanceMethods(
+        _PoisonedHost(),  # type: ignore[arg-type]
+        configured_model_id="model-x",
+    )
+    dispatcher = await _initialized(methods.handlers())
+    for req_id, (method, params) in enumerate(
+        (
+            ("schedule.list", {}),
+            ("schedule.get", {"schedule_id": "schedule-1"}),
+            ("context.list", {}),
+            ("context.get", {"context_id": "context-1"}),
+            ("modelDefault.get", {}),
+        )
+    ):
+        responses = await dispatcher.handle_frame(
+            _frame(f"r-gov-{req_id}", method, params)
+        )
+        assert responses, method
+        text = json.dumps(responses[0], ensure_ascii=False)
+        assert_secondary_surface_clean(SurfacePayload(kind="status", text=text))
+
+    failed = await dispatcher.handle_frame(
+        _frame(
+            "r-gov-mut",
+            "schedule.upsert",
+            {
+                "mutation_id": "m-1",
+                "name": "daily",
+                "description": "",
+                "trigger": "0 9 * * *",
+                "instruction": "refresh",
+                "enabled": True,
+            },
+        )
+    )
+    assert failed
+    text = json.dumps(failed[0], ensure_ascii=False)
+    assert_secondary_surface_clean(SurfacePayload(kind="rpc_error", text=text))
+    assert failed[0]["error"]["data"]["messageKey"] == "desktop.error.unavailable"
+
+
+@pytest.mark.anyio
+async def test_command_execute_answers_fixed_text_over_a_failing_seam() -> None:
+    """083 Wave 6 (ADR 0017): a marker-bearing seam failure never reaches the wire."""
+
+    from decimal import Decimal
+
+    from methods.command import CommandMethods
+
+    class _PoisonedHost:
+        def list_sessions(self) -> tuple[Any, ...]:
+            return ()
+
+        def session_cost(self, session_id: str) -> Decimal | None:
+            raise RuntimeError(POISONED)
+
+        def monthly_spend(self, principal_id: str) -> Decimal | None:
+            raise RuntimeError(POISONED)
+
+        def inspect_memory(self, query: str | None = None) -> tuple[Any, ...]:
+            raise RuntimeError(POISONED)
+
+        def compact_session(self, session_id: str) -> bool:
+            raise RuntimeError(POISONED)
+
+    methods = CommandMethods(_PoisonedHost(), principal_id="principal-opaque")  # type: ignore[arg-type]
+    dispatcher = await _initialized(methods.handlers())
+    for req_id, text in enumerate(("/cost", "/memory", "/nonsense")):
+        responses = await dispatcher.handle_frame(
+            _frame(
+                f"r-cmd-{req_id}",
+                "command.execute",
+                {"mutation_id": f"m-{req_id}", "text": text},
+            )
+        )
+        assert responses, text
+        wire = json.dumps(responses[0], ensure_ascii=False)
+        assert_secondary_surface_clean(SurfacePayload(kind="status", text=wire))
+        assert responses[0]["result"]["kind"] in {"ok", "unknown", "error"}
+
+
 def test_backup_disclosure_is_secondary_safe() -> None:
     disclosure = json.dumps(describe_backup().to_public(), ensure_ascii=False)
     assert_secondary_surface_clean(

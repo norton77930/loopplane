@@ -105,6 +105,47 @@ machine's owner with an OS keystore available.
 
 Saving stores the key; it does not verify it. An incorrect key surfaces on the first reply.
 
+## Capability management and cost (unit 083)
+
+Settings holds nine tabs: **Model provider** (desktop-only, above), **Capabilities**
+(availability cards), **Agent controls**, and — since unit 083 — **Memory**, **Skills**,
+**MCP**, **Workspace**, **Schedules**, and **Model default**, rendered from the same
+shared panels Web uses, each behind a narrow service port over sidecar RPC. The
+conversation pane's context strip shows the session's spend once the host can price it —
+`$` amounts are the host's exact `Decimal` strings, and unpriced / partially priced /
+unknown / unavailable are each their own state, never `$0`. Month-to-date spend from the
+durable ledger appears in Inspection.
+
+**Per-domain availability** is reported by the `capabilities.list` cards, never by
+protocol negotiation: MCP needs the host's endpoint policy, Schedules needs a configured
+schedule runner, Workspace contexts need storage, Model default needs a configured
+provider model, and the monthly Cost figure needs a USD ledger. An unconfigured domain
+answers *unavailable with a reason*; nothing is forced on, and nothing renders as an
+empty success.
+
+**Public-safety posture.** Every projection is a field-by-field allowlist: no MCP
+endpoint URL, header, token, credential, `owner_id`, raw `problem` text, or filesystem
+path ever reaches the renderer. Desktop is deliberately stricter than Web here — an MCP
+endpoint is write-only (it goes *in* on save and never comes back, so reopening a server
+leaves the endpoint field blank). Every durable mutation acquires the profile mutation
+lease under a **main-generated** mutation id (a renderer-supplied id never reaches the
+sidecar) and a held lease refuses with a public busy reason rather than queueing.
+
+**Adding a sidecar method touches six registries in one change** — miss any and either a
+test or the packaged handshake fails closed: `_DESKTOP_METHOD_NAMES` in
+`sidecar/bridge.py`, the two hardcoded exact-equality lists in
+`tests/integration/test_desktop_sidecar.py`, and the `REQUIRED_METHODS` allowlist in
+`electron/sidecar-rpc.ts` plus its two test copies (`electron/__tests__/helpers.ts`,
+`src/__tests__/sidecar-rpc.test.ts`) — the client validates the handshake's announced
+methods by exact membership and refuses the runtime as incompatible on any mismatch.
+
+Two capabilities are deliberately absent pending maintainer decisions (see
+`specs/083-desktop-capability-parity/plan.md`): per-session **model selection**, because
+a single-adapter host cannot honor it (`ModelRequest` carries no model id — the
+selection would change the label, not the model), and composer **host commands**
+(`/cost`, `/model`, …), because `CommandRegistry` lives in `loopplane.commands`, outside
+the sidecar boundary allow-list.
+
 ## Profiles and workspaces
 
 Projects group sessions; workspaces are explicit user-chosen directories bound through the

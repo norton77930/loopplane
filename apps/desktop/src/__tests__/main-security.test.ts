@@ -273,6 +273,214 @@ describe("typed IPC handlers", () => {
       subscription_id: "sub1",
     });
   });
+
+  it("rejects untrusted senders on cost.get and forwards session_id", async () => {
+    const handlers = new Map<
+      string,
+      (event: IpcEventLike, ...args: unknown[]) => unknown | Promise<unknown>
+    >();
+    const ipcMain = {
+      handle(channel: string, listener: (event: IpcEventLike, ...args: unknown[]) => unknown | Promise<unknown>) {
+        handlers.set(channel, listener);
+      },
+      removeHandler(channel: string) {
+        handlers.delete(channel);
+      },
+    };
+
+    const child = createChildProcessDouble();
+    const rpc = new SidecarRpcClient({ child });
+    const startP = rpc.start();
+    await Promise.resolve();
+    const initReq = JSON.parse(child.written[0]!.trim()) as { id: string };
+    child.emitStdout(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: initReq.id,
+        result: desktopInitializeResult(),
+      }),
+    );
+    await startP;
+
+    registerDesktopIpcHandlers({ ...TRUSTED_HANDLER_OPTIONS, ipcMain, rpc });
+
+    const evilSender = createIpcSenderFrom(
+      createWebContentsDouble({ url: "https://evil.example" }),
+    );
+    await expect(
+      handlers.get(IPC.costGet)!(evilSender, { sessionId: "s-1" }),
+    ).rejects.toThrow(/untrusted/i);
+
+    const goodSender = createIpcSenderFrom(
+      createWebContentsDouble({ url: "file:///app/dist/index.html" }),
+    );
+    const costP = handlers.get(IPC.costGet)!(goodSender, { sessionId: "s-1" });
+    await Promise.resolve();
+    const last = JSON.parse(child.written[child.written.length - 1]!.trim()) as {
+      id: string;
+      method: string;
+      params: { session_id: string | null };
+    };
+    expect(last.method).toBe("cost.get");
+    expect(last.params.session_id).toBe("s-1");
+    child.emitStdout(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: last.id,
+        result: {
+          session: { status: "unavailable", usd: null },
+          monthly: { status: "unavailable", usd: null },
+        },
+      }),
+    );
+    await expect(costP).resolves.toEqual({
+      session: { status: "unavailable", usd: null },
+      monthly: { status: "unavailable", usd: null },
+    });
+  });
+});
+
+describe("capability management IPC (083 Wave 4)", () => {
+  const CAPABILITY_CHANNELS = [
+    IPC.capabilityMcpList,
+    IPC.capabilityMcpGet,
+    IPC.capabilityMcpUpsert,
+    IPC.capabilityMcpReconnect,
+    IPC.capabilityMcpDelete,
+    IPC.capabilitySkillList,
+    IPC.capabilitySkillGet,
+    IPC.capabilitySkillWrite,
+    IPC.capabilitySkillImport,
+    IPC.capabilitySkillDelete,
+    IPC.capabilityMemoryList,
+    IPC.capabilityMemoryGet,
+    IPC.capabilityMemoryWrite,
+    IPC.capabilityMemoryDelete,
+  ] as const;
+
+  function registerHandlers(rpc: SidecarRpcClient) {
+    const handlers = new Map<
+      string,
+      (event: IpcEventLike, ...args: unknown[]) => unknown | Promise<unknown>
+    >();
+    const ipcMain = {
+      handle(
+        channel: string,
+        listener: (
+          event: IpcEventLike,
+          ...args: unknown[]
+        ) => unknown | Promise<unknown>,
+      ) {
+        handlers.set(channel, listener);
+      },
+      removeHandler(channel: string) {
+        handlers.delete(channel);
+      },
+    };
+    registerDesktopIpcHandlers({ ...TRUSTED_HANDLER_OPTIONS, ipcMain, rpc });
+    return handlers;
+  }
+
+  const untrustedSender = () =>
+    createIpcSenderFrom(createWebContentsDouble({ url: "https://evil.example" }));
+
+  it.each(CAPABILITY_CHANNELS)(
+    "rejects an untrusted sender on %s",
+    async (channel) => {
+      // The guard throws before the sidecar client is ever touched, so an
+      // unstarted client is enough — reaching it would be the defect.
+      const handlers = registerHandlers(
+        new SidecarRpcClient({ child: createChildProcessDouble() }),
+      );
+      await expect(
+        handlers.get(channel)!(untrustedSender(), {}),
+      ).rejects.toThrow(/untrusted/i);
+    },
+  );
+
+  const GOVERNANCE_CHANNELS = [
+    IPC.governanceScheduleList,
+    IPC.governanceScheduleGet,
+    IPC.governanceScheduleUpsert,
+    IPC.governanceScheduleEnable,
+    IPC.governanceScheduleDisable,
+    IPC.governanceScheduleRunNow,
+    IPC.governanceScheduleDelete,
+    IPC.governanceContextList,
+    IPC.governanceContextGet,
+    IPC.governanceContextUpsert,
+    IPC.governanceContextBind,
+    IPC.governanceContextDelete,
+    IPC.governanceModelDefaultGet,
+    IPC.governanceModelDefaultSet,
+    IPC.governanceModelDefaultClear,
+  ] as const;
+
+  it.each(GOVERNANCE_CHANNELS)(
+    "rejects an untrusted sender on %s",
+    async (channel) => {
+      const handlers = registerHandlers(
+        new SidecarRpcClient({ child: createChildProcessDouble() }),
+      );
+      await expect(
+        handlers.get(channel)!(untrustedSender(), {}),
+      ).rejects.toThrow(/untrusted/i);
+    },
+  );
+
+  it("rejects an untrusted sender on the command channel (ADR 0017)", async () => {
+    const handlers = registerHandlers(
+      new SidecarRpcClient({ child: createChildProcessDouble() }),
+    );
+    await expect(
+      handlers.get(IPC.commandExecute)!(untrustedSender(), { text: "/cost" }),
+    ).rejects.toThrow(/untrusted/i);
+  });
+
+  it("stamps a main-generated mutation id and drops renderer-supplied ids", async () => {
+    const child = createChildProcessDouble();
+    const rpc = new SidecarRpcClient({ child });
+    const startP = rpc.start();
+    await Promise.resolve();
+    const initReq = JSON.parse(child.written[0]!.trim()) as { id: string };
+    child.emitStdout(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: initReq.id,
+        result: desktopInitializeResult(),
+      }),
+    );
+    await startP;
+    const handlers = registerHandlers(rpc);
+
+    const goodSender = createIpcSenderFrom(
+      createWebContentsDouble({ url: "file:///app/dist/index.html" }),
+    );
+    const upsertP = handlers.get(IPC.capabilityMcpUpsert)!(goodSender, {
+      name: "srv",
+      transport: "http",
+      url: "https://mcp.example",
+      mutationId: "renderer-mut-1",
+      mutation_id: "renderer-mut-2",
+    });
+    await Promise.resolve();
+    const last = JSON.parse(child.written[child.written.length - 1]!.trim()) as {
+      id: string;
+      method: string;
+      params: Record<string, unknown>;
+    };
+    expect(last.method).toBe("mcp.upsert");
+    expect(String(last.params.mutation_id)).toMatch(/^mut-/);
+    expect(JSON.stringify(last.params)).not.toContain("renderer-mut");
+    child.emitStdout(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: last.id,
+        result: { ok: true, message: "saved" },
+      }),
+    );
+    await expect(upsertP).resolves.toEqual({ ok: true, message: "saved" });
+  });
 });
 
 describe("provider settings IPC", () => {
@@ -281,6 +489,7 @@ describe("provider settings IPC", () => {
     IPC.providersSave,
     IPC.providersClear,
     IPC.providersRestart,
+    IPC.providersCatalog,
   ] as const;
 
   function registerWithVault(vault?: ProviderVaultPort) {
@@ -345,6 +554,39 @@ describe("provider settings IPC", () => {
       keyHint: "…4f2a",
     });
     expect(JSON.stringify(view)).not.toContain(FAKE_KEY);
+  });
+
+  it("answers catalog with the configured id appended as current and no key material", async () => {
+    const handlers = registerWithVault(stubVault());
+
+    const entries = (await handlers.get(IPC.providersCatalog)!(trusted())) as {
+      provider: string;
+      models: { id: string; current: boolean }[];
+    }[];
+
+    const anthropic = entries.find((e) => e.provider === "anthropic")!;
+    // "claude-x" is not curated, so it arrives appended and marked current.
+    expect(anthropic.models.filter((m) => m.current)).toEqual([
+      { id: "claude-x", current: true },
+    ]);
+    const serialized = JSON.stringify(entries);
+    expect(serialized).not.toContain(FAKE_KEY);
+    expect(serialized).not.toContain("4f2a");
+    expect(serialized).not.toContain("keyHint");
+  });
+
+  it("answers catalog with unmarked curated lists when no vault is available", async () => {
+    const handlers = registerWithVault(undefined);
+
+    const entries = (await handlers.get(IPC.providersCatalog)!(trusted())) as {
+      provider: string;
+      models: { id: string; current: boolean }[];
+    }[];
+
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      expect(entry.models.every((m) => !m.current)).toBe(true);
+    }
   });
 
   it("passes a validated save through to the vault", async () => {

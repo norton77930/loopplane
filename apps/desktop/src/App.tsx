@@ -3,7 +3,7 @@
  */
 
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   claimLease,
@@ -11,6 +11,12 @@ import {
   CoworkShell,
   CapabilitySettingsView,
   AgentControlsSettings,
+  McpSettings,
+  MemorySettings,
+  ModelDefaultSettings,
+  ScheduleSettings,
+  SkillSettings,
+  WorkspaceSettings,
   createEmptyWorkspace,
   focusPane,
   getFocusedPane,
@@ -30,6 +36,14 @@ import {
   type PresentationInspection,
 } from "@loopplane/cowork-presentation";
 import { createDesktopPresentationHost } from "./presentation-host";
+import {
+  createMcpSettingsService,
+  createMemorySettingsService,
+  createModelDefaultSettingsService,
+  createScheduleSettingsService,
+  createSkillSettingsService,
+  createWorkspaceSettingsService,
+} from "./services/capability-services";
 import { ApprovalDialog } from "@web/components/ApprovalDialog";
 import { MessageList } from "@web/components/MessageList";
 import { QuestionDialog } from "@web/components/QuestionDialog";
@@ -68,6 +82,72 @@ const NO_WORKSPACE_EXAMPLE_KEYS = [
   "example.listTools",
   "example.whenEdit",
 ] as const;
+
+/**
+ * 083 Wave 6 (ADR 0017): the composer's slash-command hint. Must stay in sync
+ * with `default_registry()` in `src/loopplane/commands` — the registry is the
+ * authority; this list only renders the hint.
+ */
+const COMMAND_NAMES = ["/cost", "/model", "/memory", "/compact"] as const;
+
+/**
+ * 083 Wave 1: session + month-to-date spend, projected by the sidecar with the
+ * distinction carried in the data (`status`), never reconstructed here. `usd`
+ * is the host's exact Decimal string — rendered verbatim, never reformatted.
+ */
+export type CostPart = {
+  status:
+    | "priced"
+    | "partially_unpriced"
+    | "unpriced"
+    | "unknown"
+    | "unavailable"
+    | "available";
+  usd: string | null;
+};
+
+const COST_STATUSES = new Set([
+  "priced",
+  "partially_unpriced",
+  "unpriced",
+  "unknown",
+  "unavailable",
+  "available",
+]);
+
+export function narrowCostPart(value: unknown): CostPart | null {
+  if (!value || typeof value !== "object") return null;
+  const status = (value as { status?: unknown }).status;
+  const usd = (value as { usd?: unknown }).usd;
+  if (typeof status !== "string" || !COST_STATUSES.has(status)) return null;
+  return {
+    status: status as CostPart["status"],
+    usd: typeof usd === "string" ? usd : null,
+  };
+}
+
+/** Absence is its own state — an unpriced or unknown figure never renders as $0. */
+export function sessionCostStripText(
+  part: CostPart,
+  t: (key: string) => string,
+): string {
+  if (part.usd !== null && part.status === "priced") return `$${part.usd}`;
+  if (part.usd !== null && part.status === "partially_unpriced")
+    return `$${part.usd} (${t("cost.partial")})`;
+  if (part.status === "unpriced") return t("cost.unpriced");
+  if (part.status === "unknown") return t("cost.unknown");
+  return t("cost.unavailable");
+}
+
+export function monthlyCostLineText(
+  part: CostPart | null,
+  t: (key: string) => string,
+): string | null {
+  if (!part) return null;
+  if (part.status === "available" && part.usd !== null)
+    return `${t("cost.monthly")}: $${part.usd}`;
+  return t("cost.monthlyUnavailable");
+}
 
 export type DesktopShellPhase =
   | "ready"
@@ -114,6 +194,8 @@ export function App({
   const [inspection, setInspection] = useState<PresentationInspection | null>(null);
   const [agentControls, setAgentControls] = useState<PresentationAgentControls | null>(null);
   const [capabilities, setCapabilities] = useState<PresentationCapability[] | null>(null);
+  const [sessionCost, setSessionCost] = useState<CostPart | null>(null);
+  const [monthlyCost, setMonthlyCost] = useState<CostPart | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsTabId, setSettingsTabId] = useState("capabilities");
   const [providerView, setProviderView] = useState<ProviderView | null>(null);
@@ -322,6 +404,37 @@ export function App({
       cancelled = true;
     };
   }, [activeSessionId]);
+
+  // 083 Wave 1: cost projection, refetched on session switch and after each
+  // run outcome (`outcomeLabel` changes when a run settles).
+  useEffect(() => {
+    const api = window.loopplaneDesktop;
+    if (!api?.cost || !activeSessionId) {
+      setSessionCost(null);
+      setMonthlyCost(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const raw = (await api.cost.get(activeSessionId)) as {
+          session?: unknown;
+          monthly?: unknown;
+        } | null;
+        if (cancelled || !mounted.current) return;
+        setSessionCost(narrowCostPart(raw?.session));
+        setMonthlyCost(narrowCostPart(raw?.monthly));
+      } catch {
+        if (!cancelled && mounted.current) {
+          setSessionCost(null);
+          setMonthlyCost(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, outcomeLabel]);
 
   useEffect(() => {
     const host = presentationHost.current;
@@ -538,6 +651,8 @@ export function App({
       return result;
     },
     restart: async () => window.loopplaneDesktop!.providers.restart(),
+    catalog: async () =>
+      (await window.loopplaneDesktop?.providers?.catalog()) ?? [],
   };
 
   const leftSidebar = (
@@ -618,19 +733,94 @@ export function App({
     }
   })();
 
+  // 083 Wave 4: sidecar-backed service adapters for the shared settings
+  // panels. The preload facade is frozen at injection, so its identity is a
+  // stable memo dependency.
+  const capabilityBridge = window.loopplaneDesktop?.capabilityManagement ?? null;
+  const mcpService = useMemo(
+    () => (capabilityBridge ? createMcpSettingsService(capabilityBridge) : null),
+    [capabilityBridge],
+  );
+  const skillService = useMemo(
+    () => (capabilityBridge ? createSkillSettingsService(capabilityBridge) : null),
+    [capabilityBridge],
+  );
+  const memoryService = useMemo(
+    () =>
+      capabilityBridge ? createMemorySettingsService(capabilityBridge) : null,
+    [capabilityBridge],
+  );
+  const governanceBridge = window.loopplaneDesktop?.governance ?? null;
+  const scheduleService = useMemo(
+    () =>
+      governanceBridge ? createScheduleSettingsService(governanceBridge) : null,
+    [governanceBridge],
+  );
+  const workspaceContextService = useMemo(
+    () =>
+      governanceBridge
+        ? createWorkspaceSettingsService(governanceBridge)
+        : null,
+    [governanceBridge],
+  );
+  const modelDefaultService = useMemo(
+    () =>
+      governanceBridge
+        ? createModelDefaultSettingsService(governanceBridge)
+        : null,
+    [governanceBridge],
+  );
+
+  const monthlyLine = monthlyCostLineText(monthlyCost, t);
+
   /** The prompt a "regenerate" would resend; null when there is nothing to. */
   const lastUserPrompt =
     [...state.entries].reverse().find((entry) => entry.kind === "user")?.text ??
     null;
 
+  // 083 Wave 6 (ADR 0017): a leading "/" is answered locally by the shared
+  // CommandRegistry over the sidecar — a user/assistant entry pair with no run,
+  // no model round-trip, no Gateway, no Event Bus. Anything else is a prompt,
+  // byte-identical to before.
+  async function runHostCommand(text: string): Promise<void> {
+    const api = window.loopplaneDesktop;
+    let answer = t("command.unavailable");
+    try {
+      if (api?.command) {
+        const raw = (await api.command.execute(text, activeSessionId)) as {
+          text?: unknown;
+        } | null;
+        if (raw && typeof raw.text === "string") answer = raw.text;
+      }
+    } catch {
+      // The fixed public fallback above already covers a failed invoke.
+    }
+    setState((current) => ({
+      ...current,
+      entries: [
+        ...current.entries,
+        { kind: "user", text },
+        { kind: "assistant", text: answer },
+      ],
+    }));
+  }
+
+  function dispatchInput(text: string): void {
+    if (text.trim().startsWith("/")) {
+      void runHostCommand(text.trim());
+      return;
+    }
+    void send(text);
+  }
+
   function regenerate(): void {
     if (!lastUserPrompt || blocked || !transport) return;
-    void send(lastUserPrompt);
+    dispatchInput(lastUserPrompt);
   }
 
   function submitPrompt(): void {
     if (blocked || !transport) return;
-    void send(input);
+    dispatchInput(input);
     setInput("");
     resetTextareaHeight(promptRef.current);
     transport?.clearDraft?.();
@@ -682,6 +872,15 @@ export function App({
               )}
               {permissionPosture && (
                 <span className="session-context-item">{permissionPosture}</span>
+              )}
+              {sessionCost && (
+                <span
+                  className="session-context-item"
+                  data-testid="session-cost"
+                  title={t("cost.sessionLabel")}
+                >
+                  {sessionCostStripText(sessionCost, t)}
+                </span>
               )}
             </span>
           )}
@@ -809,6 +1008,11 @@ export function App({
             submitPrompt();
           }}
         >
+          {input.trimStart().startsWith("/") && (
+            <p className="command-hint" role="status">
+              {t("command.hint")} {COMMAND_NAMES.join("  ")}
+            </p>
+          )}
           <textarea
             // `aria-label` is a fixed packaged-smoke locator, and the smoke fills
             // it through UI Automation's ValuePattern, which a textarea exposes
@@ -916,12 +1120,25 @@ export function App({
                   }
                 : undefined
             }
-            inspection={inspection}
+            inspection={
+              inspection && sessionCost
+                ? {
+                    ...inspection,
+                    cost: {
+                      status:
+                        sessionCost.status === "available"
+                          ? "unknown"
+                          : sessionCost.status,
+                    },
+                  }
+                : inspection
+            }
             agentControls={agentControls}
             capabilities={capabilities}
             lines={[
               ...(outcomeLabel ? [`Last outcome: ${outcomeLabel}`] : []),
               ...inspectLines,
+              ...(monthlyLine ? [monthlyLine] : []),
             ]}
           />
         }
@@ -964,6 +1181,12 @@ export function App({
               { id: "providers", label: t("provider.tab") },
               { id: "capabilities", label: "Capabilities" },
               { id: "agent-controls", label: "Agent controls" },
+              { id: "memory", label: t("settings.tab.memory") },
+              { id: "skills", label: t("settings.tab.skills") },
+              { id: "mcp", label: t("settings.tab.mcp") },
+              { id: "workspace", label: t("settings.tab.workspace") },
+              { id: "schedules", label: t("settings.tab.schedules") },
+              { id: "model-default", label: t("settings.tab.modelDefault") },
             ]}
             initialTabId={settingsTabId}
             capabilities={capabilities}
@@ -971,7 +1194,14 @@ export function App({
             onBack={() => setShowSettings(false)}
             renderTab={(tab) =>
               tab === "providers" ? (
-                <ProviderSettings port={providerSettingsPort} />
+                <ProviderSettings
+                  port={providerSettingsPort}
+                  runActive={
+                    phase === "running" ||
+                    phase === "starting" ||
+                    phase === "cancelling"
+                  }
+                />
               ) : tab === "agent-controls" ? (
                 <AgentControlsSettings
                   projection={null}
@@ -981,7 +1211,75 @@ export function App({
                   permissionModeDraft={permissionModeDraft}
                   onPermissionModeChange={setPermissionModeDraft}
                   onRefresh={() => undefined}
+                  sessionCost={
+                    sessionCost
+                      ? {
+                          usd_spent:
+                            sessionCost.status === "priced" ||
+                            sessionCost.status === "partially_unpriced"
+                              ? sessionCost.usd
+                              : null,
+                        }
+                      : null
+                  }
+                  monthlyCost={
+                    monthlyCost
+                      ? {
+                          usd_spent:
+                            monthlyCost.status === "available"
+                              ? monthlyCost.usd
+                              : null,
+                        }
+                      : null
+                  }
                 />
+              ) : tab === "memory" ? (
+                memoryService ? (
+                  <MemorySettings
+                    service={memoryService}
+                    canMutate
+                    searchable
+                  />
+                ) : (
+                  <p>{t("settings.statusUnavailable")}</p>
+                )
+              ) : tab === "skills" ? (
+                skillService ? (
+                  <SkillSettings service={skillService} canMutate />
+                ) : (
+                  <p>{t("settings.statusUnavailable")}</p>
+                )
+              ) : tab === "mcp" ? (
+                mcpService ? (
+                  <McpSettings service={mcpService} canMutate />
+                ) : (
+                  <p>{t("settings.statusUnavailable")}</p>
+                )
+              ) : tab === "workspace" ? (
+                workspaceContextService ? (
+                  <WorkspaceSettings
+                    service={workspaceContextService}
+                    canMutate
+                    sessionId={activeSessionId}
+                  />
+                ) : (
+                  <p>{t("settings.statusUnavailable")}</p>
+                )
+              ) : tab === "schedules" ? (
+                scheduleService ? (
+                  <ScheduleSettings service={scheduleService} canMutate />
+                ) : (
+                  <p>{t("settings.statusUnavailable")}</p>
+                )
+              ) : tab === "model-default" ? (
+                modelDefaultService ? (
+                  <ModelDefaultSettings
+                    service={modelDefaultService}
+                    canMutate
+                  />
+                ) : (
+                  <p>{t("settings.statusUnavailable")}</p>
+                )
               ) : (
                 <p>Capability availability is provided by the local host.</p>
               )

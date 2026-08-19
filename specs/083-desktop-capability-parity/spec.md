@@ -18,7 +18,7 @@ This unit closes that, and closes only that. Differences that exist because the 
 ### Session 2026-08-15
 
 - Q: Should Desktop match Web feature-for-feature? → A: No. Parity is scoped to capability management and cost visibility. Attachments, login, and multi-principal scoping are Web-shaped and are explicit non-goals.
-- Q: Does this need runtime work? → A: No. Every capability is already a public method on `LoopPlaneHost` (`list/write/get/delete_managed_memory`, `list/write/import/get/delete_managed_skill`, `list/get/upsert/delete_managed_mcp`, `list/upsert/get/delete_workspace_context`, `list/upsert/get/delete_managed_schedule`, `model_default`/`set_model_default`, `session_cost`, `monthly_spend`). The sidecar already holds a Host and is permitted to import `loopplane.host`.
+- Q: Does this need runtime work? → A: No. Every capability is already a public method on `LoopPlaneHost`; the authoritative name-by-name enumeration is the host-surface table in `plan.md` (Technical Context) — an earlier shorthand here drifted from the real names (the list methods are plural: `list_managed_skills`, `list_managed_schedules`, `list_workspace_contexts`). The sidecar already holds a Host and is permitted to import `loopplane.host`.
 - Q: Can Web's settings panels be reused directly? → A: Not as they stand. All six take `ApiClient` as a type dependency. `AgentControlsSettings` is the template for the fix: it accepts a narrow `service` interface and already lives in the shared package.
 
 ## User Scenarios & Testing *(mandatory)*
@@ -35,17 +35,19 @@ A person running Desktop against their own API key wants to know, without huntin
 3. Given a host with no pricing configured, then the surface says so explicitly and never renders an unpriced or unknown value as `$0`.
 4. Given a partially priced session, then partial and complete pricing are visually distinct.
 
-### User Story 2 - Choose a model without restarting (Priority: P1)
+### User Story 2 - Choose a model in one step (Priority: P1)
 
 A person wants a cheaper model for a routine question and a stronger one for a hard change, in the same sitting.
 
-**Why this priority**: Changing model is a daily action. Today it requires editing settings and relaunching the application, which makes the choice expensive enough that people stop making it.
+**Why this priority**: Changing model is a daily action. Today it requires hand-typing a model id in Settings and remembering to relaunch, which makes the choice expensive enough that people stop making it.
+
+**Maintainer decision (2026-08-19)**: a single-adapter host cannot honor a per-run selection — `ModelRequest` carries no model id, so a selection would change the label, not the model (see the Wave 2 verification note in plan.md). The story is re-scoped to a one-step, catalog-driven switch over the existing ADR 0016 provider path: confirming a model saves it (the stored key is reused) and relaunches the runtime automatically. True per-session switching is deferred to a future runtime unit (`ModelRequest.model`, additive).
 
 **Acceptance**:
-1. Given a configured provider, when the user opens the model selector, then the models that provider offers are listed with the current one marked.
-2. When the user selects a different model, then the next run uses it and no relaunch occurs.
-3. Given a run in flight, then the selector is unavailable rather than silently deferred.
-4. Given a model id the provider rejects, then the failure is a fixed public message and the previous selection remains in effect.
+1. Given a configured provider, when the user opens the model field, then a curated catalog of that provider's models is offered with the configured one current, and a free-form id remains possible.
+2. When the user confirms a switch to a different model, then the application saves it with the stored key and relaunches itself; after the relaunch the new model answers.
+3. Given a run in flight, then the one-step switch is unavailable rather than silently deferred.
+4. Given a model id the provider rejects, the failure surfaces as ADR 0016 already defines: saving does not verify, and the first reply carries the fixed public failure while Settings still allows correcting the id.
 
 ### User Story 3 - Decide what the agent can reach (Priority: P2)
 
@@ -65,9 +67,10 @@ A person wants to see and change which MCP servers, skills, and memory entries t
 A person wants schedules, workspace contexts, and the default model to be manageable from the application, matching what Web already offers.
 
 **Acceptance**:
-1. The user can list, create, inspect, and cancel managed schedules.
+1. The user can list, create, inspect, enable, disable, run now, and delete managed schedules — the verb set the Web panel already offers.
 2. The user can list, bind, inspect, and remove workspace contexts, and the current binding is shown.
 3. The user can set and clear the model default, chosen from the available catalog rather than typed freely.
+4. A mutation attempted while another durable mutation holds the profile lease is refused with a public busy reason, not queued.
 
 ### User Story 5 - Ask the host without spending a turn (Priority: P3)
 
@@ -83,7 +86,7 @@ A person wants `/cost`, `/model`, `/memory`, and `/compact` to work in the compo
 - A capability the host cannot provide (no ledger, no scheduler, no MCP configured) is reported as unavailable with its own reason, never as an empty success state.
 - A sidecar that answers `initialize` but whose host lacks a capability must not fail the handshake; capability status is answered per domain by `capabilities.list`.
 - A mutation that fails midway leaves the previous configuration in effect; no partial write is published.
-- A model selection made while offline is stored and applied on the next successful run rather than lost.
+- A model switch made while offline still saves and relaunches; saving does not verify (ADR 0016), so the new model simply answers once connectivity returns.
 - Restoring a portable backup does not carry provider credentials, so the model selector reports no provider until one is entered again.
 
 ## Requirements *(mandatory)*
@@ -94,16 +97,16 @@ A person wants `/cost`, `/model`, `/memory`, and `/compact` to work in the compo
 
 - **FR-001**: The conversation pane MUST show the current session's spend when the host can price it, and MUST distinguish "unpriced", "partially priced", and "unavailable" from zero.
 - **FR-002**: A cost detail surface MUST show the principal's month-to-date spend from the durable ledger when one is configured.
-- **FR-003**: The user MUST be able to select the model for the next run from the configured provider's catalog without relaunching the application.
-- **FR-004**: Model selection MUST be refused, with a public reason, while a run is in flight.
-- **FR-005**: A rejected model MUST leave the prior selection in effect and surface a fixed public message.
+- **FR-003**: The user MUST be able to switch the model in one step from a curated catalog of the configured provider's models (free-form input remains possible): the switch saves over the existing ADR 0016 provider path, reusing the stored key, and relaunches the runtime automatically. No `src/loopplane` change and no new sidecar method — the catalog is provider-settings data owned by Electron main.
+- **FR-004**: The one-step switch MUST be unavailable while a run is in flight.
+- **FR-005**: A model the provider rejects surfaces per ADR 0016 — saving does not verify; the first reply carries the fixed public failure and Settings allows correcting the id.
 
 #### Capability management
 
 - **FR-006**: The user MUST be able to list, inspect, add, and remove MCP server configurations.
 - **FR-007**: The user MUST be able to list, inspect, add, import, and remove managed skills.
-- **FR-008**: The user MUST be able to list, search, inspect, and remove managed memory entries.
-- **FR-009**: The user MUST be able to list, create, inspect, and cancel managed schedules.
+- **FR-008**: The user MUST be able to list, search, inspect, and remove managed memory entries; search is a client-side filter over the listed metadata — the host has no search method and none is added.
+- **FR-009**: The user MUST be able to list, create, inspect, enable, disable, run now, and delete managed schedules, matching the Web panel's verb set.
 - **FR-010**: The user MUST be able to list, bind, inspect, and remove workspace contexts, and see the current binding.
 - **FR-011**: The user MUST be able to set and clear the model default from the available catalog.
 - **FR-012**: Every capability domain MUST report its own availability through the existing `capabilities.list` projection rather than through protocol capability negotiation.
@@ -115,7 +118,7 @@ A person wants `/cost`, `/model`, `/memory`, and `/compact` to work in the compo
 
 #### Protocol, boundary, and safety
 
-- **FR-015**: New sidecar methods MUST be added to `_DESKTOP_METHOD_NAMES` and to the exact-equality method list in `tests/integration/test_desktop_sidecar.py` in the same change; the protocol major version and the `REQUESTED_CAPABILITIES` enumeration MUST NOT change.
+- **FR-015**: New sidecar methods MUST be added, in the same change, to `_DESKTOP_METHOD_NAMES` in `apps/desktop/sidecar/bridge.py`, to **both** hardcoded exact-equality method lists in `tests/integration/test_desktop_sidecar.py` (the packaged-handshake assertion and the in-process dispatcher assertion), and to the `REQUIRED_METHODS` exact-membership allowlist in `apps/desktop/electron/sidecar-rpc.ts` — the client refuses the runtime as incompatible when the announced method set differs from that list. The protocol major version and the `REQUESTED_CAPABILITIES` enumeration MUST NOT change.
 - **FR-016**: The sidecar MUST reach every capability through public `loopplane.host` methods only; it MUST NOT import a store, controller, gateway, or tool module, and MUST NOT execute a tool.
 - **FR-017**: Every durable mutation MUST acquire the profile mutation lease and MUST use a main-generated mutation id; a renderer-supplied id MUST be ignored.
 - **FR-018**: No MCP endpoint, credential, header, token, absolute path, raw exception, or PID may reach the renderer. Failures MUST map to the fixed public error catalogue.
@@ -148,7 +151,7 @@ A person wants `/cost`, `/model`, `/memory`, and `/compact` to work in the compo
 ### Measurable Outcomes
 
 - **SC-001**: A person can read the session's spend without opening a panel, and an unpriced host says so rather than showing `$0`.
-- **SC-002**: A person can change the model and see the next run use it, with no relaunch.
+- **SC-002**: A person can change the model in one confirmed step, and the first run after the automatic relaunch uses it.
 - **SC-003**: A person can add and remove an MCP server, a skill, and a memory entry entirely from the application.
 - **SC-004**: A public-safety scan over every new projection, error, and log finds no endpoint, credential, path, raw exception, or PID.
 - **SC-005**: The packaged smoke passes unchanged, with all seven locators resolving exactly once.

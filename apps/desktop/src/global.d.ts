@@ -136,6 +136,84 @@ export type LoopPlaneDesktopApi = {
     list(): Promise<unknown>;
     invokeAction(capabilityId: string, action: string): Promise<unknown>;
   };
+  cost: {
+    get(sessionId: string | null): Promise<unknown>;
+  };
+  capabilityManagement: {
+    mcp: {
+      list(): Promise<unknown>;
+      get(mcpId: string): Promise<unknown>;
+      upsert(input: {
+        name: string;
+        transport: string;
+        url: string;
+      }): Promise<unknown>;
+      reconnect(mcpId: string): Promise<unknown>;
+      remove(mcpId: string): Promise<unknown>;
+    };
+    skills: {
+      list(): Promise<unknown>;
+      get(skillId: string): Promise<unknown>;
+      write(input: {
+        name: string;
+        description: string;
+        instructions: string;
+      }): Promise<unknown>;
+      import(input: {
+        name: string;
+        description: string;
+        instructions: string;
+      }): Promise<unknown>;
+      remove(skillId: string): Promise<unknown>;
+    };
+    memory: {
+      list(): Promise<unknown>;
+      get(memoryId: string): Promise<unknown>;
+      write(input: {
+        name: string;
+        kind: string;
+        description: string;
+        content: string;
+      }): Promise<unknown>;
+      remove(memoryId: string): Promise<unknown>;
+    };
+  };
+  governance: {
+    schedules: {
+      list(): Promise<unknown>;
+      get(scheduleId: string): Promise<unknown>;
+      upsert(input: {
+        name: string;
+        description: string;
+        trigger: string;
+        instruction: string;
+        enabled: boolean;
+      }): Promise<unknown>;
+      enable(scheduleId: string): Promise<unknown>;
+      disable(scheduleId: string): Promise<unknown>;
+      runNow(scheduleId: string): Promise<unknown>;
+      remove(scheduleId: string): Promise<unknown>;
+    };
+    contexts: {
+      list(): Promise<unknown>;
+      get(contextId: string): Promise<unknown>;
+      upsert(input: {
+        name: string;
+        description: string;
+        workspace_label: string;
+      }): Promise<unknown>;
+      bind(sessionId: string, contextId: string): Promise<unknown>;
+      remove(contextId: string): Promise<unknown>;
+    };
+    modelDefault: {
+      get(): Promise<unknown>;
+      set(modelId: string): Promise<unknown>;
+      clear(): Promise<unknown>;
+    };
+  };
+  command: {
+    execute(text: string, sessionId: string | null): Promise<unknown>;
+  };
   audit: {
     list(
       sessionId: string,
@@ -164,6 +242,7 @@ export type LoopPlaneDesktopApi = {
     }): Promise<ProviderSaveResult>;
     clear(): Promise<{ ok: true }>;
     restart(): Promise<{ ok: true }>;
+    catalog(): Promise<ProviderCatalogEntry[]>;
   };
   interaction: {
     submit(
@@ -186,6 +265,15 @@ export type LoopPlaneDesktopApi = {
       handler: (event: unknown) => void,
     ): () => void;
   };
+};
+
+/** One curated model suggestion; `current` marks the configured id. */
+export type ProviderCatalogModel = { id: string; current: boolean };
+
+/** Curated models for one provider — a typing aid, never a gate. */
+export type ProviderCatalogEntry = {
+  provider: string;
+  models: ProviderCatalogModel[];
 };
 
 /** The renderer's view of the stored provider setting — never the key itself. */

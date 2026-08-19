@@ -77,11 +77,13 @@ class InspectionMethods:
         principal_id: str | None = None,
         principal_provider: Callable[[], str | None] | None = None,
         mutation_lease: ProfileMutationLease | None = None,
+        configured_model_id: str | None = None,
     ) -> None:
         self._host = host
         self._principal_id = principal_id
         self._principal_provider = principal_provider
         self._mutation_lease = mutation_lease
+        self._configured_model_id = configured_model_id
 
     def _principal(self) -> str | None:
         if self._principal_provider is not None:
@@ -181,7 +183,30 @@ class InspectionMethods:
             status_pub = _public(status)
         except Exception:
             status_pub = {}
-        # Map Host settings status into safe capability cards.
+        # 083: the durable cost domain (monthly ledger) is host configuration;
+        # session spend is reported in-band by cost.get regardless of this card.
+        ledger_available = False
+        principal_id = self._principal()
+        if principal_id is not None:
+            try:
+                ledger_available = self._host.monthly_spend(principal_id) is not None
+            except Exception:
+                ledger_available = False
+        # Map Host settings status into safe capability cards. MCP management
+        # needs the host's endpoint policy (CapabilitySettingsStatus has no
+        # "mcp_available" field — reading one made this card permanently off).
+        mcp_available = bool(
+            isinstance(status_pub, dict)
+            and status_pub.get("mcp_endpoint_policy_available", False)
+        )
+        schedule_runner = bool(
+            isinstance(status_pub, dict)
+            and status_pub.get("schedule_runner_available", False)
+        )
+        storage_available = bool(
+            isinstance(status_pub, dict) and status_pub.get("storage_available", False)
+        )
+        model_default_available = bool(self._configured_model_id)
         capabilities = [
             {
                 "id": "memory",
@@ -189,6 +214,7 @@ class InspectionMethods:
                 "available": True,
                 "actions": ["refresh"],
                 "status": "available",
+                "reason": None,
             },
             {
                 "id": "skills",
@@ -196,16 +222,15 @@ class InspectionMethods:
                 "available": True,
                 "actions": ["refresh"],
                 "status": "available",
+                "reason": None,
             },
             {
                 "id": "mcp",
                 "label": "MCP",
-                "available": bool(
-                    isinstance(status_pub, dict)
-                    and status_pub.get("mcp_available", False)
-                ),
+                "available": mcp_available,
                 "actions": [],
-                "status": "unavailable",
+                "status": "available" if mcp_available else "unavailable",
+                "reason": None if mcp_available else "capability.unavailable",
             },
             {
                 "id": "agent_controls",
@@ -213,6 +238,7 @@ class InspectionMethods:
                 "available": True,
                 "actions": [],
                 "status": "available",
+                "reason": None,
             },
             {
                 "id": "inspection",
@@ -220,6 +246,39 @@ class InspectionMethods:
                 "available": True,
                 "actions": ["refresh"],
                 "status": "available",
+                "reason": None,
+            },
+            {
+                "id": "schedules",
+                "label": "Schedules",
+                "available": schedule_runner,
+                "actions": [],
+                "status": "available" if schedule_runner else "unavailable",
+                "reason": None if schedule_runner else "capability.unavailable",
+            },
+            {
+                "id": "contexts",
+                "label": "Workspace contexts",
+                "available": storage_available,
+                "actions": [],
+                "status": "available" if storage_available else "unavailable",
+                "reason": None if storage_available else "capability.unavailable",
+            },
+            {
+                "id": "model_default",
+                "label": "Model default",
+                "available": model_default_available,
+                "actions": [],
+                "status": "available" if model_default_available else "unavailable",
+                "reason": None if model_default_available else "capability.unavailable",
+            },
+            {
+                "id": "cost",
+                "label": "Cost",
+                "available": ledger_available,
+                "actions": [],
+                "status": "available" if ledger_available else "unavailable",
+                "reason": None if ledger_available else "cost.monthly_unavailable",
             },
         ]
         return {"capabilities": capabilities}

@@ -150,12 +150,31 @@ def test_entrypoint_negotiates_before_profile_bootstrap(tmp_path: Path) -> None:
         "backup.describe",
         "capabilities.invokeAction",
         "capabilities.list",
+        "command.execute",
+        "context.bind",
+        "context.delete",
+        "context.get",
+        "context.list",
+        "context.upsert",
+        "cost.get",
         "initialize",
         "inspection.get",
         "interaction.answerApproval",
         "interaction.answerQuestion",
         "interaction.cancel",
         "interaction.submit",
+        "mcp.delete",
+        "mcp.get",
+        "mcp.list",
+        "mcp.reconnect",
+        "mcp.upsert",
+        "memory.delete",
+        "memory.get",
+        "memory.list",
+        "memory.write",
+        "modelDefault.clear",
+        "modelDefault.get",
+        "modelDefault.set",
         "project.assignSession",
         "project.create",
         "project.list",
@@ -164,6 +183,13 @@ def test_entrypoint_negotiates_before_profile_bootstrap(tmp_path: Path) -> None:
         "restore.cancel",
         "restore.commit",
         "restore.validate",
+        "schedule.delete",
+        "schedule.disable",
+        "schedule.enable",
+        "schedule.get",
+        "schedule.list",
+        "schedule.runNow",
+        "schedule.upsert",
         "session.createInteractive",
         "session.delete",
         "session.fork",
@@ -173,6 +199,11 @@ def test_entrypoint_negotiates_before_profile_bootstrap(tmp_path: Path) -> None:
         "session.rename",
         "session.resumeInteractive",
         "session.setStarred",
+        "skill.delete",
+        "skill.get",
+        "skill.import",
+        "skill.list",
+        "skill.write",
         "system.shutdown",
         "system.status",
         "workspace.bind",
@@ -282,12 +313,31 @@ async def test_rpc_session_list_star_and_project_workspace(tmp_path: Path) -> No
         "backup.describe",
         "capabilities.invokeAction",
         "capabilities.list",
+        "command.execute",
+        "context.bind",
+        "context.delete",
+        "context.get",
+        "context.list",
+        "context.upsert",
+        "cost.get",
         "initialize",
         "inspection.get",
         "interaction.answerApproval",
         "interaction.answerQuestion",
         "interaction.cancel",
         "interaction.submit",
+        "mcp.delete",
+        "mcp.get",
+        "mcp.list",
+        "mcp.reconnect",
+        "mcp.upsert",
+        "memory.delete",
+        "memory.get",
+        "memory.list",
+        "memory.write",
+        "modelDefault.clear",
+        "modelDefault.get",
+        "modelDefault.set",
         "project.assignSession",
         "project.create",
         "project.list",
@@ -296,6 +346,13 @@ async def test_rpc_session_list_star_and_project_workspace(tmp_path: Path) -> No
         "restore.cancel",
         "restore.commit",
         "restore.validate",
+        "schedule.delete",
+        "schedule.disable",
+        "schedule.enable",
+        "schedule.get",
+        "schedule.list",
+        "schedule.runNow",
+        "schedule.upsert",
         "session.createInteractive",
         "session.delete",
         "session.fork",
@@ -305,6 +362,11 @@ async def test_rpc_session_list_star_and_project_workspace(tmp_path: Path) -> No
         "session.rename",
         "session.resumeInteractive",
         "session.setStarred",
+        "skill.delete",
+        "skill.get",
+        "skill.import",
+        "skill.list",
+        "skill.write",
         "system.shutdown",
         "system.status",
         "workspace.bind",
@@ -386,6 +448,30 @@ async def test_rpc_session_list_star_and_project_workspace(tmp_path: Path) -> No
     )
     listed2 = await _rpc_call(dispatcher, 10, "session.list", {})
     assert any(s["session_id"] == sid for s in listed2["result"]["sessions"])
+
+    # 083: cost projection answers with explicit absence on an unconfigured host
+    cost = await _rpc_call(dispatcher, 11, "cost.get", {"session_id": sid})
+    assert cost["result"]["session"]["status"] in {
+        "priced",
+        "partially_unpriced",
+        "unpriced",
+        "unknown",
+        "unavailable",
+    }
+    session_usd = cost["result"]["session"]["usd"]
+    assert session_usd is None or isinstance(session_usd, str)
+    assert cost["result"]["monthly"] == {"status": "unavailable", "usd": None}
+    caps = await _rpc_call(dispatcher, 12, "capabilities.list", {})
+    assert any(
+        c["id"] == "cost" and c["available"] is False
+        for c in caps["result"]["capabilities"]
+    )
+
+    # 083 Wave 4: capability management binds through the composed dispatcher.
+    mcp = await _rpc_call(dispatcher, 13, "mcp.list", {})
+    assert mcp["result"]["items"] == []
+    skills = await _rpc_call(dispatcher, 14, "skill.list", {})
+    assert skills["result"]["items"] == []
     await host.aclose()
 
 

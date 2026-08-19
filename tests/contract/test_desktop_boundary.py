@@ -35,6 +35,11 @@ RUNTIME_ALLOWED_PREFIXES: tuple[str, ...] = (
     # off this list, which left a real edge invisible to the scan; naming the
     # prefix keeps the rule a description of the system (constitution VII/VIII).
     "loopplane.adapters",
+    # Backend slash commands (ADR 0017): the sidecar is the CommandRegistry's
+    # third host-UX consumer beside the CLI and the web/API host. Its handlers
+    # call only public host seams; commands are host UX, never tools, so
+    # Gateway-only execution is untouched.
+    "loopplane.commands",
 )
 
 # TYPE_CHECKING-only extras (keep empty for now; host/events cover typing).
