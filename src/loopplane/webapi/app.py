@@ -190,6 +190,9 @@ def create_app(
     live_tickets = LiveTicketStore()
     catalog = dict(models or {})
     command_registry = default_registry()  # 065: backend slash commands
+    # 079: which commands read one conversation, declared by the registry itself
+    # so this gate cannot drift from the command set (see POST /commands).
+    session_scoped_commands = command_registry.session_scoped_names()
 
     def _select(model: str | None) -> tuple[LoopPlaneHost, bool, bool]:
         # Route to the chosen single-model host (028); one model per run. Returns
@@ -874,11 +877,19 @@ def create_app(
         body: CommandRequest, principal: Principal = Depends(require)
     ) -> CommandResultView:
         # 065: dispatch a backend slash command against EXISTING host seams (never
-        # the gateway/event bus). Session-scoped commands (/cost, /compact) require
-        # ownership; the result is public-safe (the caller's own data only).
+        # the gateway/event bus). Session-scoped commands require ownership; the
+        # result is public-safe (the caller's own data only).
+        #
+        # 079: this used to be a hardcoded ("cost", "compact") list, and adding a
+        # session-scoped command to the shared registry silently made it reachable
+        # here WITHOUT a gate — a cross-principal disclosure. The registry now
+        # declares which commands are session-scoped, so the gate cannot fall out
+        # of step with the command set. The handlers filter by principal as well,
+        # so a host that skips this gate degrades to "not found" rather than
+        # leaking; this remains the authoritative check.
         line = body.command if body.command.startswith("/") else f"/{body.command}"
         name = line[1:].strip().split(" ", 1)[0].lower()
-        if name in ("cost", "compact"):
+        if name in session_scoped_commands:
             if body.session_id is None:
                 raise HTTPException(status_code=400, detail="session_id required")
             _owned_or_404(body.session_id, principal)

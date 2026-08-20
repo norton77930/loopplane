@@ -13,9 +13,11 @@ from __future__ import annotations
 import sys
 
 from loopplane.cli.app import build_host, dispatch, make_parser
+from loopplane.cli.prompts import LineSource, parse_approval_answer, question_answer
 from loopplane.cli.providers import DemoModel, select_model
+from loopplane.cli.remote import RemoteEndpoint, remote_loop
 from loopplane.cli.render import EventRenderer
-from loopplane.cli.session import chat_loop, run_once
+from loopplane.cli.session import chat_loop, resume_loop, run_once
 
 
 def main() -> None:
@@ -26,11 +28,17 @@ def main() -> None:
 __all__ = [
     "DemoModel",
     "EventRenderer",
+    "LineSource",
+    "RemoteEndpoint",
     "build_host",
     "chat_loop",
     "dispatch",
     "main",
     "make_parser",
+    "parse_approval_answer",
+    "question_answer",
+    "remote_loop",
+    "resume_loop",
     "run_once",
     "select_model",
 ]

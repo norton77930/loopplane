@@ -1,4 +1,5 @@
-"""The CLI parser and command dispatch (spec FR-001-FR-003, FR-007, FR-011, FR-012).
+"""The CLI parser and command dispatch (spec FR-001-FR-003, FR-007, FR-011,
+FR-012; spec 079 US1, US3, US6).
 
 ``dispatch`` parses argv, builds a host over the public Host Application Interface,
 and runs the selected command via ``anyio.run``. The CLI executes no tool and
@@ -17,8 +18,14 @@ from typing import TextIO
 import anyio
 
 from loopplane.cli.providers import select_model
-from loopplane.cli.session import chat_loop, run_once
+from loopplane.cli.remote import RemoteEndpoint, remote_loop
+from loopplane.cli.session import chat_loop, resume_loop, run_once
 from loopplane.host import LoopPlaneHost, RuntimeConfig, StorageConfig
+
+TOKEN_ENV = "LOOPPLANE_TOKEN"
+
+_REMOTE_USAGE = f"remote needs --url and a credential (--token or {TOKEN_ENV})\n"
+_RESUME_FAILED = "could not resume (use --store and a valid session id)\n"
 
 
 def build_host(store: str | None = None) -> LoopPlaneHost:
@@ -39,11 +46,23 @@ def make_parser() -> argparse.ArgumentParser:
     sub.add_parser("sessions", help="list durable sessions")
     resume_parser = sub.add_parser("resume", help="resume a durable session")
     resume_parser.add_argument("session_id", help="the session to resume")
+    remote_parser = sub.add_parser("remote", help="drive an agent on a remote server")
+    remote_parser.add_argument("--url", help="the remote server root")
+    remote_parser.add_argument(
+        "--token", help=f"the credential (defaults to ${TOKEN_ENV})"
+    )
+    remote_parser.add_argument("--session", help="attach to an existing conversation")
     return parser
 
 
 def _stdin_lines(out: TextIO) -> Iterator[str]:
-    """Prompt-and-read real stdin lines; EOF / Ctrl-C end cleanly (FR-011)."""
+    """Prompt-and-read real stdin lines (FR-011).
+
+    Interrupting here — at an idle prompt — ends the conversation, which is what
+    it has always meant. Interrupting *during* a turn is a different thing
+    entirely: the interactive loop catches that one and cancels only the turn
+    (spec 079 FR-010, FR-013).
+    """
     while True:
         out.write("> ")
         out.flush()
@@ -71,13 +90,21 @@ async def _run(args: argparse.Namespace, out: TextIO) -> int:
     if args.command == "resume":
         host = build_host(args.store)
         try:
-            await host.resume(args.session_id)
+            await resume_loop(host, args.session_id, _stdin_lines(out), out)
         except (KeyError, RuntimeError):
-            out.write("could not resume (use --store and a valid session id)\n")
+            out.write(_RESUME_FAILED)
             return 1
-        entries = host.history_snapshot(args.session_id)
-        out.write(f"resumed {args.session_id} ({len(entries)} history entries)\n")
         return 0
+    if args.command == "remote":
+        token = args.token or os.environ.get(TOKEN_ENV)
+        if not args.url or not token:
+            # Never echo what was supplied — only that something is missing.
+            out.write(_REMOTE_USAGE)
+            return 2
+        endpoint = RemoteEndpoint(
+            base_url=args.url, token=token, session_id=args.session
+        )
+        return await remote_loop(endpoint, _stdin_lines(out), out)
     return 2
 
 
@@ -88,4 +115,12 @@ def dispatch(argv: Sequence[str], out: TextIO | None = None) -> int:
     if args.command is None:
         make_parser().print_help(stream)
         return 2
-    return anyio.run(_run, args, stream)
+    try:
+        return anyio.run(_run, args, stream)
+    except KeyboardInterrupt:
+        # Ctrl-C at an idle prompt. The interactive loop installs its own
+        # handler only while a turn is running, so this window belongs to the
+        # runtime's handling — which cancels the task and re-raises here. End
+        # the way this command always has: a newline, and a clean exit.
+        stream.write("\n")
+        return 0

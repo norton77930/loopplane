@@ -712,30 +712,59 @@ servers, and hooks for the existing seams. Inert by default.
 - `PluginInfo` — a read-only, metadata-only plugin listing entry.
 - `list_plugins` — a public-safe listing of discovered plugins.
 
-### `loopplane.cli` (unit 017)
+### `loopplane.cli` (units 017, 079)
 
 A thin terminal host over `loopplane.host`: the `loopplane` console command and its
-testable, credential-free core.
+testable, credential-free core. Unit 079 makes the interactive path hold ONE
+conversation (approvals, questions, and a mid-turn interrupt included) and adds a
+remote bridge that is a client of the existing web/API host — no outward contract
+changes, and `httpx` stays lazily imported from the existing `net` extra.
 
 - `main` — the `loopplane` console entry point.
 - `dispatch` — parse argv and run a command; returns an exit code.
 - `make_parser` — the argument parser for the CLI commands.
 - `build_host` — build a host over the selected model (optionally with a store).
-- `run_once` — run one prompt and render it to a stream.
-- `chat_loop` — run input lines as turns until EOF/quit.
-- `EventRenderer` — an event sink that renders a run, metadata-safe.
+- `run_once` — run one prompt and render it to a stream (the one-shot path).
+- `chat_loop` — hold one conversation, running input lines as turns in it (079).
+- `resume_loop` — pick a stored conversation up and continue it interactively (079).
+- `remote_loop` — drive a conversation on a remote host; returns an exit code (079).
+- `RemoteEndpoint` — where to connect and as whom; holds the credential in memory only, and carries an `api_prefix` for a server not published under `/v1` (079).
+- `EventRenderer` — an event sink that renders a run, metadata-safe; renders approval
+  requests and questions as of 079.
+- `LineSource` — the single input source turns and answers are read from (079).
+- `parse_approval_answer` — map a typed line to a permission decision (079).
+- `question_answer` — the answer text for a pending question (079).
 - `select_model` — choose the demo model or an env-configured provider.
 - `DemoModel` — the built-in, credential-free demo model.
 
-### `loopplane.commands` (unit 065)
+### `loopplane.commands` (units 065, 079)
 
 Backend-semantic slash commands (gap G14): a small host command surface that maps a
-leading-`/` command to an EXISTING host seam — `/cost` (064), `/model`, `/memory`, and
-`/compact` (the loop's `compact_history`). Commands are a host UX, NOT tools: they never
-reach the Tool Gateway or the Event Bus. Shared by the CLI REPL and the web/API
-`POST /commands` endpoint; dispatch never raises and is public-safe.
+leading-`/` command to an EXISTING host seam — `/cost` (064), `/model`, `/memory`,
+`/compact` (the loop's `compact_history`), and, added by 079, `/help`, `/sessions`
+(`list_sessions`), `/permission` (`agent_controls`), and `/history`
+(`history_snapshot`). Commands are a host UX, NOT tools: they never reach the Tool
+Gateway or the Event Bus. Shared by the CLI REPL, the web/API `POST /commands`
+endpoint, and the Desktop sidecar's `command.execute` (ADR 0017); dispatch never raises
+and is public-safe.
+
+Unit 079 adds a **remote-safety classification**: each command declares whether it may
+run over a remote connection, and a context can declare that its caller is remote. A
+non-remote-safe command is refused before its handler runs, so it touches no host seam.
+`/compact` is the one built-in that is not remote-safe — the only mutator, irreversible,
+and unverifiable from a remote view. Both knobs default to the pre-079 behavior
+(`remote_safe=True`, `CommandContext.remote=False`), so existing consumers are
+byte-identical.
 
 - `CommandResult` — a normalized, public-safe command result (`kind` + `text`).
-- `CommandContext` — what a handler needs (the host + principal + optional session + models).
-- `CommandRegistry` — parses a leading-`/` line and dispatches to a handler (never raises).
-- `default_registry` — a registry with the four built-in commands (cost/model/memory/compact).
+- `CommandContext` — what a handler needs (the host + principal + optional session +
+  models + whether the caller is remote).
+- `CommandDescriptor` — one command's name, one-line summary, remote-safety, and whether it is session-scoped (079).
+- `CommandRegistry` — parses a leading-`/` line and dispatches to a handler (never
+  raises). `register` takes keyword-only `summary`, `remote_safe`, and
+  `session_scoped`; `describe` enumerates every command; `session_scoped_names`
+  tells a host with principals which commands need an ownership check before
+  dispatch.
+- `format_command_listing` — the operator-facing command listing, shared so a host
+  that answers `/help` itself produces exactly the registry's text (079).
+- `default_registry` — a registry with the eight built-in commands.

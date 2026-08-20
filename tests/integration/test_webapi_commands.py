@@ -137,3 +137,101 @@ def test_commands_are_auth_gated(tmp_path: Path) -> None:
         assert (
             client.post("/v1/commands", json={"command": "/memory"}).status_code == 401
         )
+
+
+# --- 079: the new session-scoped commands must be gated the same way ---------
+
+
+def test_history_command_non_owner_is_404(tmp_path: Path) -> None:
+    """The disclosure this unit shipped once: /history is session-scoped, so a
+    non-owner must get the same 404 /cost gets — and learn nothing."""
+
+    app = create_app(_budget_host(tmp_path), authenticator=_tokens())
+    with make_client(app) as client:
+        sid = _open_and_submit(client, ALICE)
+        resp = client.post(
+            "/v1/commands",
+            json={"command": "/history", "session_id": sid},
+            headers=BOB,
+        )
+        assert resp.status_code == 404
+        body = str(resp.json())
+        assert "block(s)" not in body
+        assert sid not in body
+
+
+def test_permission_command_non_owner_is_404(tmp_path: Path) -> None:
+    app = create_app(_budget_host(tmp_path), authenticator=_tokens())
+    with make_client(app) as client:
+        sid = _open_and_submit(client, ALICE)
+        resp = client.post(
+            "/v1/commands",
+            json={"command": "/permission", "session_id": sid},
+            headers=BOB,
+        )
+        assert resp.status_code == 404
+        body = str(resp.json())
+        assert "mode:" not in body
+        assert sid not in body
+
+
+def test_a_non_owned_session_is_indistinguishable_from_a_missing_one(
+    tmp_path: Path,
+) -> None:
+    app = create_app(_budget_host(tmp_path), authenticator=_tokens())
+    with make_client(app) as client:
+        sid = _open_and_submit(client, ALICE)
+        owned_by_other = client.post(
+            "/v1/commands",
+            json={"command": "/history", "session_id": sid},
+            headers=BOB,
+        )
+        never_existed = client.post(
+            "/v1/commands",
+            json={"command": "/history", "session_id": "no-such-session"},
+            headers=BOB,
+        )
+        assert owned_by_other.status_code == never_existed.status_code == 404
+        assert owned_by_other.json() == never_existed.json()
+
+
+def test_history_and_permission_require_a_session(tmp_path: Path) -> None:
+    app = create_app(_budget_host(tmp_path), authenticator=_tokens())
+    with make_client(app) as client:
+        for command in ("/history", "/permission"):
+            resp = client.post("/v1/commands", json={"command": command}, headers=ALICE)
+            assert resp.status_code == 400, command
+
+
+def test_history_command_owner_succeeds(tmp_path: Path) -> None:
+    app = create_app(_budget_host(tmp_path), authenticator=_tokens())
+    with make_client(app) as client:
+        sid = _open_and_submit(client, ALICE)
+        resp = client.post(
+            "/v1/commands",
+            json={"command": "/history", "session_id": sid},
+            headers=ALICE,
+        )
+        assert resp.status_code == 200
+        assert "block(s)" in resp.json()["text"]
+
+
+def test_the_gate_covers_every_session_scoped_command(tmp_path: Path) -> None:
+    """The gate is driven by the registry, so it cannot fall out of step with
+    the command set. This asserts that coupling directly."""
+
+    from loopplane.commands import default_registry
+
+    scoped = default_registry().session_scoped_names()
+    assert scoped == {"cost", "compact", "history", "permission"}
+
+    app = create_app(_budget_host(tmp_path), authenticator=_tokens())
+    with make_client(app) as client:
+        sid = _open_and_submit(client, ALICE)
+        for name in sorted(scoped):
+            resp = client.post(
+                "/v1/commands",
+                json={"command": f"/{name}", "session_id": sid},
+                headers=BOB,
+            )
+            assert resp.status_code == 404, name

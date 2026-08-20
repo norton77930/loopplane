@@ -75,3 +75,61 @@ async def test_renders_tool_metadata_not_raw_input() -> None:
     assert "echo" in text
     assert "success" in text
     assert "xyz" not in text  # raw tool input is never rendered
+
+
+# --- 079: approval and question rendering (T016) -----------------------------
+
+
+async def test_renders_an_approval_request_with_only_what_is_needed() -> None:
+    from loopplane.events.envelope import (
+        ApprovalRequestedEvent,
+        ApprovalRequestedPayload,
+    )
+
+    out = io.StringIO()
+    render = EventRenderer(out)
+    await render(
+        ApprovalRequestedEvent(
+            session_id="s",
+            sequence=1,
+            occurred_at=_T,
+            payload=ApprovalRequestedPayload(
+                request_id="r1",
+                call_id="c1",
+                tool_name="write_file",
+                input_summary="1 field",
+            ),
+        )
+    )
+    text = out.getvalue()
+    assert "[approve] write_file" in text
+    assert "1 field" in text
+    assert "y/n/a/never" in text  # the answer legend is shown
+    assert "r1" not in text  # the request id is machinery, not operator detail
+    assert "c1" not in text
+
+
+async def test_renders_a_question_with_its_options() -> None:
+    from loopplane.events.envelope import (
+        Question,
+        QuestionAskedEvent,
+        QuestionAskedPayload,
+    )
+
+    out = io.StringIO()
+    render = EventRenderer(out)
+    await render(
+        QuestionAskedEvent(
+            session_id="s",
+            sequence=1,
+            occurred_at=_T,
+            payload=QuestionAskedPayload(
+                request_id="r2",
+                questions=[Question(text="which one?", options=["left", "right"])],
+            ),
+        )
+    )
+    text = out.getvalue()
+    assert "[question] which one?" in text
+    assert "- left" in text and "- right" in text
+    assert "r2" not in text
