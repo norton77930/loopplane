@@ -10,10 +10,9 @@
 
 ## Sources & method
 
-- **claude-code** — feature inventory from a source-reconstructed copy at the
-  `@anthropic-ai/claude-code` 2.1.x level (40+ built-in tools, 90+ slash commands, 28
-  hook events, 6 permission modes, multi-agent / worktree / remote, MCP + resources +
-  OAuth).
+- **claude-code** — feature inventory of the `@anthropic-ai/claude-code` 2.1.x line
+  (40+ built-in tools, 90+ slash commands, 28 hook events, 6 permission modes,
+  multi-agent / worktree / remote, MCP + resources + OAuth).
 - **orion-agent** — feature inventory of a full-stack Python + TS sibling harness (30+
   tools, parallel executor, swarm peer messaging, background tasks, scheduling, STT/TTS,
   model proxy + billing, 3 sandbox modes, 4 MCP transports + OAuth, multi-level budgets,
