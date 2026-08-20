@@ -39,6 +39,9 @@ apps/desktop/release/
 # Local agent / browser-QA scratch artifacts — never commit
 /.playwright-mcp/
 /.claude/skills/run-web-demo/
+# Local agent tool state: holds a localhost session token, pids, and server
+# logs. Untracked but previously unignored, so a bulk `git add` would leak it.
+/.superpowers/
 
 # Logs / runtime files (root-anchored so source packages are not caught)
 /logs/
