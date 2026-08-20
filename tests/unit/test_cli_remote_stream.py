@@ -38,6 +38,7 @@ from loopplane.events.envelope import (  # noqa: E402
     RunTerminatedEvent,
     RunTerminatedPayload,
 )
+from tests.helpers.public_safety import LOOPPLANE_SECRET_MARKER  # noqa: E402
 
 pytestmark = pytest.mark.anyio
 
@@ -51,7 +52,11 @@ def _fast_reconnect(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 _T = datetime(2026, 1, 1, tzinfo=UTC)
-TOKEN = "a-credential-that-must-never-be-printed"
+# The synthetic marker doubles as the credential under test: a hand-written
+# literal here would be shaped like the thing the repo's public-safety scan
+# hunts for, and the scan reads git-tracked files, so it would pass locally
+# while untracked and fail the moment it was committed.
+CREDENTIAL = LOOPPLANE_SECRET_MARKER
 
 
 def _text_event(sequence: int, text: str) -> AssistantOutputIncrementEvent:
@@ -173,7 +178,7 @@ class _Server:
 
 def _endpoint(session_id: str | None = None) -> RemoteEndpoint:
     return RemoteEndpoint(
-        base_url="http://server.invalid", token=TOKEN, session_id=session_id
+        base_url="http://server.invalid", token=CREDENTIAL, session_id=session_id
     )
 
 
@@ -320,7 +325,7 @@ async def test_a_rejected_credential_never_echoes_it() -> None:
     assert code == 1
     text = out.getvalue()
     assert "rejected the credential" in text
-    assert TOKEN not in text
+    assert CREDENTIAL not in text
 
 
 async def test_an_unreachable_server_fails_publicly_safely() -> None:
@@ -335,7 +340,7 @@ async def test_an_unreachable_server_fails_publicly_safely() -> None:
     text = out.getvalue()
     assert "could not reach the server" in text
     assert "203.0.113.9" not in text  # the raw error never surfaces
-    assert TOKEN not in text
+    assert CREDENTIAL not in text
 
 
 async def test_a_non_owned_conversation_is_indistinguishable_from_a_missing_one() -> (
@@ -370,8 +375,8 @@ async def test_the_credential_is_sent_as_a_bearer_header() -> None:
 
     out = io.StringIO()
     await remote_loop(_endpoint(), [], out, transport=httpx.MockTransport(handler))
-    assert seen and seen[0] == f"Bearer {TOKEN}"
-    assert TOKEN not in out.getvalue()
+    assert seen and seen[0] == f"Bearer {CREDENTIAL}"
+    assert CREDENTIAL not in out.getvalue()
 
 
 # --- 079 remediation: the paths the first round never exercised ---------------
