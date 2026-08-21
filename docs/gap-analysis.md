@@ -166,8 +166,10 @@ in-process fairness/quota (072), PDF / `DocumentBlock` (069), the pre-turn cost 
 (068), native Gemini `thought_signature` (070), code-review remediation (073), web
 parity/capability management and hardening (074–076), responsive presentation and
 security remediation (080–081), and host-owned Web Agent Controls (077). What remains is
-the tail below. It is a **suggested priority list only** — the next reserved board unit is
-`078-desktop-cowork-parity`; new roadmap items would be specced as later units.
+the tail below. It is a **suggested priority list only**. `078-desktop-cowork-parity` has
+since been implemented and its Stage-C delivery gate has passed, though
+`docs/loopplane-agent-board.md` remains the only completion authority; new roadmap items
+would be specced as later units.
 
 **P1 — platform depth (the remaining distributed tail)**
 - **G20 distributed tail** — cross-process / multi-worker execution above the

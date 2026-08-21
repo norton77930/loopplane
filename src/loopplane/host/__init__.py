@@ -18,6 +18,7 @@ from loopplane.fairness import (
     PlatformFairnessRejected,
 )
 from loopplane.host.assembly import AssembledRuntime, assemble
+from loopplane.host.audit import TurnAuditEntry, checkpoint_records_to_audit_entries
 from loopplane.host.capabilities import AllowedWorkspaceContextProvider
 from loopplane.host.config import (
     ApprovalPolicy,
@@ -30,6 +31,11 @@ from loopplane.host.config import (
     ToolSpec,
     validate_config,
 )
+from loopplane.host.generation_validation import (
+    GenerationExpectation,
+    GenerationValidationResult,
+    validate_active_generation,
+)
 from loopplane.host.host import (
     ApprovalDecision,
     LoopPlaneHost,
@@ -37,6 +43,19 @@ from loopplane.host.host import (
     RunOutcome,
     Session,
     build_host,
+)
+from loopplane.host.snapshot import (
+    DesktopActiveGenerationProvider,
+    DesktopPortableSnapshotProvider,
+    DesktopRuntimeStorageInitializer,
+    PortableSnapshotResult,
+    PortableSnapshotUnavailable,
+    UnavailablePortableSnapshotProvider,
+)
+from loopplane.host.storage_authority import (
+    DesktopStorageAuthorityFactory,
+    StorageAuthorityFactory,
+    StorageAuthorityLease,
 )
 from loopplane.model import ContentBlock, DocumentBlock, ImageBlock, TextBlock
 
@@ -48,7 +67,13 @@ __all__ = [
     "CapabilityManagementConfig",
     "ConfigError",
     "ContentBlock",
+    "DesktopActiveGenerationProvider",
+    "DesktopPortableSnapshotProvider",
+    "DesktopRuntimeStorageInitializer",
+    "DesktopStorageAuthorityFactory",
     "DocumentBlock",
+    "GenerationExpectation",
+    "GenerationValidationResult",
     "ImageBlock",
     "LoopPlaneHost",
     "MemoryConfig",
@@ -60,10 +85,18 @@ __all__ = [
     "RuntimeConfig",
     "Session",
     "SkillsConfig",
+    "StorageAuthorityFactory",
+    "StorageAuthorityLease",
     "StorageConfig",
     "TextBlock",
     "ToolSpec",
+    "TurnAuditEntry",
+    "PortableSnapshotResult",
+    "PortableSnapshotUnavailable",
+    "UnavailablePortableSnapshotProvider",
     "assemble",
     "build_host",
+    "checkpoint_records_to_audit_entries",
+    "validate_active_generation",
     "validate_config",
 ]

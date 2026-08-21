@@ -23,4 +23,16 @@ describe("ApprovalDialog", () => {
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(onDecide).toHaveBeenCalledWith({ allow: false });
   });
+
+  it("maps backdrop dismissal to an explicit deny", () => {
+    const onDecide = vi.fn();
+    render(<ApprovalDialog toolName="danger" onDecide={onDecide} />);
+
+    const backdrop = screen.getByRole("dialog").parentElement;
+    expect(backdrop).not.toBeNull();
+    fireEvent.click(backdrop as HTMLElement);
+
+    expect(onDecide).toHaveBeenCalledOnce();
+    expect(onDecide).toHaveBeenCalledWith({ allow: false });
+  });
 });

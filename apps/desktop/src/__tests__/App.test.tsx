@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { generatedCapabilityFixtures, generatedSessionEventFixtures } from "@web/api/generated";
 import type {
@@ -9,12 +9,22 @@ import type {
   WorkspaceContext,
 } from "@web/api/types";
 
-import { App } from "../App";
+import {
+  App,
+  monthlyCostLineText,
+  narrowCostPart,
+  sessionCostStripText,
+} from "../App";
 import type { SidecarTransport } from "../sidecar";
 
 function stubTransport(
   events: RawEvent[],
-  overrides: Partial<Pick<SidecarTransport, "answerApproval" | "answerQuestion">> = {},
+  overrides: Partial<
+    Pick<
+      SidecarTransport,
+      "answerApproval" | "answerQuestion" | "cancel" | "status" | "dispose"
+    >
+  > = {},
 ): SidecarTransport {
   return {
     run: async function* () {
@@ -22,11 +32,21 @@ function stubTransport(
     },
     answerApproval: () => undefined,
     answerQuestion: () => undefined,
+    cancel: () => undefined,
+    status: async () => ({ ready: true }),
+    dispose: async () => undefined,
+    listSessions: async () => [],
+    listProjects: async () => [],
+    listWorkspaces: async () => [],
+    setDraft: () => undefined,
+    clearDraft: () => undefined,
+    activeSessionId: null,
+    activeSubscriptionId: null,
     ...overrides,
   } as unknown as SidecarTransport;
 }
 
-describe("App (desktop, reusing the unit-018 UI)", () => {
+describe("App (desktop single-session composition, T031)", () => {
   it("preserves the shared approval-dialog decision contract", async () => {
     const answerApproval = vi.fn();
     const transport = stubTransport(
@@ -40,7 +60,7 @@ describe("App (desktop, reusing the unit-018 UI)", () => {
     );
 
     render(<App transport={transport} />);
-    fireEvent.change(screen.getByLabelText("prompt"), { target: { value: "run it" } });
+    fireEvent.change(screen.getByLabelText("LoopPlane smoke prompt"), { target: { value: "run it" } });
     fireEvent.click(screen.getByText("Send"));
     fireEvent.click(await screen.findByText("Allow"));
 
@@ -63,12 +83,34 @@ describe("App (desktop, reusing the unit-018 UI)", () => {
     );
 
     render(<App transport={transport} />);
-    fireEvent.change(screen.getByLabelText("prompt"), { target: { value: "ask" } });
+    fireEvent.change(screen.getByLabelText("LoopPlane smoke prompt"), { target: { value: "ask" } });
     fireEvent.click(screen.getByText("Send"));
     fireEvent.click(await screen.findByRole("checkbox", { name: "A" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByText("Send"));
 
     expect(answerQuestion).toHaveBeenCalledWith("question-1", ["A"]);
+  });
+
+  it("offers the message actions the shared list already supported", async () => {
+    // MessageList has carried Fork and Regenerate since it was extracted;
+    // Desktop passed neither, so both controls were simply absent.
+    const transport = stubTransport([
+      { type: "assistant-output-increment", payload: { text: "an answer", turn_index: 0 } },
+      { type: "run-terminated", payload: { reason: "natural-completion", turns_taken: 1 } },
+    ]);
+    render(<App transport={transport} />);
+    fireEvent.change(screen.getByLabelText("LoopPlane smoke prompt"), {
+      target: { value: "first question" },
+    });
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() => expect(screen.getByText("an answer")).toBeInTheDocument());
+
+    // Regenerate resends the last user prompt rather than an empty turn.
+    fireEvent.click(await screen.findByText("Regenerate"));
+
+    await waitFor(() =>
+      expect(screen.getAllByText("first question").length).toBeGreaterThan(1),
+    );
   });
 
   it("renders a streamed run over the sidecar transport", async () => {
@@ -77,10 +119,204 @@ describe("App (desktop, reusing the unit-018 UI)", () => {
       { type: "run-terminated", payload: { reason: "natural-completion", turns_taken: 1 } },
     ]);
     render(<App transport={transport} />);
-    fireEvent.change(screen.getByLabelText("prompt"), { target: { value: "hello" } });
+    fireEvent.change(screen.getByLabelText("LoopPlane smoke prompt"), { target: { value: "hello" } });
     fireEvent.click(screen.getByText("Send"));
     await waitFor(() => expect(screen.getByText("hi there")).toBeInTheDocument());
     expect(screen.getByText("hello")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("runtime-status").textContent).toMatch(/finished/i),
+    );
+  });
+
+  it("exposes cancel during a run", async () => {
+    const cancel = vi.fn();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const transport = {
+      run: async function* () {
+        yield {
+          type: "assistant-output-increment",
+          payload: { text: "partial", turn_index: 0 },
+        } as RawEvent;
+        await gate;
+      },
+      answerApproval: () => undefined,
+      answerQuestion: () => undefined,
+      cancel,
+      status: async () => ({ ready: true }),
+      dispose: async () => undefined,
+    } as unknown as SidecarTransport;
+
+    render(<App transport={transport} />);
+    fireEvent.change(screen.getByLabelText("LoopPlane smoke prompt"), { target: { value: "go" } });
+    fireEvent.click(screen.getByText("Send"));
+    await screen.findByText("partial");
+    fireEvent.click(screen.getByLabelText("cancel run"));
+    expect(cancel).toHaveBeenCalled();
+    release();
+  });
+
+  it("keeps one-run permission selection as a draft until the local host accepts submit", async () => {
+    const previousApi = window.loopplaneDesktop;
+    const getAgentControls = vi.fn().mockResolvedValue({
+      default_mode: null,
+      selectable_modes: [{ id: "plan", kind: "plan", summary: "" }],
+      active_run: { mode: "ask", state: "active", planActive: false },
+      last_accepted_run: { mode: "ask", state: "settled", planActive: false },
+      budget: { tracking: "unavailable", pricing: "unpriced" },
+      actions: ["select_permission_mode"],
+      unavailable: false,
+    });
+    window.loopplaneDesktop = {
+      inspection: { get: vi.fn().mockResolvedValue({ skills: [], tools: [], mcp: [], memory: [] }) },
+      agentControls: { get: getAgentControls },
+      capabilities: { list: vi.fn().mockResolvedValue({ capabilities: [] }), invokeAction: vi.fn() },
+    } as never;
+    const runs: Array<{ prompt: string; options: unknown }> = [];
+    const transport = {
+      ...stubTransport([]),
+      activeSessionId: "session-1",
+      run: async function* (prompt: string, options: unknown) {
+        runs.push({ prompt, options });
+        yield { type: "run-terminated", payload: { reason: "natural-completion", turns_taken: 1 } } as RawEvent;
+      },
+    } as unknown as SidecarTransport;
+
+    try {
+      render(<App transport={transport} resumeSessionId="session-1" />);
+      await waitFor(() => {
+        expect(getAgentControls).toHaveBeenCalledWith("session-1");
+        expect(screen.getByText("Budget pricing: unpriced")).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+      const agentControlsTab = screen.getByRole("tab", { name: "Agent controls" });
+      fireEvent.click(agentControlsTab);
+      await waitFor(() => expect(agentControlsTab).toHaveAttribute("aria-selected", "true"));
+      await screen.findByText("Active run");
+      const select = await screen.findByLabelText("Permission mode for next run");
+      fireEvent.change(select, { target: { value: "plan" } });
+
+      expect(screen.getByText(/Draft for next run/)).toHaveTextContent("plan");
+      expect(screen.getByText("Active run").nextSibling).toHaveTextContent("ask");
+      expect(screen.getByText("Last accepted run").nextSibling).toHaveTextContent("ask");
+
+      fireEvent.click(screen.getByRole("button", { name: "Back to chat" }));
+      fireEvent.change(screen.getByLabelText("LoopPlane smoke prompt"), { target: { value: "second" } });
+      fireEvent.click(screen.getByText("Send"));
+      await waitFor(() => expect(runs).toHaveLength(1));
+      expect(runs[0]).toEqual({ prompt: "second", options: { workspaceId: undefined, permissionMode: "plan" } });
+
+      fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+      fireEvent.click(screen.getByRole("tab", { name: "Agent controls" }));
+      await waitFor(() => expect(screen.queryByText(/Draft for next run/)).toBeNull());
+    } finally {
+      window.loopplaneDesktop = previousApi;
+    }
+  });
+
+  it("recovers from an initializing status when main reports runtime ready", async () => {
+    const previousApi = window.loopplaneDesktop;
+    let statusHandler: ((event: unknown) => void) | null = null;
+    window.loopplaneDesktop = {
+      app: {
+        status: async () => ({ ready: false }),
+        shutdown: async () => ({ ok: true }),
+        subscribeStatus: (handler: (event: unknown) => void) => {
+          statusHandler = handler;
+          return () => {
+            statusHandler = null;
+          };
+        },
+      },
+    } as never;
+
+    try {
+      render(<App transport={stubTransport([])} initialPhase="starting" />);
+      await waitFor(() =>
+        expect(screen.getByTestId("runtime-status")).toHaveTextContent(/starting/i),
+      );
+      act(() => {
+        statusHandler?.({ method: "runtime.state", params: { state: "ready" } });
+      });
+      await waitFor(() =>
+        expect(screen.getByTestId("runtime-status")).toHaveTextContent(/ready/i),
+      );
+      // The visible text is the short human form, but `Wait-RuntimeUsable` in
+      // scripts/smoke-desktop-artifact.ps1 matches /usable/ against this group's
+      // descendant accessible names. Losing that word fails the packaged smoke
+      // with `runtime_not_usable`, so it is pinned separately from the copy.
+      expect(
+        screen.getByRole("status", { name: /usable/i }),
+      ).toBeInTheDocument();
+    } finally {
+      window.loopplaneDesktop = previousApi;
+    }
+  });
+
+  it("projects a public-safe main-process failure into the visible diagnostic group", async () => {
+    const previousApi = window.loopplaneDesktop;
+    let statusHandler: ((event: unknown) => void) | null = null;
+    window.loopplaneDesktop = {
+      app: {
+        status: async () => ({ ready: true }),
+        shutdown: async () => ({ ok: true }),
+        subscribeStatus: (handler: (event: unknown) => void) => {
+          statusHandler = handler;
+          return () => {
+            statusHandler = null;
+          };
+        },
+      },
+    } as never;
+
+    try {
+      render(<App transport={stubTransport([])} />);
+      act(() => {
+        statusHandler?.({
+          method: "runtime.state",
+          params: {
+            state: "failed",
+            diagnostic: "The local runtime is incompatible.",
+          },
+        });
+      });
+      await waitFor(() =>
+        expect(
+          screen.getByRole("group", {
+            name: "LoopPlane smoke runtime diagnostic",
+          }),
+        ).toHaveTextContent("The local runtime is incompatible."),
+      );
+      expect(screen.queryByText(/private|path|exception/i)).toBeNull();
+    } finally {
+      window.loopplaneDesktop = previousApi;
+    }
+  });
+
+  it("shows unavailable when transport is missing", () => {
+    render(<App transport={null} initialPhase="unavailable" />);
+    expect(screen.getByRole("alert").textContent).toMatch(/unavailable/i);
+    expect(screen.getByLabelText("LoopPlane smoke prompt")).toBeDisabled();
+  });
+
+  it("shows incompatible shell phase", () => {
+    render(
+      <App
+        transport={stubTransport([])}
+        initialPhase="incompatible"
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toMatch(/incompatible/i);
+  });
+
+  it("disposes transport on unmount", () => {
+    const dispose = vi.fn(async () => undefined);
+    const transport = stubTransport([], { dispose });
+    const { unmount } = render(<App transport={transport} />);
+    unmount();
+    expect(dispose).toHaveBeenCalled();
   });
 
   it("accepts generated shared capability fixtures", () => {
@@ -95,17 +331,126 @@ describe("App (desktop, reusing the unit-018 UI)", () => {
     expect(schedule.instruction).toBe("refresh documentation notes");
     expect(modelDefault.model_id).toBe("model-a");
   });
+
   it("accepts the generated shared web event fixture", async () => {
     const transport = stubTransport([
       generatedSessionEventFixtures.assistant_output_increment,
       generatedSessionEventFixtures.run_terminated,
     ]);
     render(<App transport={transport} />);
-    fireEvent.change(screen.getByLabelText("prompt"), { target: { value: "hello" } });
+    fireEvent.change(screen.getByLabelText("LoopPlane smoke prompt"), { target: { value: "hello" } });
     fireEvent.click(screen.getByText("Send"));
 
     await waitFor(() =>
       expect(screen.getByText("generated hello")).toBeInTheDocument(),
     );
+  });
+});
+
+describe("cost visibility (083 Wave 1)", () => {
+  afterEach(() => {
+    delete (window as { loopplaneDesktop?: unknown }).loopplaneDesktop;
+  });
+
+  function mockCost(result: unknown) {
+    const get = vi.fn(async () => result);
+    (window as { loopplaneDesktop?: unknown }).loopplaneDesktop = {
+      cost: { get },
+    };
+    return get;
+  }
+
+  it("shows the priced session spend verbatim in the context strip", async () => {
+    const get = mockCost({
+      session: { status: "priced", usd: "0.123456" },
+      monthly: { status: "available", usd: "12.50" },
+    });
+    render(<App transport={stubTransport([])} resumeSessionId="s-cost" />);
+    await waitFor(() =>
+      expect(screen.getByTestId("session-cost")).toHaveTextContent("$0.123456"),
+    );
+    expect(get).toHaveBeenCalledWith("s-cost");
+  });
+
+  it("renders an unpriced session as its own state, never as $0", async () => {
+    mockCost({
+      session: { status: "unpriced", usd: "0" },
+      monthly: { status: "unavailable", usd: null },
+    });
+    render(<App transport={stubTransport([])} resumeSessionId="s-cost" />);
+    await waitFor(() =>
+      expect(screen.getByTestId("session-cost").textContent).toBeTruthy(),
+    );
+    expect(screen.getByTestId("session-cost").textContent).not.toContain("$");
+  });
+
+  it("clamps unknown cost payloads instead of rendering them", () => {
+    expect(narrowCostPart({ status: "DROP TABLE", usd: "1" })).toBeNull();
+    expect(narrowCostPart("garbage")).toBeNull();
+    expect(narrowCostPart({ status: "priced", usd: 3 })).toEqual({
+      status: "priced",
+      usd: null,
+    });
+  });
+
+  it("keeps the four session states textually distinct", () => {
+    const t = (key: string) => key;
+    const texts = [
+      sessionCostStripText({ status: "priced", usd: "0" }, t),
+      sessionCostStripText({ status: "partially_unpriced", usd: "0" }, t),
+      sessionCostStripText({ status: "unpriced", usd: "0" }, t),
+      sessionCostStripText({ status: "unavailable", usd: null }, t),
+    ];
+    expect(new Set(texts).size).toBe(4);
+    expect(texts[2]).not.toContain("$");
+  });
+
+  it("labels the month-to-date line and its absence", () => {
+    const t = (key: string) => key;
+    expect(monthlyCostLineText({ status: "available", usd: "12.50" }, t)).toBe(
+      "cost.monthly: $12.50",
+    );
+    expect(monthlyCostLineText({ status: "unavailable", usd: null }, t)).toBe(
+      "cost.monthlyUnavailable",
+    );
+    expect(monthlyCostLineText(null, t)).toBeNull();
+  });
+});
+
+describe("host commands (083 Wave 6)", () => {
+  afterEach(() => {
+    delete (window as { loopplaneDesktop?: unknown }).loopplaneDesktop;
+  });
+
+  it("answers a leading slash locally without starting a run", async () => {
+    const execute = vi.fn(async () => ({ kind: "ok", text: "session: 0.25" }));
+    (window as { loopplaneDesktop?: unknown }).loopplaneDesktop = {
+      command: { execute },
+    };
+    const runSpy = vi.fn(async function* () {});
+    const transport = {
+      ...stubTransport([]),
+      run: runSpy,
+    } as unknown as SidecarTransport;
+    render(<App transport={transport} resumeSessionId="s-cmd" />);
+    fireEvent.change(screen.getByLabelText("LoopPlane smoke prompt"), {
+      target: { value: "/cost" },
+    });
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() =>
+      expect(screen.getByText("session: 0.25")).toBeInTheDocument(),
+    );
+    expect(execute).toHaveBeenCalledWith("/cost", "s-cmd");
+    expect(runSpy).not.toHaveBeenCalled();
+    expect(screen.getByText("/cost")).toBeInTheDocument();
+  });
+
+  it("shows the command hint on a leading slash and none otherwise", () => {
+    render(<App transport={stubTransport([])} />);
+    const prompt = screen.getByLabelText("LoopPlane smoke prompt");
+    fireEvent.change(prompt, { target: { value: "/" } });
+    expect(screen.getByText(/\/cost/)).toBeInTheDocument();
+    fireEvent.change(prompt, { target: { value: "hello" } });
+    expect(screen.queryByText(/\/cost/)).toBeNull();
   });
 });

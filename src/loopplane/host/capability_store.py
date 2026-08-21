@@ -111,8 +111,22 @@ def _validate_mcp_endpoint_changes(
 class CapabilitySettingsStore:
     """Versioned JSON persistence with per-principal atomic updates."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        validate_root: Callable[[], None] | None = None,
+    ) -> None:
         self._base = root / "capabilities" / "v1"
+        self._validate_root = validate_root
+
+    def _require_root(self) -> None:
+        if self._validate_root is None:
+            return
+        try:
+            self._validate_root()
+        except Exception as exc:
+            raise CapabilityStoreUnavailable("capability settings unavailable") from exc
 
     def load(self, principal_id: str) -> CapabilitySettingsState:
         path = self._path(principal_id)
@@ -133,6 +147,7 @@ class CapabilitySettingsStore:
             return state.model_copy(deep=True)
 
     def _path(self, principal_id: str) -> Path:
+        self._require_root()
         if not principal_id:
             raise CapabilityStoreUnavailable("capability settings unavailable")
         digest = hashlib.sha256(principal_id.encode("utf-8")).hexdigest()
@@ -151,6 +166,7 @@ class CapabilitySettingsStore:
         return state
 
     def _write_unlocked(self, path: Path, state: CapabilitySettingsState) -> None:
+        self._require_root()
         if _contains_forbidden_key(state.model_dump(mode="json")):
             raise CapabilityStoreUnavailable("capability settings unavailable")
         temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")

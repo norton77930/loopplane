@@ -11,6 +11,7 @@
     "build": "tsc --noEmit && vite build"
   },
   "dependencies": {
+    "@loopplane/cowork-presentation": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.1.0",

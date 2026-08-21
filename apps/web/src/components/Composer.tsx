@@ -1,3 +1,9 @@
+import {
+  COMPOSER_MAX_HEIGHT,
+  growTextarea,
+  resetTextareaHeight,
+  shouldSubmitOnKey,
+} from "@loopplane/cowork-presentation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useTranslation } from "../i18n/i18n";
@@ -20,7 +26,7 @@ interface Props {
   onCommand?: (id: string) => void;
 }
 
-const MAX_HEIGHT = 200;
+const MAX_HEIGHT = COMPOSER_MAX_HEIGHT;
 
 export function Composer({
   disabled,
@@ -50,10 +56,7 @@ export function Composer({
   }, [focusToken]);
 
   function grow() {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`;
+    growTextarea(ref.current, MAX_HEIGHT);
   }
 
   function submit() {
@@ -61,7 +64,7 @@ export function Composer({
     if (!text || disabled || sendDisabled) return;
     onSend(text);
     setValue("");
-    if (ref.current) ref.current.style.height = "auto";
+    resetTextareaHeight(ref.current);
   }
 
   function insertMention(name: string) {
@@ -103,10 +106,12 @@ export function Composer({
               grow();
             }}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                submit();
-              }
+              // Not a bare `Enter && !shiftKey`: Chinese, Japanese and Korean
+              // input methods use Enter to accept a candidate, and sending there
+              // fires off a half-finished word.
+              if (!shouldSubmitOnKey(event)) return;
+              event.preventDefault();
+              submit();
             }}
           />
           <button

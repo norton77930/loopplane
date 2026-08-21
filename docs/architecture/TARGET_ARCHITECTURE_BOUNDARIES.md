@@ -38,10 +38,10 @@ Each block covers: responsibility / allowed deps / forbidden deps / public API /
 - **Responsibility**: the embedding seam (`LoopPlaneHost`/`RuntimeConfig`), the single composition root `assemble`, the CLI host (console script `loopplane`), and slash commands (unit 065, host UX).
 - **Allowed deps**: all Phase-1 public surfaces; `host/assembly.py` is the **only** place allowed to (lazily) import concrete `tools` implementations and supervisor factories.
 - **Forbidden deps**: `cli`/`commands` MUST NOT call gateway internals or `tools` directly; `commands` MUST NOT become a tool and MUST NOT bypass the Gateway/Event Bus.
-- **Public API**: `LoopPlaneHost`, `RuntimeConfig`, `assemble`/`AssembledRuntime`, `CommandRegistry`/`default_registry`, `cli.main`.
+- **Public API**: `LoopPlaneHost`, `RuntimeConfig`, `assemble`/`AssembledRuntime`, `CommandRegistry`/`default_registry`/`CommandDescriptor`/`format_command_listing`, `cli.main`, and (079) `cli.remote_loop`/`RemoteEndpoint`/`resume_loop` plus the `LineSource` input primitives.
 - **Internal-only**: assembly wiring internals, `_resolve_permission_mode`.
 - **Event-stream rules**: consume, never re-emit (G2). **Tool-gateway rules**: never execute tools (G1). **Persistence rules**: via controller (G3).
-- **Optional-dependency rules**: none (the CLI defaults to a credential-free demo model).
+- **Optional-dependency rules**: the CLI defaults to a credential-free demo model and imports with base deps alone. Unit 079's remote bridge (`cli/remote.py`) lazily imports `httpx` from the pre-existing `net` extra (G4 ①), guarded so its absence is an explained state rather than an import error; a boundary test asserts `httpx` never appears at module import.
 - **Testing expectations**: G7 (host/cli/commands each have core + boundary + US suites).
 - **Docs & examples**: keep `docs/embedding-host.md` and `docs/cli.md` in sync.
 - **AI cautions**: "tidying the imports of `assembly.py`" breaks the optional-extra boundary — the lazy imports are deliberate; new `RuntimeConfig` knobs MUST be default-off (G5).
@@ -51,7 +51,7 @@ Each block covers: responsibility / allowed deps / forbidden deps / public API /
 - **Responsibility**: ASGI transport (HTTP/SSE/WS) over `LoopPlaneHost`; auth (token / JWT+JWKS, units 056/067); `EventReplayStore` (071); `TenantHostPool` (061); cost (064) and capability-management (075) endpoints.
 - **Allowed deps**: `host` public surface, `commands`, `events` (serialization), fastapi/starlette (G4 ③, package-level).
 - **Forbidden deps**: MUST NOT re-compose runtime internals, execute tools, or re-emit the live bus.
-- **Public API**: `create_app`, `token_authenticator`/`jwt_authenticator`, `EventReplayStore`, `TenantHostPool`, plus the outward HTTP/SSE/WS contract (`apps/web` and `apps/desktop` depend on backend-owned generated types).
+- **Public API**: `create_app`, `token_authenticator`/`jwt_authenticator`, `EventReplayStore`, `TenantHostPool`, plus the outward HTTP/SSE/WS contract. `apps/web` and `apps/desktop` depend on it through backend-owned generated types; since unit 079 `loopplane.cli`'s remote bridge is a **third consumer**, hand-written and in-repo — it reads routes, JSON keys, and the SSE frame grammar directly (ADR 0018). Its integration tests run against a real `create_app`, so same-tree drift breaks them; cross-release skew is not covered, which is why a contract change must consider the CLI as well as the two apps.
 - **Internal-only**: streaming implementation, pool internals, JWKS resolver details.
 - **Event-stream rules**: SSE/WS are pure transport; replay persistence belongs to the web boundary, not the `events` package.
 - **Persistence rules**: replay-store backends; session state still flows through the controller (G3).

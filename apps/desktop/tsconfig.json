@@ -13,7 +13,15 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "types": ["vitest/globals", "@testing-library/jest-dom", "node"],
-    "paths": { "@web/*": ["../web/src/*"] }
+    "paths": {
+      "@web/*": ["../web/src/*"],
+      "@loopplane/cowork-presentation": [
+        "../../packages/cowork-presentation/src/index.ts"
+      ],
+      "@loopplane/cowork-presentation/*": [
+        "../../packages/cowork-presentation/src/*"
+      ]
+    }
   },
   "include": ["src", "electron", "vite.config.ts"]
 }

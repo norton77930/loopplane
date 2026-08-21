@@ -31,6 +31,7 @@ from loopplane.host.capabilities import (
     ManagedMcpEndpointPolicy,
     ManagedScheduleRunner,
 )
+from loopplane.host.storage_authority import StorageAuthorityFactory
 from loopplane.ledger import UsdLedger
 from loopplane.model import ModelBoundary, ToolDescriptor
 from loopplane.pricing import PricingTable
@@ -80,6 +81,7 @@ class StorageConfig:
     artifact_threshold_bytes: int | None = None
     replacement_budget_bytes: int | None = None
     checkpoint_backend: CheckpointBackend = "file"
+    authority: StorageAuthorityFactory | None = None
 
 
 @dataclass(frozen=True)
@@ -330,6 +332,7 @@ def _coerce_storage(value: Any) -> StorageConfig | None:
         artifact_threshold_bytes=value.get("artifact_threshold_bytes"),
         replacement_budget_bytes=value.get("replacement_budget_bytes"),
         checkpoint_backend=value.get("checkpoint_backend", "file"),
+        authority=value.get("authority"),
     )
 
 
@@ -421,6 +424,13 @@ def validate_config(config: RuntimeConfig) -> None:
 
     if config.model is None:
         raise ConfigError("a model provider is required")
+    if config.storage is not None and config.storage.authority is not None:
+        if config.storage.checkpoint_backend != "sqlite":
+            raise ConfigError(
+                "storage authority requires the sqlite checkpoint backend"
+            )
+        if not callable(getattr(config.storage.authority, "acquire", None)):
+            raise ConfigError("storage authority must provide acquire()")
     if config.platform_fairness is not None:
         for name in ("admit", "model_turn"):
             if not callable(getattr(config.platform_fairness, name, None)):

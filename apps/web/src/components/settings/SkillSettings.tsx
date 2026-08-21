@@ -1,15 +1,14 @@
-import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useMemo } from "react";
+
+import {
+  SkillSettings as SharedSkillSettings,
+  type SkillSettingsService,
+} from "@loopplane/cowork-presentation";
 
 import type { ApiClient } from "../../api/client";
-import type { ManagedSkill } from "../../api/types";
-import { useTranslation } from "../../i18n/i18n";
-import {
-  CapabilityDetail,
-  type CapabilityDetailField,
-} from "./CapabilityDetail";
-import { EmptySection } from "./EmptySection";
+import { I18nProvider } from "../../i18n/i18n";
 
+/** Web-only adapter for the shared renderer; HTTP/client ownership remains outside the package. */
 export function SkillSettings({
   client,
   canMutate,
@@ -17,198 +16,23 @@ export function SkillSettings({
   client: ApiClient;
   canMutate: boolean;
 }) {
-  const { t } = useTranslation();
-  const [skills, setSkills] = useState<ManagedSkill[] | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [name, setName] = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [detail, setDetail] = useState<{
-    title: string;
-    fields: CapabilityDetailField[];
-  } | null>(null);
-
-  async function refresh() {
-    try {
-      setSkills(await client.listManagedSkills());
-      setProblem(null);
-    } catch {
-      setSkills([]);
-      setProblem(t("settings.skills.unavailable"));
-    }
-  }
-
-  useEffect(() => {
-    void refresh();
-  }, [client]);
-
-  function definition() {
-    return { name, description: "", instructions };
-  }
-
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const response = await client.writeManagedSkill(definition());
-      if (!response.result.ok) {
-        setProblem(response.result.message);
-        return;
-      }
-      await refresh();
-    } catch {
-      setProblem(t("settings.skills.unavailable"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function importSkill() {
-    setBusy(true);
-    try {
-      const response = await client.importManagedSkill(definition());
-      if (!response.result.ok) {
-        setProblem(response.result.message);
-        return;
-      }
-      await refresh();
-    } catch {
-      setProblem(t("settings.skills.unavailable"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove(id: string) {
-    if (!window.confirm(t("settings.skills.deleteConfirm"))) return;
-    setBusy(true);
-    try {
-      const result = await client.deleteManagedSkill(id);
-      if (!result.ok) {
-        setProblem(result.message);
-        return;
-      }
-      await refresh();
-    } catch {
-      setProblem(t("settings.skills.unavailable"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function open(skill: ManagedSkill) {
-    try {
-      const loaded = await client.getManagedSkill(skill.id);
-      if (skill.scope === "shared_read_only") {
-        setDetail({
-          title: loaded.name,
-          fields: [
-            {
-              label: t("settings.detail.description"),
-              value: loaded.description,
-            },
-            { label: t("settings.detail.source"), value: loaded.source },
-            { label: t("settings.detail.status"), value: loaded.status },
-          ],
-        });
-        return;
-      }
-      setName(loaded.name);
-      setInstructions(loaded.instructions);
-    } catch {
-      setProblem(t("settings.skills.detailsUnavailable"));
-    }
-  }
-
+  const service = useMemo<SkillSettingsService>(
+    () => ({
+      list: () => client.listManagedSkills(),
+      get: (id) => client.getManagedSkill(id),
+      write: (definition) =>
+        client.writeManagedSkill(definition).then((response) => response.result),
+      import: (definition) =>
+        client
+          .importManagedSkill(definition)
+          .then((response) => response.result),
+      remove: (id) => client.deleteManagedSkill(id),
+    }),
+    [client],
+  );
   return (
-    <section className="capability-section" aria-labelledby="skill-settings-title">
-      <div className="capability-section-heading">
-        <h2 id="skill-settings-title">{t("settings.tab.skills")}</h2>
-      </div>
-      <form className="capability-form" onSubmit={(event) => void save(event)}>
-        <label>
-          <span>{t("settings.skills.name")}</span>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            disabled={!canMutate || busy}
-            required
-          />
-        </label>
-        <label>
-          <span>{t("settings.skills.instructions")}</span>
-          <textarea
-            value={instructions}
-            onChange={(event) => setInstructions(event.target.value)}
-            disabled={!canMutate || busy}
-            required
-          />
-        </label>
-        <div className="capability-form-actions">
-          <button
-            type="submit"
-            className="primary"
-            disabled={!canMutate || busy}
-          >
-            {t("settings.skills.save")}
-          </button>
-          <button
-            type="button"
-            disabled={!canMutate || busy}
-            onClick={() => void importSkill()}
-          >
-            {t("settings.skills.import")}
-          </button>
-        </div>
-      </form>
-      {problem && <div className="capability-problem">{problem}</div>}
-      {skills === null ? (
-        <div className="capability-loading">{t("settings.loading")}</div>
-      ) : skills.length === 0 ? (
-        <EmptySection message={t("settings.skills.empty")} />
-      ) : (
-        <ul className="capability-list">
-          {skills.map((skill) => (
-            <li
-              key={skill.id}
-              className="capability-item"
-              data-testid={`skill-${skill.id}`}
-            >
-              <div className="capability-item-copy">
-                <strong>{skill.name}</strong>
-                <span>{skill.description}</span>
-              </div>
-              {skill.scope === "shared_read_only" && (
-                <span className="settings-state">{t("settings.readOnly")}</span>
-              )}
-              <div className="capability-actions">
-                {skill.actions.includes("open") && (
-                  <button type="button" onClick={() => void open(skill)}>
-                    {t("settings.action.open")}
-                  </button>
-                )}
-                {skill.actions.includes("delete") && (
-                  <button
-                    type="button"
-                    className="danger"
-                    disabled={busy}
-                    onClick={() => void remove(skill.id)}
-                  >
-                    {t("settings.action.delete")}
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      {detail && (
-        <CapabilityDetail
-          title={detail.title}
-          fields={detail.fields}
-          onClose={() => setDetail(null)}
-        />
-      )}
-    </section>
+    <I18nProvider>
+      <SharedSkillSettings service={service} canMutate={canMutate} />
+    </I18nProvider>
   );
 }

@@ -1,0 +1,675 @@
+/* LoopPlane Desktop renderer styles.
+   The design system — tokens, typography, message list, dialogs, composer,
+   settings — is the shared cowork presentation stylesheet, exactly as the Web
+   app consumes it. Only the classes the Electron renderer owns are defined
+   here, built on the same tokens so light/dark and spacing stay in step. */
+
+@import "@loopplane/cowork-presentation/styles.css";
+
+.desktop-shell {
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ---- Conversation pane -------------------------------------------------- */
+
+.app {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.desktop-topbar {
+  position: relative;
+  z-index: var(--z-header);
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-height: 52px;
+  padding: 8px var(--shell-gutter);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+
+/* The session's name, which is the one thing in this row that changes. It gets
+   the weight; the status and the actions sit below it in the hierarchy. */
+.desktop-topbar h1 {
+  margin: 0;
+  min-width: 0;
+  flex: 0 1 auto;
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-topbar-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.desktop-topbar-actions button {
+  font-size: 13px;
+  padding: 5px 11px;
+}
+
+/* The status group carries the runtime phase; it is also a fixed smoke
+   locator, so it stays one element with one accessible name. */
+.runtime-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.runtime-status::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.desktop-shell[data-phase="running"] .runtime-status::before,
+.desktop-shell[data-phase="starting"] .runtime-status::before,
+.desktop-shell[data-phase="cancelling"] .runtime-status::before {
+  background: var(--running);
+}
+
+.desktop-shell[data-phase="unavailable"] .runtime-status::before,
+.desktop-shell[data-phase="incompatible"] .runtime-status::before,
+.desktop-shell[data-phase="error"] .runtime-status::before {
+  background: var(--danger);
+}
+
+.runtime-status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Session context strip ---------------------------------------------- */
+
+/* The runtime-diagnostic group carries this when nothing is wrong (see
+   RuntimeUnavailable): which folder the agent is pointed at, which model
+   answers, and how much it may do without asking. */
+.session-context {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.session-context-item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-context-item + .session-context-item::before {
+  content: "·";
+  margin-right: 10px;
+  color: var(--border-strong);
+}
+
+.app > .messages,
+.app > .empty-state {
+  flex: 1;
+  min-height: 0;
+}
+
+/* The shared `.composer` expects a surface around it; the desktop form is the
+   surface itself, so give it the same treatment inline. */
+.app > .composer {
+  flex: none;
+  width: min(
+    var(--conversation-max-width),
+    calc(100% - (2 * var(--shell-gutter)))
+  );
+  margin: 0 auto 14px;
+  padding: 8px;
+  /* flex-end, not center: the box grows downward with the text, so the buttons
+     stay pinned to the last line rather than drifting to the middle. */
+  align-items: flex-end;
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow);
+}
+
+.app > .composer textarea {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 12px;
+  padding: 8px 10px;
+  font: inherit;
+  line-height: 1.5;
+  background: transparent;
+  color: var(--text);
+  /* One row until the content asks for more; `growTextarea` sets an explicit
+     height from there, and `resize: none` keeps the drag handle from fighting
+     it. Past the cap the textarea scrolls inside the surface. */
+  resize: none;
+  overflow-y: auto;
+  max-height: 200px;
+}
+
+.app > .composer textarea:focus-visible {
+  outline: 0;
+  box-shadow: none;
+}
+
+.app > .composer button[type="submit"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+/* ---- Session sidebar ---------------------------------------------------- */
+
+.session-sidebar {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+  overflow-y: auto;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar-top {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-new-session {
+  width: 100%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.sidebar-search {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 9px;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-section-header button {
+  flex: none;
+  font-size: 12px;
+  padding: 3px 9px;
+}
+
+.session-sidebar ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* The session list is the one thing here that grows; everything else keeps its
+   size so the list gets the column. */
+.session-sidebar > ul[data-testid="session-list"] {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.session-group-heading {
+  padding: 10px 9px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Three buttons on every row competed with the titles. They collapse to zero
+   width rather than only fading: at `opacity: 0` they still occupy the row, so
+   every title stayed truncated to a few characters for a control nobody was
+   looking at. They remain in the accessibility tree and in keyboard order, and
+   `:focus-within` expands them for anyone arriving without a mouse. */
+.session-row-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    max-width 120ms ease,
+    opacity 120ms ease;
+}
+
+.session-row:hover .session-row-actions,
+.session-row:focus-within .session-row-actions {
+  max-width: 160px;
+  opacity: 1;
+}
+
+.session-row-actions button {
+  flex: none;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+/* Without hover there is no way to reveal them, so they stay. */
+@media (hover: none) {
+  .session-row-actions {
+    max-width: 160px;
+    opacity: 1;
+  }
+}
+
+.sidebar-projects,
+.sidebar-workspaces {
+  flex: none;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.sidebar-projects > summary,
+.sidebar-workspaces > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.sidebar-projects > summary:hover,
+.sidebar-workspaces > summary:hover {
+  background: var(--bg-elev);
+}
+
+.sidebar-count {
+  margin-left: auto;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.sidebar-footer {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.sidebar-workspaces > summary {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.workspace-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-workspaces > summary .availability {
+  margin-left: auto;
+  flex: none;
+}
+
+.sidebar-footer-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sidebar-footer-actions button {
+  flex: 1 1 auto;
+  font-size: 12px;
+  padding: 5px 9px;
+}
+
+.sidebar-footer-prefs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-theme-toggle {
+  flex: none;
+  width: 32px;
+  padding: 5px 0;
+  text-align: center;
+}
+
+.sidebar-language {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.session-sidebar li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.session-sidebar li > button:first-child {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-color: transparent;
+  background: transparent;
+  padding: 5px 9px;
+}
+
+.session-sidebar li > button:first-child:hover {
+  background: var(--bg-elev);
+  border-color: var(--border);
+}
+
+.session-sidebar li > button.selected {
+  background: var(--accent-soft);
+  border-color: var(--border-strong);
+  font-weight: 600;
+}
+
+.session-sidebar li > button:not(:first-child) {
+  flex: none;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.session-sidebar li.empty {
+  display: block;
+  padding: 4px 9px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.session-sidebar .availability {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.session-sidebar .hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ---- Confirmation dialogs ----------------------------------------------- */
+
+/* Without this the dialog renders inline in the document flow, which reads as
+   page content rather than as a decision that blocks the pane behind it. */
+.confirm-dialog {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow);
+}
+
+.confirm-dialog p {
+  margin: 0;
+}
+
+.confirm-dialog button {
+  align-self: flex-start;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.confirm-dialog-actions button {
+  align-self: auto;
+}
+
+/* ---- Provider settings -------------------------------------------------- */
+
+/* The unconfigured app can only answer with a placeholder, so say so above the
+   conversation. A banner, never a replacement: the packaged smoke reads its
+   success marker out of this pane. */
+.provider-setup-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px var(--shell-gutter) 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 13px;
+}
+
+.provider-setup-banner span {
+  flex: 1;
+  min-width: 0;
+}
+
+.provider-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 34rem;
+}
+
+.provider-current {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  overflow-wrap: anywhere;
+}
+
+.provider-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.provider-field input,
+.provider-field select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.provider-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.provider-actions button.primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+.provider-failure {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.provider-restart {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.provider-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ---- Backup and restore ------------------------------------------------- */
+
+.backup-restore-view {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  padding: var(--shell-gutter);
+  overflow-y: auto;
+}
+
+/* Without this the section's children stay inline-level, which put the
+   "I understand this backup is unencrypted" checkbox and the button that acts
+   on it on the same line — a consent control and the action it gates, reading
+   as one run-on row. */
+.backup-restore-view section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  width: min(var(--conversation-max-width), 100%);
+}
+
+.backup-restore-view h1 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.backup-restore-view h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+/* The disclosure is the point of this screen, not fine print: it keeps body
+   size and a measure that stays readable. */
+.backup-restore-view p {
+  margin: 0;
+  max-width: 62ch;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.backup-restore-view label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.backup-restore-view ul {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+
+.backup-restore-view section > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+}
+
+.backup-restore-view .restore-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  width: auto;
+}
+
+.backup-restore-view .restore-actions .primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: var(--accent);
+}
+
+.backup-restore-view [role="alert"] {
+  padding: 10px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  max-width: 62ch;
+}

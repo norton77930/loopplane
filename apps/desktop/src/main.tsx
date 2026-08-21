@@ -2,14 +2,21 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
-import { type DesktopBridge, SidecarTransport } from "./sidecar";
+import { DesktopI18nProvider } from "./i18n";
+import { createTransportFromWindow } from "./sidecar";
+import "./styles.css";
 
-const bridge = (window as unknown as { api?: DesktopBridge }).api;
 const root = document.getElementById("root");
-if (root && bridge) {
+const transport = createTransportFromWindow();
+if (root) {
   createRoot(root).render(
     <StrictMode>
-      <App transport={new SidecarTransport(bridge)} />
+      <DesktopI18nProvider>
+        <App
+          transport={transport}
+          initialPhase={transport ? "starting" : "unavailable"}
+        />
+      </DesktopI18nProvider>
     </StrictMode>,
   );
 }

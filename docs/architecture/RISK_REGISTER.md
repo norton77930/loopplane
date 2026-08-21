@@ -105,3 +105,27 @@
 - **Why AI errs**: agents treat examples as API templates and write code that ignores newer guards (budget, permission modes)
 - **Mitigation**: extend examples to newer capabilities (needs its own unit); the template's §A excludes examples from required reading
 - **Gate**: none · **Verify**: `tests/integration/test_examples_smoke.py`
+
+## R14 — A guard asserts the construct instead of the property
+
+- **Affected**: any source-shape contract, especially delivery and boundary guards
+- **Severity/Likelihood**: High / Med
+- **Why AI errs**: writing a guard straight from the implementation makes the assertion mirror the code that was just written, so it passes by construction and never encodes the property its own name claims. Unit 078 shipped `it("... invokes smoke from an external CWD")` asserting `toContain("Push-Location $runRoot")` — the one construct that cannot set a process working directory. Every delivery run then failed closed before UI Automation while the guard stayed green.
+- **Mitigation**: state the property, not the spelling; prove the new assertion is RED against the pre-fix source before trusting it; prefer asserting the observable effect (or the absence of the wrong construct) over the presence of the right-looking one
+- **Gate**: the guard's own negative self-check · **Verify**: extract the previous revision (`git show HEAD:<file>`) and confirm the new assertion fails on it
+
+## R15 — Fail-open multi-command CI steps
+
+- **Affected**: `.github/workflows/*.yml` steps that run several commands under `shell: powershell`
+- **Severity/Likelihood**: High / High
+- **Why AI errs**: a `run: |` block reads like a script where any failure stops the job, but GitHub reports only the **last** command's exit code and native tools do not raise in PowerShell. A fifteen-command reviewed-source gate can report `success` while `ruff`, `mypy`, `pytest`, and `npm test` all failed inside it.
+- **Mitigation**: check `$LASTEXITCODE` after each command, or split one command per step
+- **Gate**: none today (recorded, unrepaired, maintainer decision) · **Verify**: compare a green multi-command step against the same commands run as their own workflow
+
+## R16 — The packaged smoke passes inside a margin machine load can erase
+
+- **Affected**: `scripts/smoke-desktop-artifact.ps1` happy path; the Windows delivery job
+- **Severity/Likelihood**: Med / Med
+- **Why AI errs**: the gate is green on a quiet machine, so an agent reads it as settled. The happy scenario must reach a usable runtime inside one fixed ten-second deadline, and a cold packaged start spends most of it: first launch of a freshly copied artifact measured 5.2s to a window and never reached usable, while the second and third launches reached it at 6.6s and 5.7s. The app's own handshake budget is `SIDECAR_WARMUP_MS + SIDECAR_INIT_TIMEOUT_MS`; when a loaded machine pushes the frozen sidecar past it, the run reports a healthy runtime as unavailable.
+- **Mitigation**: run the packaged smoke on an otherwise idle machine; do not interpret a single failure as a product defect without the millisecond timeline; keep the handshake budget below the acceptance deadline so the failure is a timeout rather than a hang
+- **Gate**: the delivery job's `-Scenario all` run · **Verify**: `apps/desktop/.build/probe-runtime-usable.ps1` prints window, locator and status transitions with timestamps and distinguishes "slow" from "never"

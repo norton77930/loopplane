@@ -46,6 +46,7 @@ from loopplane.host.config import (
     validate_config,
 )
 from loopplane.host.sink import RunSink
+from loopplane.host.storage_authority import StorageAuthorityLease
 from loopplane.memory import MemoryStore
 from loopplane.observability import maybe_attach
 from loopplane.skills import SkillToolAdapter, load_skills, skill_profiles
@@ -79,6 +80,7 @@ class AssembledRuntime:
     skills: Mapping[str, LoadedSkill]
     memory_store: MemoryStore | None
     capability_manager: CapabilityManager
+    storage_lease: StorageAuthorityLease | None
 
 
 def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRuntime:
@@ -91,7 +93,28 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
     """
 
     validate_config(config)
+    storage_lease: StorageAuthorityLease | None = None
+    try:
+        if config.storage is not None and config.storage.authority is not None:
+            storage_lease = config.storage.authority.acquire(config.storage.root)
+            storage_lease.validate()
+        return _assemble_validated(
+            config,
+            subagent_depth=subagent_depth,
+            storage_lease=storage_lease,
+        )
+    except BaseException:
+        if storage_lease is not None:
+            storage_lease.close()
+        raise
 
+
+def _assemble_validated(
+    config: RuntimeConfig,
+    *,
+    subagent_depth: int,
+    storage_lease: StorageAuthorityLease | None,
+) -> AssembledRuntime:
     # Durable backends — both or neither, wired together (FR-002).
     artifact_store: ArtifactStore | None = None
     checkpoint_store: CheckpointStore | None = None
@@ -99,13 +122,21 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
     output_limit_bytes: int | None = None
     replacement_budget_bytes: int | None = None
     if config.storage is not None:
-        artifact_store = ArtifactStore(config.storage.root)
+        storage_root = (
+            storage_lease.root if storage_lease is not None else config.storage.root
+        )
+        validate_storage = storage_lease.validate if storage_lease is not None else None
+        artifact_store = ArtifactStore(
+            storage_root,
+            validate_root=validate_storage,
+        )
         if config.storage.checkpoint_backend == "sqlite":
             checkpoint_store = SqliteCheckpointStore(
-                config.storage.root / "checkpoints.sqlite3"
+                storage_root / "checkpoints.sqlite3",
+                validate_root=validate_storage,
             )
         else:
-            checkpoint_store = FileCheckpointStore(config.storage.root)
+            checkpoint_store = FileCheckpointStore(storage_root)
         artifact_handoff = make_artifact_handoff(artifact_store)
         output_limit_bytes = config.storage.artifact_threshold_bytes
         replacement_budget_bytes = config.storage.replacement_budget_bytes
@@ -201,7 +232,12 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         gateway.register_adapter(WorktreeToolsAdapter())
 
     capability_store = (
-        CapabilitySettingsStore(config.storage.root)
+        CapabilitySettingsStore(
+            storage_lease.root if storage_lease is not None else config.storage.root,
+            validate_root=(
+                storage_lease.validate if storage_lease is not None else None
+            ),
+        )
         if config.storage is not None
         else None
     )
@@ -315,6 +351,7 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
         skills=skills_map or {},
         memory_store=memory_store,
         capability_manager=capability_manager,
+        storage_lease=storage_lease,
     )
 
 

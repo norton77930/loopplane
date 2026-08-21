@@ -33,6 +33,17 @@ apps/desktop/sidecar/build/
 apps/desktop/sidecar/dist/
 apps/desktop/release/
 
+# Desktop emitted bundles and local delivery scratch (unit 078) — never commit.
+# Untracked but unignored, these were a bulk-`git add` hazard and made Ruff and
+# Vitest collect stale copies of the workspace from local packaging runs.
+apps/*/dist-electron/
+apps/desktop/.build/
+
+# Agent worktrees checked out inside the tree — never repo content. Git already
+# excludes them locally, but the sdist builder reads .gitignore, so without this
+# `uv build` walks a sibling checkout and fails on its leftover temp paths.
+.claude/worktrees/
+
 # Local manual-QA helper (docs/manual-qa.md §2) — do not commit
 /serve_web_demo.py
 

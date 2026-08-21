@@ -8,14 +8,13 @@ productName: LoopPlane
 directories:
   output: release
 files:
-  - electron/**/*.js
-  - electron/**/*.cjs
   - dist/**/*
+  - dist-electron/**/*
 extraResources:
   - from: sidecar/dist
     to: sidecar
     filter:
-      - loopplane-sidecar*
+      - "**/*"
 win:
   target: nsis
 mac:

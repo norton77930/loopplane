@@ -98,3 +98,12 @@ A web UI / dashboard (unit 012); real cloud deployment, TLS termination, and wor
 user management, a persistent credential/identity store, and OAuth / SSO; rate limiting and quotas beyond
 the auth boundary (governance is unit 009); bidirectional realtime collaboration and distributed session
 sharing.
+
+## Desktop parity (unit 078)
+
+Unit 078 gave the Desktop app the same cowork surface through the shared
+`packages/cowork-presentation` package, and it changed **nothing** here. The Desktop app
+does not mount, call, or depend on this host: it spawns a local Python sidecar and speaks
+JSON-RPC V1 over stdio, opening no port. Every route, JSON envelope, event-stream frame,
+and authentication rule on this surface is unchanged, and the Web contract suites plus
+`tests/contract/test_webapi_boundary.py` assert that from the committed tree.

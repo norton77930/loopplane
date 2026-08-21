@@ -28,6 +28,7 @@ from loopplane.host.agent_controls import (
     validate_browser_permission_mode,
 )
 from loopplane.host.assembly import AssembledRuntime, assemble
+from loopplane.host.audit import TurnAuditEntry, checkpoint_records_to_audit_entries
 from loopplane.host.capabilities import (
     CapabilityOperationResult,
     CapabilitySettingsStatus,
@@ -53,6 +54,12 @@ from loopplane.host.inspect import (
     tools_view,
 )
 from loopplane.host.sink import RunSink
+from loopplane.host.snapshot import (
+    DesktopPortableSnapshotProvider,
+    PortableSnapshotProvider,
+    PortableSnapshotResult,
+    UnavailablePortableSnapshotProvider,
+)
 from loopplane.loop.history import HistoryEntry
 from loopplane.model import ContentBlock, TextBlock
 
@@ -118,6 +125,7 @@ class LoopPlaneHost:
         subagent_depth: int = 0,
         swarm_supervisor: SwarmSupervisor | None = None,
         swarm_member_id: str | None = None,
+        portable_snapshot_provider: PortableSnapshotProvider | None = None,
     ) -> None:
         # Assembly validates the config and fails fast before any run (FR-005).
         # ``subagent_depth`` (spec 043) is this host's recursion depth; 0 for a
@@ -134,6 +142,10 @@ class LoopPlaneHost:
         # message registry and resolves "self". ``None`` for a top-level host.
         self._swarm_supervisor = swarm_supervisor
         self._swarm_member_id = swarm_member_id
+        # 078 T075: default-unavailable portable snapshot; Desktop injects provider.
+        self._snapshot_provider: PortableSnapshotProvider = (
+            portable_snapshot_provider or UnavailablePortableSnapshotProvider()
+        )
 
     @property
     def skill_problems(self) -> tuple[str, ...]:
@@ -261,11 +273,17 @@ class LoopPlaneHost:
         )
         controller.attach_reviewer(session_id)
         self._bind(sink, controller, session_id, on_event, on_approval)
-        try:
-            yield Session(controller, session_id, sink, self._config)
-        finally:
+        session = Session(controller, session_id, sink, self._config)
+
+        def cleanup() -> None:
             sink.unbind()
             self._active = False
+
+        session._cleanup = cleanup
+        try:
+            yield session
+        finally:
+            await session.aclose()
 
     def list_sessions(self) -> list[SessionSummary]:
         return [
@@ -273,7 +291,12 @@ class LoopPlaneHost:
             for summary in self._assembled.controller.list_sessions()
         ]
 
-    async def resume(self, session_id: str) -> None:
+    async def resume(
+        self,
+        session_id: str,
+        *,
+        working_scope: Path | None = None,
+    ) -> None:
         summary = next(
             (
                 item
@@ -286,12 +309,89 @@ class LoopPlaneHost:
             await self._assembled.capability_manager.activate_principal(
                 summary.principal_id
             )
-        await self._assembled.controller.resume(session_id)
+        await self._assembled.controller.resume(session_id, working_scope=working_scope)
+
+    @asynccontextmanager
+    async def resume_session(
+        self,
+        session_id: str,
+        on_event: EventSink,
+        *,
+        on_approval: OnApproval | None = None,
+        working_scope: Path | None = None,
+        principal_id: str | None = None,
+    ) -> AsyncIterator[Session]:
+        """Resume a durable session into an interactive ``Session`` handle (078 T022).
+
+        Composes principal activation, controller resume (optional
+        ``working_scope``), reviewer attachment, RunSink bind/replay, and the
+        existing ``Session`` lifecycle. ``working_scope=None`` preserves
+        controller default (``Path.cwd()``).
+        """
+
+        self._enter_run()
+        try:
+            summary = next(
+                (
+                    item
+                    for item in self._assembled.controller.list_sessions()
+                    if item.session_id == session_id
+                ),
+                None,
+            )
+            if summary is None or (
+                principal_id is not None
+                and summary.principal_id not in (None, principal_id)
+            ):
+                raise KeyError(f"unknown session: {session_id}")
+            active_principal = (
+                principal_id if principal_id is not None else summary.principal_id
+            )
+            await self._assembled.capability_manager.activate_principal(
+                active_principal
+            )
+            controller = self._assembled.controller
+            sink = self._assembled.sink
+            await controller.resume(session_id, working_scope=working_scope)
+            controller.attach_reviewer(session_id)
+            self._bind(sink, controller, session_id, on_event, on_approval)
+            session = Session(controller, session_id, sink, self._config)
+
+            def cleanup() -> None:
+                sink.unbind()
+                self._active = False
+
+            session._cleanup = cleanup
+            yield session
+        finally:
+            if "session" in locals():
+                await session.aclose()
+            else:
+                self._assembled.sink.unbind()
+                self._active = False
 
     async def aclose(self) -> None:
-        """Release owner-scoped managed adapters held by this host."""
+        """Release managed adapters and retained storage authority."""
 
-        await self._assembled.capability_manager.aclose()
+        first_error: Exception | None = None
+        try:
+            self._assembled.controller.retry_pending_artifact_deletions()
+        except Exception as exc:
+            first_error = exc
+        try:
+            await self._assembled.capability_manager.aclose()
+        except Exception as exc:
+            if first_error is None:
+                first_error = exc
+        lease = self._assembled.storage_lease
+        if lease is not None and first_error is None:
+            try:
+                lease.close()
+                self._assembled.storage_lease = None
+            except Exception as exc:
+                first_error = exc
+        if first_error is not None:
+            raise first_error
 
     async def set_session_title(self, session_id: str, title: str) -> None:
         """Persist a new title for a session (030)."""
@@ -342,6 +442,58 @@ class LoopPlaneHost:
         """A point-in-time history snapshot for a session (FR-003)."""
 
         return self._assembled.controller.history_snapshot(session_id)
+
+    def list_turn_audit(self, session_id: str) -> tuple[TurnAuditEntry, ...]:
+        """Read checkpoint-derived metadata-only logical-turn audit rows.
+
+        Audit is deliberately unavailable for non-durable sessions: reconstructing
+        it from live history would both violate the durability contract and risk
+        exposing content-derived metadata.  Checkpoint-store ``load`` is read-only.
+        """
+
+        checkpoint_store = self._assembled.checkpoint_store
+        if checkpoint_store is None:
+            return ()
+        records, _problems = checkpoint_store.load(session_id)
+        return checkpoint_records_to_audit_entries(records)
+
+    def export_portable_snapshot(self, destination: Path) -> PortableSnapshotResult:
+        """Export a portable profile snapshot (078 T075).
+
+        Default-unavailable unless a Desktop provider was injected.
+        """
+
+        return self._snapshot_provider.export_snapshot(Path(destination))
+
+    def validate_portable_snapshot(self, source: Path) -> PortableSnapshotResult:
+        """Read-only validation of an inactive staged snapshot (078 T075)."""
+
+        return self._snapshot_provider.validate_snapshot(Path(source))
+
+    def set_portable_snapshot_provider(
+        self, provider: PortableSnapshotProvider | None
+    ) -> None:
+        """Inject or clear the Desktop portable-snapshot provider."""
+
+        self._snapshot_provider = provider or UnavailablePortableSnapshotProvider()
+
+    def enable_desktop_portable_snapshot(self) -> None:
+        """Inject the canonical Host-owned Desktop snapshot provider.
+
+        Only Desktop composition calls this opt-in seam.  It preserves all
+        non-Desktop defaults and keeps the configured storage root private to
+        the Host/provider boundary.
+        """
+
+        storage = self._config.storage
+        if storage is None or storage.checkpoint_backend != "sqlite":
+            self._snapshot_provider = UnavailablePortableSnapshotProvider()
+            return
+        lease = self._assembled.storage_lease
+        self._snapshot_provider = DesktopPortableSnapshotProvider(
+            lease.root if lease is not None else storage.root,
+            validate_root=lease.validate if lease is not None else None,
+        )
 
     def session_cost(self, session_id: str) -> Decimal | None:
         """A session's accumulated USD, or ``None`` when not budget-tracked (064)."""
@@ -794,6 +946,7 @@ class Session:
         self._sink = sink
         self._config = config
         self._outcome: RunOutcome | None = None
+        self._cleanup: Callable[[], Awaitable[None] | None] | None = None
 
     @property
     def session_id(self) -> str:
@@ -822,6 +975,15 @@ class Session:
         # Resolve anything the loop is parked on (a pending approval/question)
         # so a cancelled interactive run can never hang on a reviewer (FR-115).
         self._controller.on_reviewer_disconnect(self._session_id)
+
+    async def aclose(self) -> None:
+        cleanup = self._cleanup
+        if cleanup is None:
+            return
+        result = cleanup()
+        if result is not None:
+            await result
+        self._cleanup = None
 
     def answer_approval(
         self,

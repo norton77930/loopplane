@@ -57,6 +57,28 @@ def test_runtime_dependencies_are_unchanged() -> None:
     }
 
 
+def test_pyinstaller_stays_out_of_runtime_metadata() -> None:
+    """078 freezes the Desktop sidecar from a build-only lock (078 T092).
+
+    The closed dependency sets above already bar it from ``[project]``; the
+    resolved runtime lock must stay clean too, so the freeze tool can never
+    reach an installed runtime environment.
+    """
+
+    build_only = (
+        REPO_ROOT / "apps" / "desktop" / "sidecar" / "pyinstaller-build.in"
+    ).read_text(encoding="utf-8")
+    assert "pyinstaller" in build_only.lower(), (
+        "the build-only PyInstaller input must exist, otherwise this guard cannot fail"
+    )
+
+    for relative in ("pyproject.toml", "uv.lock"):
+        text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        assert "pyinstaller" not in text.lower(), (
+            f"{relative} must not carry the build-only freeze tool"
+        )
+
+
 def test_version_has_a_single_source() -> None:
     data = load_pyproject()
     project = data["project"]  # type: ignore[index]

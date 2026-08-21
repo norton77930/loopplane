@@ -1,7 +1,10 @@
-// @ts-expect-error Vitest provides Node built-ins at runtime; the Web tsconfig intentionally omits Node types.
+// @ts-ignore Vitest provides Node built-ins at runtime; the Web tsconfig intentionally omits Node types.
 import { readFileSync } from "node:fs";
 
-const styles = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+const styles = readFileSync(
+  new URL("../../../../packages/cowork-presentation/src/styles.css", import.meta.url),
+  "utf8",
+);
 
 describe("accessibility style contracts", () => {
   it("preserves focus, reflow, reduced motion, and forced-color visibility", () => {

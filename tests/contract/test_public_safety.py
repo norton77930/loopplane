@@ -13,6 +13,11 @@ import re
 import subprocess
 from pathlib import Path
 
+from tests.helpers.public_safety import (
+    LOOPPLANE_PATH_MARKER,
+    all_authorized_content_markers,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_PATTERN_FILE = REPO_ROOT / "sensitive-scan.txt"
 
@@ -43,6 +48,17 @@ BUILTIN_PATTERNS: dict[str, str] = {
     "absolute Windows user path": _WINDOWS_USER_PATH,
     "absolute POSIX home path": _POSIX_HOME_PATH,
 }
+
+
+def test_authorized_content_fixtures_are_portable() -> None:
+    path_patterns = (
+        re.compile(BUILTIN_PATTERNS["absolute Windows user path"]),
+        re.compile(BUILTIN_PATTERNS["absolute POSIX home path"]),
+    )
+
+    fixtures = (LOOPPLANE_PATH_MARKER, *all_authorized_content_markers())
+    for marker in fixtures:
+        assert not any(regex.search(marker) for regex in path_patterns), marker
 
 
 def _committed_files() -> list[Path]:

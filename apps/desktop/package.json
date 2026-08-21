@@ -3,16 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "LoopPlane desktop GUI — an Electron shell over a local sidecar, reusing the web UI (unit 019).",
-  "main": "electron/main.ts",
+  "description": "LoopPlane desktop GUI — Electron shell over a local sidecar with shared cowork presentation (078).",
+  "main": "dist-electron/main.js",
+  "files": [
+    "dist",
+    "dist-electron",
+    "electron-builder.yml",
+    "package.json"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "vite",
-    "build:sidecar": "pyinstaller sidecar/loopplane-sidecar.spec --distpath sidecar/dist --workpath sidecar/build",
-    "dist": "electron-builder"
+    "build": "tsc --noEmit && vite build && tsc -p tsconfig.main.json && tsc -p tsconfig.preload.json",
+    "build:sidecar": "pwsh -NoProfile -File ../../../scripts/build-desktop-sidecar.ps1",
+    "dist": "electron-builder",
+    "package": "pwsh -NoProfile -File ../../../scripts/build-desktop-package.ps1"
   },
   "dependencies": {
+    "@loopplane/cowork-presentation": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

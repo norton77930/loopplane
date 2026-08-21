@@ -17,6 +17,7 @@ represents most-recent activity (contracts/checkpoint-store.md). Implements the
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from datetime import UTC, datetime
 from itertools import groupby
 from operator import itemgetter
@@ -41,21 +42,80 @@ _SCHEMA = (
     "data TEXT NOT NULL, "
     "PRIMARY KEY (session_id, sequence))"
 )
+_SCHEMA_COLUMNS = [
+    (0, "session_id", "TEXT", 1, None, 1),
+    (1, "sequence", "INTEGER", 1, None, 2),
+    (2, "recorded_at", "TEXT", 1, None, 0),
+    (3, "data", "TEXT", 1, None, 0),
+]
+_SCHEMA_OBJECTS = [
+    (
+        "table",
+        "records",
+        "records",
+        "CREATE TABLE records ("
+        "session_id TEXT NOT NULL, "
+        "sequence INTEGER NOT NULL, "
+        "recorded_at TEXT NOT NULL, "
+        "data TEXT NOT NULL, "
+        "PRIMARY KEY (session_id, sequence))",
+    )
+]
+
+
+def validate_sqlite_checkpoint_schema(connection: sqlite3.Connection) -> None:
+    """Require the exact non-executable serving schema and records table."""
+
+    objects = connection.execute(
+        "SELECT type, name, tbl_name, sql FROM sqlite_schema "
+        "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name, tbl_name"
+    ).fetchall()
+    if objects != _SCHEMA_OBJECTS or (
+        connection.execute("PRAGMA table_info(records)").fetchall() != _SCHEMA_COLUMNS
+    ):
+        raise sqlite3.DatabaseError("incompatible checkpoint schema")
 
 
 class SqliteCheckpointStore:
-    def __init__(self, db_path: Path) -> None:
+    def __init__(
+        self,
+        db_path: Path,
+        *,
+        validate_root: Callable[[], None] | None = None,
+    ) -> None:
         self._db_path = db_path
+        self._validate_root = validate_root
         self._locks: dict[str, anyio.Lock] = {}
 
     def _lock(self, session_id: str) -> anyio.Lock:
         return self._locks.setdefault(session_id, anyio.Lock())
 
+    def _require_root(self) -> None:
+        if self._validate_root is not None:
+            self._validate_root()
+
     def _connect(self) -> sqlite3.Connection:
+        self._require_root()
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._require_root()
         connection = sqlite3.connect(self._db_path)
-        connection.execute(_SCHEMA)
-        return connection
+        try:
+            self._require_root()
+            connection.execute(_SCHEMA)
+            validate_sqlite_checkpoint_schema(connection)
+            return connection
+        except Exception:
+            connection.close()
+            raise
+
+    def initialize(self) -> None:
+        """Create and validate the empty SQLite schema without appending a record."""
+
+        connection = self._connect()
+        try:
+            connection.commit()
+        finally:
+            connection.close()
 
     async def append(self, record: CheckpointRecord) -> None:
         """Insert one record and commit before returning (FR-080, FR-084)."""
@@ -81,6 +141,7 @@ class SqliteCheckpointStore:
         """The session's records ordered by sequence; corrupt rows are skipped
         and reported, mirroring the filesystem backend (FR-083).
         """
+        self._require_root()
         if not self._db_path.is_file():
             return [], []
         connection = self._connect()
@@ -108,6 +169,7 @@ class SqliteCheckpointStore:
         empty listing, not an error. ``last_active_at`` is the session's latest
         ``recorded_at``.
         """
+        self._require_root()
         if not self._db_path.is_file():
             return []
         connection = self._connect()
@@ -248,6 +310,7 @@ class SqliteCheckpointStore:
 
     def delete_session(self, session_id: str) -> None:
         """Remove all rows for the session; idempotent if absent (030)."""
+        self._require_root()
         if not self._db_path.is_file():
             return
         connection = self._connect()

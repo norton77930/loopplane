@@ -94,6 +94,21 @@ units 069–070), **0012** (durable event replay store), **0013** (platform fair
   deterministic localized follow-up suggestions with zero hidden work. Browser defaults remain
   read-only/empty, `bypassPermissions` is never selectable, explicit deny remains authoritative,
   and Event Bus/checkpoint/Gateway/persistence/default/dependency contracts are unchanged.
+- **078** Desktop cowork parity (`apps/desktop`, `packages/cowork-presentation`,
+  `loopplane.host`) — brings the Desktop app to cowork parity with Web and makes it
+  independently installable. Extracts the cowork surface into the first-party
+  `@loopplane/cowork-presentation` package that both apps render from through their own
+  adapters; adds a JSON-RPC V1 stdio protocol whose sidecar negotiates before composing the
+  Host; adds OS profile ownership with validated generations, projects and chooser-bound
+  workspaces, multi-pane single-active interactive leases, a checkpoint audit view, and an
+  unencrypted-by-disclosure portable backup whose archive excludes unsent drafts and
+  credentials, with a validate/commit/cancel restore lease. Delivery moves to four scripts
+  behind a third external-human Stage-C review: one tokenized verifier that emits a bounded
+  descriptor, two token-free descriptor-only wrappers for the PyInstaller freeze and the
+  `electron-builder` package, and a built-in .NET UI-Automation smoke that runs over a copy
+  outside the checkout. PyInstaller stays a build-only dependency, absent from
+  `pyproject.toml` and `uv.lock`. Web outward contracts, the Event Bus, checkpoint records,
+  Gateway invocation, and every default are unchanged.
 - **080** Web frontend visual refactor (`apps/web`) — presentation-only responsive
   conversation shell, full-page modular Settings, adaptive inspection, local accessible
   icons, bilingual chrome, and keyboard/focus/live-region, high-zoom, forced-color, and

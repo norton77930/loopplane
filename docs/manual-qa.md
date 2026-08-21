@@ -70,34 +70,38 @@ Reference: [Web frontend](./web-frontend.md).
 
 ## 3. Desktop app (Electron + Python sidecar)
 
-**Dev launch** — needs the real Electron binary, so a normal install (do **not**
-set `ELECTRON_SKIP_BINARY_DOWNLOAD` here):
+**Dev launch** — needs the real Electron binary, so a normal install from the repository
+root (do **not** set `ELECTRON_SKIP_BINARY_DOWNLOAD` here):
 
 ```sh
-cd apps/desktop
-npm install
-npm run dev      # builds the renderer and launches Electron; spawns sidecar/bridge.py
+npm ci                                # repository root; one root lock, npm workspaces
+npm run build -w @loopplane/desktop   # renderer dist/ + main and preload dist-electron/
+cd apps/desktop && npx electron .     # main: dist-electron/main.js; spawns sidecar/bridge.py
 ```
 
-- [ ] A native window opens with the chat UI.
+The Electron binary is a devDependency of the Desktop workspace and is not hoisted, so the
+launch runs from `apps/desktop`.
+
+- [ ] A native window opens with the cowork UI.
 - [ ] Submit a prompt → the sidecar replies and the run streams.
+- [ ] Bind a workspace through the chooser → it appears as available; relink or remove it → the state changes visibly.
+- [ ] Open backup → the **unencrypted** disclosure appears before anything is written; the archive excludes unsent drafts and credentials.
 - [ ] Close the window → the Python sidecar exits (no orphan process).
+- [ ] Relaunch → the previous session is listed (restart durability).
+- [ ] Launch a second instance against the same profile root → it fails closed on the ownership lock instead of sharing state.
 
-**Packaged installer** — the reserved manual/CI step ([Desktop GUI § Packaging](./desktop-gui.md)). On each target OS:
+**Packaged artifact** — never a bare tool invocation. The only route is the verifier-gated
+wrapper chain ([Desktop GUI § Delivery](./desktop-gui.md)); PyInstaller is a build-only
+dependency and must not be installed into the runtime environment. In practice this runs in
+the required Windows CI delivery job, which is entered only by an approved
+`pull_request_review`:
 
-```sh
-cd apps/desktop
-pip install pyinstaller
-npm run build:sidecar     # PyInstaller -> sidecar/dist/loopplane-sidecar*
-npx vite build            # renderer -> dist/ (+ compile electron/*.ts)
-npm install electron-builder
-npm run dist              # electron-builder -> apps/desktop/release/<installer>
-# then sign / notarize per platform
-```
-
-- [ ] An installer is produced under `apps/desktop/release/`.
+- [ ] The tokenized verifier emits a descriptor and the GitHub token is removed before any wrapper runs.
+- [ ] `scripts/build-desktop-package.ps1` produces `win-unpacked` from descriptor snapshots only.
+- [ ] `win-unpacked` is copied outside the checkout and `scripts/smoke-desktop-artifact.ps1 -Scenario all` is launched with an explicit external **process** working directory (`Push-Location` is not sufficient — see Desktop GUI § External-CWD package validation).
+- [ ] The smoke exits 0: every fixed Name/ControlType pair observed once, the success marker reached, restart history present, all three failure scenarios diagnosed inside ten seconds, no orphan process, no local listener, profiles preserved, copied sidecar restored.
 - [ ] Install + launch on a machine with **no system Python** → the app runs (uses the frozen sidecar).
-- [ ] (Release) the per-OS installer is **signed / notarized**.
+- [ ] (Release) the per-OS installer is **signed / notarized** — reserved, not claimed by 078.
 
 ## 4. Real-model validation (needs an API key)
 

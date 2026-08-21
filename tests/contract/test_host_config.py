@@ -4,6 +4,7 @@ public-safe (no-secret) shape (spec US2; FR-005, FR-011, FR-013, SC-005)."""
 from __future__ import annotations
 
 import dataclasses
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,7 @@ from loopplane.fairness import PlatformFairness, PlatformFairnessPolicy
 from loopplane.host import (
     ApprovalPolicy,
     ConfigError,
+    DesktopStorageAuthorityFactory,
     LoopPlaneHost,
     RuntimeConfig,
     StorageConfig,
@@ -89,6 +91,24 @@ def test_from_mapping_round_trips_a_plain_mapping() -> None:
     assert config.tools[0].descriptor.name == "echo"
     assert config.approval is not None
     assert "echo" in config.approval.deny
+
+
+def test_from_mapping_preserves_storage_authority(tmp_path: Path) -> None:
+    authority = DesktopStorageAuthorityFactory(tmp_path / "profile")
+
+    config = RuntimeConfig.from_mapping(
+        {
+            "model": _model(),
+            "storage": {
+                "root": tmp_path / "profile" / "generation-storage" / "g0",
+                "checkpoint_backend": "sqlite",
+                "authority": authority,
+            },
+        }
+    )
+
+    assert config.storage is not None
+    assert config.storage.authority is authority
 
 
 def test_from_mapping_without_model_is_rejected() -> None:
