@@ -579,10 +579,6 @@ async def _converse(remote: _Remote, stop: anyio.Event) -> int:
             await _cancel_remote_turn(remote)
             remote.out.write(INTERRUPT_NOTICE)
             return 0
-            if stop.is_set():
-                # A conversation that turned out to be gone is a failure to do
-                # what was asked, however it was discovered.
-                return 1 if remote.gone else 0
 
 
 async def _submit_racing_interrupt(
