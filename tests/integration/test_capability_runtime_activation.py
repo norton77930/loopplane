@@ -9,7 +9,10 @@ from typing import Literal
 import anyio
 import pytest
 
-import loopplane.host.capability_manager as capability_manager_module
+# MCPToolAdapter is resolved from the module the connect code lives in, which
+# unit 082 T032 moved out of capability_manager. Patching the old module would
+# silently do nothing and let the test reach a real endpoint.
+import loopplane.host._capability_mcp as mcp_module
 from loopplane.adapters.mcp import MCPServerConfig
 from loopplane.context import RunContext
 from loopplane.events import EventSequencer, RuntimeEvent
@@ -341,10 +344,9 @@ async def _lifecycle_manager(
 ]:
     _LifecycleMcpAdapter.reset()
     monkeypatch.setattr(
-        capability_manager_module,
+        mcp_module,
         "MCPToolAdapter",
         _LifecycleMcpAdapter,
-        raising=False,
     )
     policy = {"allowed": True}
     gateway = ToolGateway()
@@ -513,10 +515,9 @@ async def test_reconnected_mcp_tools_activate_for_owner_only(
 ) -> None:
     _RuntimeMcpAdapter.invocations = []
     monkeypatch.setattr(
-        capability_manager_module,
+        mcp_module,
         "MCPToolAdapter",
         _RuntimeMcpAdapter,
-        raising=False,
     )
     model = _RecordingModel(_mcp_script() + _mcp_script())
     host = LoopPlaneHost(

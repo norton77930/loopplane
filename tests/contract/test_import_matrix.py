@@ -408,7 +408,10 @@ MATRIX: dict[str, BoundaryMatrixEntry] = {
 # Existing composition/dependency discrepancy: capability_manager owns the only
 # runtime host -> adapters.mcp edge. This is not a package-wide sanctioned direction.
 FILE_SCOPED_RUNTIME_EXCEPTIONS: dict[str, frozenset[str]] = {
-    "host/capability_manager.py": frozenset(("loopplane.adapters.mcp",)),
+    # Unit 082 T032 moved this edge out of capability_manager.py. The exception
+    # names a file rather than the package on purpose, so a sanctioned import
+    # cannot ride along into a new home without being re-declared here.
+    "host/_capability_mcp.py": frozenset(("loopplane.adapters.mcp",)),
 }
 
 
@@ -634,7 +637,7 @@ def test_validator_rejects_an_undeclared_top_level_module(tmp_path: Path) -> Non
     ]
 
 
-def test_host_mcp_runtime_exception_is_limited_to_capability_manager(
+def test_host_mcp_runtime_exception_is_limited_to_the_managed_mcp_module(
     tmp_path: Path,
 ) -> None:
     root = _minimal_source_root(tmp_path)
@@ -642,7 +645,7 @@ def test_host_mcp_runtime_exception_is_limited_to_capability_manager(
     (root / "adapters" / "__init__.py").write_text("", encoding="utf-8")
     (root / "host").mkdir()
     (root / "host" / "__init__.py").write_text("", encoding="utf-8")
-    (root / "host" / "capability_manager.py").write_text(
+    (root / "host" / "_capability_mcp.py").write_text(
         "from loopplane.adapters.mcp import MCPServerConfig\n", encoding="utf-8"
     )
     (root / "host" / "other.py").write_text(

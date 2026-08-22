@@ -88,9 +88,7 @@ def test_no_capability_method_changes_shape() -> None:
         for name in sorted(set(recorded[label]) & set(current[label])):
             was, now = recorded[label][name], current[label][name]
             if was["async"] != now["async"]:
-                drift.append(
-                    f"{label}.{name}: async {was['async']} -> {now['async']}"
-                )
+                drift.append(f"{label}.{name}: async {was['async']} -> {now['async']}")
             if was["signature"] != now["signature"]:
                 drift.append(
                     f"{label}.{name}: {was['signature']} -> {now['signature']}"

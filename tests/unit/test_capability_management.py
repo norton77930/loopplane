@@ -7,7 +7,10 @@ from pathlib import Path
 
 import pytest
 
-import loopplane.host.capability_manager as capability_manager_module
+# MCPToolAdapter is resolved from the module the connect code lives in, which
+# unit 082 T032 moved out of capability_manager. Patching the old module would
+# silently do nothing and let the test reach a real endpoint.
+import loopplane.host._capability_mcp as mcp_module
 from loopplane.adapters.mcp import MCPServerConfig
 from loopplane.context import RunContext
 from loopplane.gateway.spi import AdapterOutput
@@ -554,10 +557,9 @@ async def test_mcp_management_upsert_reconnect_failure_and_delete(
     _FakeMcpAdapter.fail_connect = False
     _FakeMcpAdapter.instances = []
     monkeypatch.setattr(
-        capability_manager_module,
+        mcp_module,
         "MCPToolAdapter",
         _FakeMcpAdapter,
-        raising=False,
     )
     host = _host(tmp_path, runtime_activation_enabled=True)
 
