@@ -46,6 +46,7 @@ VERSION_PATTERN = re.compile(
     re.MULTILINE,
 )
 BOLD_UNIT_PATTERN = re.compile(r"\*\*(\d{3})\*\*")
+CHANGELOG_ENTRY_PATTERN = re.compile(r"^-\s+\*\*(\d{3})\*\*", re.MULTILINE)
 NAMED_UNIT_LINE_PATTERN = re.compile(r"^.*\bunits?\b.*$", re.IGNORECASE | re.MULTILINE)
 THREE_DIGIT_PATTERN = re.compile(r"(?<!\d)(\d{3})(?!\d)")
 BOARD_ROW_PATTERN = re.compile(
@@ -76,6 +77,7 @@ class ReleaseSyncResult:
     init_version_ok: bool
     changelog_section_ok: bool
     board_status_ok: bool
+    changelog_coverage_ok: bool
     notes: str
     failures: tuple[str, ...]
 
@@ -145,6 +147,23 @@ def release_units(notes: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(units))
 
 
+def changelog_units(text: str) -> frozenset[str]:
+    """Unit ids that the changelog actually DOCUMENTS, in entry form.
+
+    Section-agnostic on purpose: a unit released in an earlier version is
+    still documented, and must not be dragged into the current section.
+
+    Deliberately stricter than ``release_units``. The two directions need
+    OPPOSITE strictness: be generous about what counts as a claim (so no
+    claim escapes the board check), and strict about what counts as an
+    entry. Sharing one extractor made this check vacuous on its first real
+    run -- a line of prose reading 'predating units 078, 083, and 079' was
+    enough to mark two undocumented units as documented.
+    """
+
+    return frozenset(CHANGELOG_ENTRY_PATTERN.findall(text))
+
+
 def read_board_statuses(repo_root: Path) -> dict[str, str] | None:
     """Map board unit ids to their live statuses, or None when the board is absent."""
 
@@ -178,12 +197,12 @@ def check_release_sync(ref: str, repo_root: Path) -> ReleaseSyncResult:
 
     changelog_path = repo_root / CHANGELOG_FILE
     notes = ""
+    changelog_text = ""
     if not changelog_path.is_file():
         failures.append(f"{CHANGELOG_FILE.as_posix()} is missing")
     else:
-        section = extract_changelog_section(
-            changelog_path.read_text(encoding="utf-8"), version
-        )
+        changelog_text = changelog_path.read_text(encoding="utf-8")
+        section = extract_changelog_section(changelog_text, version)
         if section is None:
             failures.append(
                 f"{CHANGELOG_FILE.as_posix()} has no released, dated section "
@@ -220,12 +239,35 @@ def check_release_sync(ref: str, repo_root: Path) -> ReleaseSyncResult:
                     board_failures += 1
             board_status_ok = board_failures == 0
 
+    # The other direction. The check above catches a unit CLAIMED before it is
+    # Verified. On its own it cannot see the opposite mistake -- a unit that
+    # shipped and was never written down -- because nothing in the release
+    # section refers to it. That failure mode is silent: every gate stays green
+    # and the release simply loses the unit. Ask the board instead.
+    changelog_coverage_ok = False
+    if changelog_text:
+        board = read_board_statuses(repo_root)
+        if board is not None:
+            documented = changelog_units(changelog_text)
+            undocumented = [
+                unit
+                for unit, status in sorted(board.items())
+                if status == "Verified" and unit not in documented
+            ]
+            for unit in undocumented:
+                failures.append(
+                    f"board unit {unit} is 'Verified' but is referenced nowhere "
+                    f"in {CHANGELOG_FILE.as_posix()}"
+                )
+            changelog_coverage_ok = not undocumented
+
     return ReleaseSyncResult(
         tag=ref,
         version=version,
         init_version_ok=init_version_ok,
         changelog_section_ok=bool(notes),
         board_status_ok=board_status_ok,
+        changelog_coverage_ok=changelog_coverage_ok,
         notes=notes,
         failures=tuple(failures),
     )
@@ -286,6 +328,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if result.board_status_ok:
         print(
             f"[ok] every released unit is Verified on {BOARD_FILE.as_posix()}",
+            file=err,
+        )
+    if result.changelog_coverage_ok:
+        print(
+            f"[ok] every Verified unit on {BOARD_FILE.as_posix()} is referenced "
+            f"in {CHANGELOG_FILE.as_posix()}",
             file=err,
         )
     for failure in result.failures:

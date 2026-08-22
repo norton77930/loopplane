@@ -39,6 +39,7 @@ Captured from the assembled FastAPI app **before** the router split; fields chos
 | `init_version_ok` | bool | `loopplane.__version__ == version` |
 | `changelog_section_ok` | bool | `CHANGELOG.md` has a `[X.Y.Z]` section with a valid calendar date |
 | `board_status_ok` | bool | every three-digit unit referenced by the released section exists on the board with status `Verified` |
+| `changelog_coverage_ok` | bool | the reverse direction: every unit the board marks `Verified` has a `- **NNN**` entry somewhere in `CHANGELOG.md`. **Added after this unit landed** (2026-08-22), not part of its delivery — the unit's own landing exposed the gap when units 079 and 083 shipped undocumented and passed every gate |
 | `notes` | str | The extracted CHANGELOG section (stdout on success; consumed by `gh release create`) |
 | exit code | int | 0 only if all checks pass; non-zero with one-line diagnostics per failure |
 

@@ -6,7 +6,7 @@ Semantic Versioning.
 
 ## [Unreleased]
 
-Sixteen additive, presentation, and remediation units (064–077 plus 080–081) extend the
+Twenty additive, presentation, and remediation units (064–083) extend the
 v0.4.0 platform line toward cost transparency, richer host UX, document-capable model
 content, platform hardening, and web parity. The cost-governance arc gains **queryable
 spend** (064) and a **pre-turn predictive cost guard** (068); host UX gains
@@ -17,13 +17,18 @@ store** (071), and **per-tenant platform fairness** (072); a **code-review remed
 pass hardened CI and public-safety seams (073); and the web app reaches **live-channel
 parity** (074), **first-class capability management** (075), durable/principal-safe
 capability settings (076), host-owned Web Agent Controls (077), an accessible responsive
-presentation refactor (080), and a security-focused delivery remediation (081). Every
+presentation refactor (080), and a security-focused delivery remediation (081). Beyond the
+web line, Desktop becomes independently installable and reaches cowork (078) then full
+capability parity (083); the terminal reaches CLI/remote parity (079); and the repository
+itself is made ready to be public (082). Every
 configurable runtime addition remains
 default-off; the runtime core and the event schema are unchanged (no `SCHEMA_VERSION`
 bump), and the only content-model changes are the additive extensions recorded in ADR
-0011. Four ADRs recorded the boundary decisions: **0011** (DocumentBlock content model,
+0011. Eight ADRs recorded the boundary decisions: **0011** (DocumentBlock content model,
 units 069–070), **0012** (durable event replay store), **0013** (platform fairness),
-**0014** (pre-turn cost guard).
+**0014** (pre-turn cost guard), **0015** (desktop cowork boundary), **0016** (desktop
+provider credentials), **0017** (sidecar command registry), and **0018** (the CLI as a
+consumer of the outward web contract).
 
 ### Added
 
@@ -109,6 +114,19 @@ units 069–070), **0012** (durable event replay store), **0013** (platform fair
   outside the checkout. PyInstaller stays a build-only dependency, absent from
   `pyproject.toml` and `uv.lock`. Web outward contracts, the Event Bus, checkpoint records,
   Gateway invocation, and every default are unchanged.
+- **079** CLI/remote parity (`loopplane.cli`, `loopplane.commands`) — gives the terminal
+  host one continuing conversation with terminal-side approvals and questions, a mid-turn
+  interrupt, and four more shared slash commands carrying a remote-safety classification,
+  then adds a remote-control bridge that drives a running web/API host as an ordinary
+  client. Additive throughout: no new dependency, no event or record schema change, no
+  outward contract change, and `apps/` untouched. Two review rounds found three defects the
+  green gates had missed, all fixed at the root with a test that fails without the fix: a
+  cross-principal disclosure through `POST /v1/commands` (the ownership gate held a
+  hardcoded command list that silently omitted the two session-scoped commands this unit
+  added, and now reads `CommandRegistry.session_scoped_names()` instead), an interrupt
+  branch a real Ctrl-C never reaches, and a client read timeout that ended any realistic
+  remote turn. Recorded in **ADR 0018**: the unit makes the CLI a third consumer of the
+  outward web contract, which the boundary document had not said.
 - **080** Web frontend visual refactor (`apps/web`) — presentation-only responsive
   conversation shell, full-page modular Settings, adaptive inspection, local accessible
   icons, bilingual chrome, and keyboard/focus/live-region, high-zoom, forced-color, and
@@ -141,6 +159,17 @@ units 069–070), **0012** (durable event replay store), **0013** (platform fair
   shipped units; the reason is recorded in `docs/architecture/ARCHITECTURE_AUDIT.md`. No
   outward contract, schema, dependency, or
   default change.
+- **083** Desktop capability parity (`apps/desktop`, `packages/cowork-presentation`) —
+  gives the Desktop operator the controls the Web operator already had: session and monthly
+  cost visibility, per-session model selection without a relaunch, management of MCP
+  servers, skills, memory, schedules, workspace contexts and the model default, and host
+  slash commands in the composer. No runtime change of any kind — every capability was
+  already a public `LoopPlaneHost` method, so the unit is a sidecar projection, an IPC
+  surface, and the extraction of Web's six settings panels into
+  `@loopplane/cowork-presentation` behind service ports; the `src/loopplane` diff is empty.
+  Delivered over **ADR 0016** (one-step catalog model switch) and **ADR 0017** (the sidecar
+  admits `loopplane.commands`). Attachments, login, multi-principal scoping, and a native
+  application menu are explicit non-goals.
 
 ## [0.4.0] - 2026-06-21
 

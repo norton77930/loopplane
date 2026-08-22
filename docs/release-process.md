@@ -35,8 +35,12 @@ uv run python scripts/release_sync_check.py v0.5.0
 It checks that the tag is a `vX.Y.Z` ref, that `__version__` in
 `src/loopplane/__init__.py` equals the tag's version, that `CHANGELOG.md` has a
 released section with a valid calendar date in `## [X.Y.Z] - YYYY-MM-DD` form, and that
-every three-digit unit referenced by that section is **Verified** on the agent board; on
-success it prints that section (the release notes) to stdout. The remaining sync rules —
+every three-digit unit referenced by that section is **Verified** on the agent board.
+It also checks the other direction — that every unit the board marks **Verified**
+is documented by a `- **NNN**` entry somewhere in `CHANGELOG.md` (any section; a unit
+released earlier stays documented). Without that second direction a unit that shipped
+and was never written down passes every gate silently and the release simply loses it.
+On success the script prints the release section (the release notes) to stdout. The remaining sync rules —
 `docs/api-reference.md` currency, `docs/capabilities.md` / `docs/gap-analysis.md` currency,
 and the ADR references of the changelog section — stay in the human preflight below.
 

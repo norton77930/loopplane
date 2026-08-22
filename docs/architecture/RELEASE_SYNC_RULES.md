@@ -8,7 +8,7 @@
 |---|---|---|
 | Unit starts (`speckit-plan`) | The `AGENTS.md` + `CLAUDE.md` SPECKIT blocks | `AGENTS.md` via `speckit-agent-context-update` (the tooling manages only `AGENTS.md`); mirror the block into `CLAUDE.md` manually in the same change — on divergence, `AGENTS.md` wins |
 | ADR approved | New `docs/adr/NNNN-*.md`; referenced from the unit's plan.md | ADRs are approved at the plan stage, before implementation |
-| Unit Verified | `docs/loopplane-agent-board.md` (required); a `CHANGELOG.md` **[Unreleased]** entry (required — new rule); `docs/api-reference.md` (required if the public surface changed) | The [Unreleased] rule prevents another 064–075-style twelve-unit backlog |
+| Unit Verified | `docs/loopplane-agent-board.md` (required); a `CHANGELOG.md` **[Unreleased]** entry (required — new rule; **mechanically enforced** since 2026-08-22 by `scripts/release_sync_check.py`, which fails a release when a board-`Verified` unit has no `- **NNN**` changelog entry); `docs/api-reference.md` (required if the public surface changed) | The [Unreleased] rule prevents another 064–075-style twelve-unit backlog |
 | Release | Bump `__version__`; promote [Unreleased] → `[X.Y.Z] – date`; git tag; bring `docs/capabilities.md` + `docs/gap-analysis.md` up to the released line; recalibrate the README's high-level claims | The CHANGELOG section references the ADRs it ships |
 | Outward contract change (HTTP/SSE/WS/event/record schema) | `docs/api-reference.md` in the same unit; the apps' generated types | Human approval gate |
 | Positioning/installation change | README + `docs/getting-started.md` together (their install sections are currently word-identical) | Prevents the two files diverging |

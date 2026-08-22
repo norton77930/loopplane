@@ -53,6 +53,7 @@ def _write_repo(
     version: str,
     changelog: str,
     board_status: str = "Verified",
+    extra_units: dict[str, str] | None = None,
 ) -> Path:
     package = root / "src" / "loopplane"
     package.mkdir(parents=True)
@@ -63,11 +64,18 @@ def _write_repo(
     (root / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
     docs = root / "docs"
     docs.mkdir()
+    rows = [
+        f"| **001-fixture** | `specs/001-fixture` | **{board_status}** | "
+        "fixture | — | — |"
+    ]
+    for unit, status in (extra_units or {}).items():
+        rows.append(
+            f"| **{unit}-extra** | `specs/{unit}-extra` | **{status}** | "
+            "fixture | — | — |"
+        )
     (docs / "loopplane-agent-board.md").write_text(
         "| Unit | Spec Directory | Status | Scope | Depends On | Next Action |\n"
-        "| --- | --- | --- | --- | --- | --- |\n"
-        f"| **001-fixture** | `specs/001-fixture` | **{board_status}** | "
-        "fixture | — | — |\n",
+        "| --- | --- | --- | --- | --- | --- |\n" + "\n".join(rows) + "\n",
         encoding="utf-8",
     )
     return root
@@ -219,6 +227,66 @@ def test_check_fails_when_a_released_unit_is_missing_from_the_board(
     assert not result.board_status_ok
     assert "001" in result.failures[0]
     assert "missing" in result.failures[0]
+
+
+def test_check_fails_when_a_verified_unit_is_absent_from_the_changelog(
+    tmp_path: Path,
+) -> None:
+    """The gap this rule closes: the changelog->board direction only catches a
+    unit claimed before it is done. A unit that shipped and was never written
+    down passes every other check silently, and the release loses it."""
+
+    root = _write_repo(
+        tmp_path,
+        version="1.2.3",
+        changelog=DATED_CHANGELOG,
+        extra_units={"077": "Verified"},
+    )
+    result = checker.check_release_sync("v1.2.3", root)
+    assert not result.ok
+    assert result.board_status_ok, "the forward direction is still satisfied"
+    assert not result.changelog_coverage_ok
+    assert len(result.failures) == 1
+    assert "077" in result.failures[0]
+
+
+def test_a_unit_that_is_not_verified_need_not_be_in_the_changelog(
+    tmp_path: Path,
+) -> None:
+    """Only Verified units owe a changelog entry; work in flight does not."""
+
+    root = _write_repo(
+        tmp_path,
+        version="1.2.3",
+        changelog=DATED_CHANGELOG,
+        extra_units={"077": "Implemented"},
+    )
+    result = checker.check_release_sync("v1.2.3", root)
+    assert result.ok, result.failures
+    assert result.changelog_coverage_ok
+
+
+def test_prose_naming_a_unit_is_not_a_changelog_entry(tmp_path: Path) -> None:
+    """Found on this rule's own first real run, which passed when it should
+    have failed: a line of prose that happens to name a unit satisfied the
+    permissive extractor the forward direction uses, and the coverage check
+    went blind. The two directions need opposite strictness -- generous about
+    what counts as a claim, strict about what counts as an entry."""
+
+    changelog = DATED_CHANGELOG.replace(
+        "- the previous thing",
+        "- the previous thing, written before units 077 and 001 existed",
+    )
+    root = _write_repo(
+        tmp_path,
+        version="1.2.3",
+        changelog=changelog,
+        extra_units={"077": "Verified"},
+    )
+    result = checker.check_release_sync("v1.2.3", root)
+    assert not result.ok
+    assert not result.changelog_coverage_ok
+    assert any("077" in failure for failure in result.failures)
 
 
 def test_check_reports_a_version_mismatch(tmp_path: Path) -> None:
