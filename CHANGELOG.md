@@ -6,6 +6,10 @@ Semantic Versioning.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.5.0] - 2026-08-22
+
 Twenty additive, presentation, and remediation units (064–083) extend the
 v0.4.0 platform line toward cost transparency, richer host UX, document-capable model
 content, platform hardening, and web parity. The cost-governance arc gains **queryable
