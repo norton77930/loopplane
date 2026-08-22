@@ -1115,3 +1115,38 @@ above closes. The WebAPI route/OpenAPI/signature contract and behavior suites re
 5. **Rollback.** No commit exists. The isolated 082 worktree can be discarded to remove all
    local work; after a future approved commit, the independent story layout supports bounded
    `git revert` rollback.
+
+## Post-landing deferral resolution (2026-08-22)
+
+The four `[DEFER-078]` tasks became executable when 078 closed `Verified` on 2026-08-20.
+Two are now done; two remain, and the board row stays `Implemented` until they are.
+
+- **T007 — done.** `pyproject.toml` gains `Documentation`, `Changelog` and `Issues`
+  project URLs alongside the existing `Homepage`/`Repository`, and the
+  `Operating System :: OS Independent` classifier. No `License ::` classifier was added:
+  the project already declares PEP 639 `license = "MIT"` + `license-files`, and current
+  PyPA guidance deprecates the classifier alongside an SPDX expression — which is what
+  the task's "following current PyPA guidance for the existing SPDX license expression"
+  asks for. Verified end to end: `uv build` produces both distributions, `uvx twine check
+  --strict` reports PASSED for each, and the built wheel's `METADATA` carries all five
+  `Project-URL` lines, `License-Expression: MIT`, `License-File: LICENSE`, and the OS
+  classifier with no duplicate license declaration.
+- **T017 — done, by marking rather than rewriting.** ADR 0015 is `Accepted`
+  (2026-08-05), but `docs/loopplane-agent-board.md` still read "ADR 0015 remains
+  Proposed" in three places. All three are 078-scoped gate clauses inside the autopilot
+  machinery (§6 decision algorithm, §7 autopilot mode, §9 required stop conditions), so the
+  problem was tense, not logic: they describe a sequence that has since completed. Each is
+  now marked **Discharged** with the closure date and the ADR's real status, leaving the
+  conditional text intact as the historical gate record. Rewriting autopilot conditions to
+  fix a tense would have carried far more risk than the defect.
+- **T008 — open.** GATE-§E; needs explicit maintainer approval or an explicit rejection,
+  which per the task is then recorded here alongside the README extras matrix.
+- **T032 — open.** Decomposing `src/loopplane/host/capability_manager.py` is a real
+  refactor of a public-surface-bearing module, not a cleanup; it needs its own plan.
+
+A transition to `Verified` was attempted on 2026-08-22 and reverted the same day:
+`tests/contract/test_spec_task_audit.py` refuses a `Verified` spec with unchecked tasks
+unless it is listed in `docs/spec-task-audit-exceptions.md`, and that file admits only
+historical checklist drift. T008 and T032 are active work, so no exception was written
+— writing one would have cleared the gate by defeating it.
+
