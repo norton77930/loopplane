@@ -135,6 +135,12 @@ version.
 
 ## Recommended next release
 
-`v0.5.0` covering units **064–081** (the current `[Unreleased]` line), plus unit 078 if it
-is Verified by then. That is a MINOR bump: a batch of additive capability units with no
-contract break. Timing is the maintainer's call.
+`v0.5.0` covering units **064–083** (the current `[Unreleased]` line). All of them are
+`Verified` on the board as of 2026-08-22. That is a MINOR bump: a batch of additive
+capability, parity, and delivery units with no contract break. Timing is the maintainer's
+call, and the two blockers are mechanical: bump `__version__` and promote `[Unreleased]`.
+
+Note the ordering with the one-time setup above. `LOOPPLANE_RELEASE_DRY_RUN` is currently
+**unset**, which means dry run, so tagging today would validate and build but publish
+nothing and create no release. Reserve the PyPI name and configure the trusted publisher
+first if the intent is a real publish; otherwise a tag is a safe rehearsal of the pipeline.

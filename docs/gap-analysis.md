@@ -17,10 +17,10 @@
   tools, parallel executor, swarm peer messaging, background tasks, scheduling, STT/TTS,
   model proxy + billing, 3 sandbox modes, 4 MCP transports + OAuth, multi-level budgets,
   Postgres).
-- **LoopPlane** — its own specs (001–075; 001–063 released as v0.4.0, 064–075 verified on
+- **LoopPlane** — its own specs (001–083; 001–063 released as v0.4.0, 064–083 verified on
   `main` and pending release) verified against `src/loopplane/` and `apps/`. The v0.4.0
   line (044–063) closed the large majority of the gaps below and the 064–075 line closed
-  most of what remained; this document reflects status through unit 075.
+  most of what remained; this document reflects status through unit 083.
 
 Matrix legend: ✅ has an equivalent capability · ◑ partial / different shape · ❌ absent.
 Cells reflect *presence of an equivalent capability*, not feature-for-feature parity. The
@@ -75,11 +75,15 @@ snapshots above.
 | Host surfaces (CLI / web / desktop) | ✅ | ✅ | ✅ |
 | IDE extension (VS Code / JetBrains) | ✅ | ❌ | ❌ |
 
-## C2. Gap status (through unit 075)
+## C2. Gap status (through unit 083)
 
 The original G1–G24 gaps and where they now stand. The v0.4.0 line (044–063) closed or
 partially closed the large majority, and the 064–075 line (verified, pending release)
-closed most of the rest; the implementing unit is cited.
+closed most of the rest; the implementing unit is cited. Units 076–083 closed **no
+further G1–G24 gap** — that line was parity, presentation, and delivery work (web
+capability durability, Desktop cowork and capability parity, CLI/remote parity, open-source
+release readiness), not gap closure. The list below is therefore unchanged by them, which is
+worth stating rather than leaving a reader to infer it from silence.
 
 ### Closed in v0.4.0
 
@@ -133,7 +137,10 @@ closed most of the rest; the implementing unit is cited.
 ### Still open
 
 - **G9 — Remote / cloud agent execution.** Children run in-process via `run_loop`; no
-  out-of-process or networked agent execution (deferred, ADR 0003).
+  out-of-process or networked agent execution (deferred, ADR 0003). Unit **079** is adjacent
+  but does not close this: its remote bridge is remote *control* of a running host from a
+  terminal, as an ordinary client of the outward web contract (ADR 0018). The agents
+  themselves still run in the host's own process.
 - **G13 — IDE extension** (VS Code / JetBrains). Desktop only; no IDE integration.
 - **G15 — STT / TTS / voice.** None.
 - **G17 — Output styles** / pluggable formatters. None.
@@ -147,7 +154,7 @@ The comparison is not one-directional. LoopPlane leads on:
 - **Determinism & safety posture** — deny-wins, fail-closed deciders; metadata-only,
   deterministic observability contracts (010); additive features that default to
   byte-identical behavior — the entire v0.4.0 line (044–063) shipped without a single core
-  rewrite, `SCHEMA_VERSION` bump, or content-model change, and the 064–075 line kept the
+  rewrite, `SCHEMA_VERSION` bump, or content-model change, and the 064–083 line kept the
   pattern (no `SCHEMA_VERSION` bump; the only content-model changes are the additive
   extensions recorded in ADR 0011).
 - **Loop engineering layer** — first-class validators / evaluators / retry / repair and a
@@ -156,7 +163,7 @@ The comparison is not one-directional. LoopPlane leads on:
 - **Clean boundaries** — a single Tool Gateway (V) and Event Bus (VI) with enforced
   import boundaries, making the runtime auditable and embeddable.
 
-## C4. Forward roadmap (through unit 081, prioritized)
+## C4. Forward roadmap (through unit 083, prioritized)
 
 The previous edition of this roadmap (written post-v0.4.0) has itself been largely
 executed by the 064–077 line plus the out-of-sequence 080–081 delivery work: every former
@@ -167,9 +174,16 @@ in-process fairness/quota (072), PDF / `DocumentBlock` (069), the pre-turn cost 
 parity/capability management and hardening (074–076), responsive presentation and
 security remediation (080–081), and host-owned Web Agent Controls (077). What remains is
 the tail below. It is a **suggested priority list only**. `078-desktop-cowork-parity` has
-since been implemented and its Stage-C delivery gate has passed, though
-`docs/loopplane-agent-board.md` remains the only completion authority; new roadmap items
-would be specced as later units.
+since closed `Verified` on `docs/loopplane-agent-board.md`, which remains the only
+completion authority; new roadmap items would be specced as later units.
+
+Since that paragraph was written, **078** (Desktop cowork parity), **079** (CLI/remote
+parity), **082** (open-source release readiness) and **083** (Desktop capability parity)
+have all closed `Verified`. None of them changes the tail below: 078 and 083 brought Desktop
+to parity with an existing surface rather than adding a new capability class, 079 added
+remote *control* rather than the remote *execution* G9 asks for, and 082 was repository
+tooling. G13 (IDE extension) in particular is untouched — a packaged Desktop app is not
+an IDE integration.
 
 **P1 — platform depth (the remaining distributed tail)**
 - **G20 distributed tail** — cross-process / multi-worker execution above the
