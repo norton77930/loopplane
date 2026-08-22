@@ -33,7 +33,7 @@
 - [x] T005 [P] [US1] Update `README.md`: add truthful badges (CI status, MIT license, Python 3.12+ — PyPI version badge only after first publish), rewrite the Install section (index-install as primary path with honest "pending first publish" interim wording; clone as contributor path), add an extras matrix table (which extras for which deployment), and cross-link `GOVERNANCE.md` / `CONTRIBUTING.md`
 - [x] T006 [US1] Validation per SC-001: `uv build`; `uvx twine check dist/*`; create a fresh Python 3.12 venv, `pip install` the built wheel with `[web]` plus one provider extra, run `examples/host_quickstart.py` and the `loopplane` console script; record the literal transcript in `specs/082-open-source-release-readiness/implementation-evidence.md`
 - [x] T007 [US1] [DEFER-078] Complete `pyproject.toml` metadata per FR-001: add `Changelog`/`Issues`/`Documentation` project URLs and an operating-system classifier following current PyPA guidance for the existing SPDX license expression; re-run `uv build` + `uvx twine check dist/*`
-- [ ] T008 [US1] [DEFER-078] [GATE-§E] Only if the maintainer approves (research.md R5): add the `all` convenience extra (union of the nine existing extras) to `pyproject.toml`; if rejected, confirm the README extras matrix from T005 covers the need and record the decision in implementation-evidence.md
+- [x] T008 [US1] [DEFER-078] [GATE-§E] Only if the maintainer approves (research.md R5): add the `all` convenience extra (union of the nine existing extras) to `pyproject.toml`; if rejected, confirm the README extras matrix from T005 covers the need and record the decision in implementation-evidence.md
 
 **Checkpoint**: US1 deliverable except its two [DEFER-078] tasks; the deferral is recorded in evidence, not silently dropped.
 

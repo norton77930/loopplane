@@ -39,12 +39,42 @@ def test_project_metadata_is_complete() -> None:
     assert project.get("urls"), "pyproject [project.urls] is missing"
 
 
+def test_the_all_extra_names_every_other_extra() -> None:
+    """The `all` extra is a hand-written union, so it can silently fall out of
+    step with the extras it claims to cover -- add a tenth extra, forget this
+    line, and `pip install loopplane[all]` quietly stops meaning "all". The
+    membership is therefore pinned rather than trusted. It is written
+    self-referentially (`loopplane[a,b,...]`) so the version constraints still
+    have exactly one home."""
+
+    extras = load_pyproject()["project"]["optional-dependencies"]  # type: ignore[index]
+    assert "all" in extras, "pyproject has no `all` convenience extra"
+    assert len(extras["all"]) == 1, extras["all"]
+
+    match = re.fullmatch(r"loopplane\[([a-z0-9,._-]+)\]", extras["all"][0].strip())
+    assert match, (
+        "the `all` extra must be self-referential, not a copy of the dependency "
+        f"lines: {extras['all'][0]!r}"
+    )
+    named = {name.strip() for name in match.group(1).split(",")}
+    others = {name for name in extras if name != "all"}
+    assert named == others, (
+        f"`all` names {sorted(named)} but the extras are {sorted(others)}; "
+        f"missing={sorted(others - named)} unknown={sorted(named - others)}"
+    )
+
+
 def test_runtime_dependencies_are_unchanged() -> None:
     # The release unit MUST add no runtime dependency (NFR-002, SC-006).
     project = _project()
     names = {re.split(r"[<>=!~ ]", dep)[0] for dep in project["dependencies"]}
     assert names == {"anyio", "pydantic", "jsonschema"}, names
-    assert set(project["optional-dependencies"]) == {
+    # `all` is excluded deliberately, not waved through: it is a self-referential
+    # alias over the nine below and names no distribution of its own, so it adds
+    # no runtime dependency and NFR-002 / SC-006 still hold. Every extra that DOES
+    # name a distribution stays pinned here; `all`'s membership is pinned by
+    # test_the_all_extra_names_every_other_extra.
+    assert set(project["optional-dependencies"]) - {"all"} == {
         "anthropic",
         "gemini",
         "mcp",

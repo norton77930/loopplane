@@ -50,8 +50,10 @@ else is an optional extra:
 | `oauth` | PyJWT + httpx | OAuth / JWT / JWKS principal verification |
 | `postgres` | psycopg | Postgres checkpoint, ledger, and event-replay backends |
 | `otel` | OpenTelemetry API | OpenTelemetry observability export |
+| `all` | every extra above | trying LoopPlane out, or a deployment that genuinely wants the lot |
 
-Combine what a deployment needs, for example:
+`all` is a convenience alias, not a recommendation — it pulls in every SDK above, including
+psycopg and three model vendors. Prefer naming what you need. Combine extras freely, for example:
 
 ```sh
 pip install ".[anthropic]"                        # local CLI against Claude

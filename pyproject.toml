@@ -34,6 +34,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Self-referential on purpose: naming the extras rather than copying their
+# dependency lines means the version constraints have exactly one home and
+# cannot drift into two. `tests/contract/test_packaging.py` pins the membership.
+all = ["loopplane[anthropic,gemini,mcp,net,oauth,openai,otel,postgres,web]"]
 anthropic = ["anthropic>=0.40"]
 gemini = ["google-genai>=1"]
 mcp = ["mcp>=1"]

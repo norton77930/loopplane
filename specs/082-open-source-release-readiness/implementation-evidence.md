@@ -1139,8 +1139,27 @@ Two are now done; two remain, and the board row stays `Implemented` until they a
   now marked **Discharged** with the closure date and the ADR's real status, leaving the
   conditional text intact as the historical gate record. Rewriting autopilot conditions to
   fix a tense would have carried far more risk than the defect.
-- **T008 — open.** GATE-§E; needs explicit maintainer approval or an explicit rejection,
-  which per the task is then recorded here alongside the README extras matrix.
+- **T008 — done, approved by the maintainer on 2026-08-22.** `pyproject.toml` gains
+  `all = ["loopplane[anthropic,gemini,mcp,net,oauth,openai,otel,postgres,web]"]`. The
+  self-referential form is deliberate: naming the extras rather than copying their
+  dependency lines keeps every version constraint in exactly one place, so the alias
+  cannot drift into a second, stale set of pins. hatchling resolves the reference at build
+  time, so the wheel's METADATA carries `Provides-Extra: all` plus all nine distinct
+  packages under `extra == 'all'` (httpx deduplicated from `net` and `oauth`) — the
+  installed result is complete even though the source is a single line.
+
+  The remaining hazard is membership drift: add a tenth extra, forget this line, and
+  `[all]` quietly stops meaning all. That is pinned rather than trusted by
+  `test_the_all_extra_names_every_other_extra`, negative-self-checked by adding an
+  unsynchronised extra and confirming the failure names it (`missing=['zzznew']`).
+
+  `test_runtime_dependencies_are_unchanged` pinned the extras set literally to the nine and
+  so refused the addition. Rather than adding `all` to its expected set — which would have
+  blunted the contract — the assertion now excludes self-referential aliases and keeps every
+  distribution-naming extra pinned, which is what NFR-002 / SC-006 (no new runtime
+  dependency) actually protect. `all` names no distribution of its own, so the guarantee
+  holds. Verified in both directions: adding a real dependency-bearing extra still fails
+  the contract.
 - **T032 — open.** Decomposing `src/loopplane/host/capability_manager.py` is a real
   refactor of a public-surface-bearing module, not a cleanup; it needs its own plan.
 
