@@ -25,6 +25,13 @@ from pathlib import Path
 from typing import Any
 
 from loopplane.host import LoopPlaneHost
+from loopplane.host._capability_common import _CommonMixin
+from loopplane.host._capability_contexts import _ContextsMixin
+from loopplane.host._capability_mcp import _McpMixin
+from loopplane.host._capability_memory import _MemoryMixin
+from loopplane.host._capability_model import _ModelMixin
+from loopplane.host._capability_schedules import _SchedulesMixin
+from loopplane.host._capability_skills import _SkillsMixin
 from loopplane.host.capability_manager import CapabilityManager
 
 FIXTURE = Path(__file__).parent / "fixtures" / "capability_surface.json"
@@ -94,3 +101,57 @@ def test_no_capability_method_changes_shape() -> None:
                     f"{label}.{name}: {was['signature']} -> {now['signature']}"
                 )
     assert not drift, "capability surface changed shape:\n  " + "\n  ".join(drift)
+
+
+_MIXINS: tuple[type, ...] = (
+    _CommonMixin,
+    _McpMixin,
+    _SkillsMixin,
+    _MemoryMixin,
+    _SchedulesMixin,
+    _ContextsMixin,
+    _ModelMixin,
+)
+
+
+def test_no_two_capability_mixins_define_the_same_method() -> None:
+    """The split is organisational: one `self`, seven classes, and Python
+    resolving names by MRO. Nothing about that stops two mixins from defining
+    the same method -- the MRO would simply pick the first, silently, and the
+    surface snapshot would still pass because the name and signature it records
+    are unchanged. This is the guard for that.
+    """
+
+    seen: dict[str, str] = {}
+    clashes: list[str] = []
+    for mixin in _MIXINS:
+        for name, value in vars(mixin).items():
+            if name.startswith("__") or not callable(value):
+                continue
+            if name in seen:
+                clashes.append(f"{name}: {seen[name]} and {mixin.__name__}")
+            seen[name] = mixin.__name__
+    assert not clashes, "capability mixins define the same method twice: " + "; ".join(
+        clashes
+    )
+
+
+def test_capability_mixin_attribute_declarations_do_not_conflict() -> None:
+    """Each mixin declares the instance attributes its domain reads so mypy can
+    check the dependency. Re-declaring one that another mixin also needs is
+    fine and reads as documentation; declaring it with a DIFFERENT type is a
+    contradiction that mypy resolves by MRO order rather than reporting.
+    """
+
+    declared: dict[str, tuple[str, str]] = {}
+    conflicts: list[str] = []
+    for mixin in _MIXINS:
+        for name, annotation in vars(mixin).get("__annotations__", {}).items():
+            text = str(annotation)
+            if name in declared and declared[name][1] != text:
+                owner, previous = declared[name]
+                conflicts.append(
+                    f"{name}: {owner} says {previous!r}, {mixin.__name__} says {text!r}"
+                )
+            declared.setdefault(name, (mixin.__name__, text))
+    assert not conflicts, "conflicting attribute declarations: " + "; ".join(conflicts)

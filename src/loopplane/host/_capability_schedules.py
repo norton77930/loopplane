@@ -17,7 +17,6 @@ from loopplane.host.capabilities import (
     CapabilityAction,
     CapabilityOperationResult,
     CapabilityStatus,
-    ManagedMcpTransport,
     ManagedSchedule,
 )
 from loopplane.host.capability_store import (
@@ -26,14 +25,6 @@ from loopplane.host.capability_store import (
     CapabilityStoreUnavailable,
 )
 from loopplane.host.config import CapabilityManagementConfig
-
-_LOCAL_PRINCIPAL = "local-default"
-_UNAVAILABLE_MESSAGE = "capability settings are unavailable"
-_MCP_TRANSPORTS: tuple[ManagedMcpTransport, ...] = (
-    "http",
-    "sse",
-    "websocket",
-)
 
 
 class _SchedulesMixin(_CommonMixin):

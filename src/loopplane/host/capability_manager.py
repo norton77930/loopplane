@@ -11,7 +11,6 @@ from loopplane.host._capability_schedules import _SchedulesMixin
 from loopplane.host._capability_skills import _SkillsMixin
 from loopplane.host.capabilities import (
     CapabilitySettingsStatus,
-    ManagedMcpTransport,
 )
 from loopplane.host.capability_store import (
     CapabilitySettingsStore,
@@ -22,14 +21,6 @@ from loopplane.memory import (
     MemoryStore,
 )
 from loopplane.skills import LoadedSkill, SkillToolAdapter
-
-_LOCAL_PRINCIPAL = "local-default"
-_UNAVAILABLE_MESSAGE = "capability settings are unavailable"
-_MCP_TRANSPORTS: tuple[ManagedMcpTransport, ...] = (
-    "http",
-    "sse",
-    "websocket",
-)
 
 
 class CapabilityManager(
@@ -100,34 +91,3 @@ class CapabilityManager(
 
     async def aclose(self) -> None:
         await self._gateway.shutdown_scoped_adapters()
-
-    async def _activate_mcp(self, principal_id: str) -> None:
-        state = self._load(principal_id)
-        if state is None:
-            return
-        active = self._active_mcp_ids.setdefault(principal_id, set())
-        configured = set(state.mcp)
-        for mcp_id in sorted(active - configured):
-            await self._deactivate_mcp(principal_id, mcp_id)
-        for mcp_id, record in sorted(state.mcp.items()):
-            status = self._string(record, "status")
-            if status == "connected":
-                await self._connect_mcp(
-                    mcp_id,
-                    principal_id=principal_id,
-                )
-            else:
-                await self._deactivate_mcp(principal_id, mcp_id)
-
-    def _discover_shared_mcp(self) -> dict[str, tuple[str, ...]]:
-        discovered: dict[str, list[str]] = {}
-        for descriptor in self._gateway.descriptors():
-            source = descriptor.source
-            if not source.startswith("external-server:"):
-                continue
-            server_name = source.removeprefix("external-server:")
-            if server_name:
-                discovered.setdefault(server_name, []).append(descriptor.name)
-        return {
-            name: tuple(sorted(tools)) for name, tools in sorted(discovered.items())
-        }

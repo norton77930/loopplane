@@ -15,7 +15,6 @@ from loopplane.host._capability_common import _CommonMixin
 from loopplane.host.capabilities import (
     CapabilityAction,
     CapabilityOperationResult,
-    ManagedMcpTransport,
     WorkspaceContext,
 )
 from loopplane.host.capability_store import (
@@ -24,14 +23,6 @@ from loopplane.host.capability_store import (
     CapabilityStoreUnavailable,
 )
 from loopplane.host.config import CapabilityManagementConfig
-
-_LOCAL_PRINCIPAL = "local-default"
-_UNAVAILABLE_MESSAGE = "capability settings are unavailable"
-_MCP_TRANSPORTS: tuple[ManagedMcpTransport, ...] = (
-    "http",
-    "sse",
-    "websocket",
-)
 
 
 class _ContextsMixin(_CommonMixin):

@@ -14,7 +14,6 @@ from datetime import UTC, datetime
 from loopplane.host._capability_common import _CommonMixin
 from loopplane.host.capabilities import (
     CapabilityOperationResult,
-    ManagedMcpTransport,
     ManagedMemoryDetail,
     ManagedMemoryEntry,
 )
@@ -28,14 +27,6 @@ from loopplane.memory import (
     MemoryEntry,
     MemorySnapshotAugmentation,
     MemoryStore,
-)
-
-_LOCAL_PRINCIPAL = "local-default"
-_UNAVAILABLE_MESSAGE = "capability settings are unavailable"
-_MCP_TRANSPORTS: tuple[ManagedMcpTransport, ...] = (
-    "http",
-    "sse",
-    "websocket",
 )
 
 

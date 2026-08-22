@@ -16,7 +16,6 @@ from pydantic import ValidationError
 from loopplane.host._capability_common import _CommonMixin
 from loopplane.host.capabilities import (
     CapabilityOperationResult,
-    ManagedMcpTransport,
     ManagedSkill,
     ManagedSkillDetail,
 )
@@ -27,14 +26,6 @@ from loopplane.host.capability_store import (
 )
 from loopplane.host.config import CapabilityManagementConfig
 from loopplane.skills import LoadedSkill, Skill
-
-_LOCAL_PRINCIPAL = "local-default"
-_UNAVAILABLE_MESSAGE = "capability settings are unavailable"
-_MCP_TRANSPORTS: tuple[ManagedMcpTransport, ...] = (
-    "http",
-    "sse",
-    "websocket",
-)
 
 
 class _SkillsMixin(_CommonMixin):

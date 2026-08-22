@@ -242,7 +242,7 @@ MATRIX: dict[str, BoundaryMatrixEntry] = {
         ),
         notes=(
             "TARGET §2 / R4 assembly lazy-import seam; "
-            "capability_manager MCP exception is file-scoped"
+            "managed-MCP exception is file-scoped"
         ),
     ),
     "inspect": _entry(
@@ -405,8 +405,9 @@ MATRIX: dict[str, BoundaryMatrixEntry] = {
     ),
 }
 
-# Existing composition/dependency discrepancy: capability_manager owns the only
-# runtime host -> adapters.mcp edge. This is not a package-wide sanctioned direction.
+# Existing composition/dependency discrepancy: the managed-MCP module owns the
+# only runtime host -> adapters.mcp edge. This is not a package-wide sanctioned
+# direction.
 FILE_SCOPED_RUNTIME_EXCEPTIONS: dict[str, frozenset[str]] = {
     # Unit 082 T032 moved this edge out of capability_manager.py. The exception
     # names a file rather than the package on purpose, so a sanctioned import
