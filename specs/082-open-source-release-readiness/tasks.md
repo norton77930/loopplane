@@ -112,7 +112,7 @@
 - [x] T029 [US6] Write `tests/contract/test_webapi_route_snapshot.py` FIRST per `contracts/webapi-route-snapshot.md`: checked-in sorted route inventory (methods, path, endpoint `__name__`, response-model class name, status code) + canonicalized `app.openapi()` JSON equality + `inspect.signature(create_app)` surface assert; green against the CURRENT `src/loopplane/webapi/app.py`
 - [x] T030 [US6] Re-file `src/loopplane/webapi/app.py` route groups into `src/loopplane/webapi/routers/` modules (sessions, streaming/live, interaction, capabilities, inspect, cost, misc: models/uploads/commands) mounted by `create_app()`; behavior, keyword surface, and shared helpers preserved; `app.py` shrinks to composition + helpers
 - [x] T031 [US6] Prove invariance per SC-004: T029 snapshot green unchanged, `tests/contract/test_webapi_boundary.py` green, full §G gates green with literal counts in implementation-evidence.md; explicitly record "no §E outward-contract gate triggered"
-- [ ] T032 [US6] [DEFER-078] Decompose `src/loopplane/host/capability_manager.py` into cohesive submodules preserving the `loopplane.host` public surface semantics; full §G gates green; only after 078 is Verified on the board
+- [x] T032 [US6] [DEFER-078] Decompose `src/loopplane/host/capability_manager.py` into cohesive submodules preserving the `loopplane.host` public surface semantics; full §G gates green; only after 078 is Verified on the board
 
 **Checkpoint**: webapi hotspot resolved; host hotspot queued behind 078.
 

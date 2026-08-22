@@ -1160,8 +1160,33 @@ Two are now done; two remain, and the board row stays `Implemented` until they a
   dependency) actually protect. `all` names no distribution of its own, so the guarantee
   holds. Verified in both directions: adding a real dependency-bearing extra still fails
   the contract.
-- **T032 — open.** Decomposing `src/loopplane/host/capability_manager.py` is a real
-  refactor of a public-surface-bearing module, not a cleanup; it needs its own plan.
+- **T032 — done (2026-08-22).** `capability_manager.py` goes from 1655 lines to four
+  methods ({`__init__`, `settings_status`, `activate_principal`, `aclose`}); the rest moves
+  into seven per-domain mixin modules. The seam was not invented: grouping the 33 public
+  methods by noun reproduces exactly the six settings panels unit 083 had already extracted
+  from the web app. A call-graph pass, not intuition, placed the 35 private helpers, and it
+  showed that 16 look shared while only 7 are — the rest is MCP machinery the lifecycle
+  merely calls, so it travels with MCP instead of bloating a common module.
+
+  Mixins rather than sub-managers, reversing the initial plan: the AST showed 58 of 68
+  methods are instance methods, so composition would have meant rewriting every
+  `self._store` in 58 bodies. 082's own router split tolerated that pattern because those
+  are independent handlers; the same pattern costs an order of magnitude more on this
+  shape of code. As mixins the bodies move verbatim, and each declares the attributes its
+  domain reads so mypy checks the dependency instead of leaving it implicit in `self`.
+
+  Verified against `tests/contract/fixtures/capability_surface.json`, captured from the
+  PRE-split tree in `6497be1` for exactly this purpose: 33 + 57 public callables, identical
+  names, signatures and coroutine-ness. Three gates each caught a different class of
+  mistake — mypy a wrong attribute type, the test suite 16 monkeypatches that silently
+  stopped patching anything once the code changed module, and the import matrix a
+  sanctioned cross-boundary import trying to ride into a new file. Notably the snapshot,
+  mypy and ruff were ALL green while those 16 tests failed: nothing static changed, only
+  where a name resolves at run time. Contract snapshots prove shape, not behaviour.
+
+  An R1 review returned 0 blocking findings; its three follow-ups are closed in `f3ef4c0`
+  (dead duplicated module constants, MCP machinery split across two homes, and the absence
+  of any guard on mixin method-name disjointness).
 
 A transition to `Verified` was attempted on 2026-08-22 and reverted the same day:
 `tests/contract/test_spec_task_audit.py` refuses a `Verified` spec with unchecked tasks
