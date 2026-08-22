@@ -15,6 +15,7 @@ import sqlite3
 import stat
 import subprocess
 import sys
+import time
 import warnings
 import zipfile
 from collections.abc import Callable, Mapping
@@ -1035,8 +1036,11 @@ async def test_restore_token_expires_after_fifteen_minutes_without_active_mutati
     )
     reservation = manager.get(validated["restore_token"])
     assert reservation is not None
+    # Advance the lease's own clock rather than the wall clock. Patching
+    # `time.time` used to work only because the lease read it; that coupling
+    # WAS the defect, since a real NTP step moved it the same way.
     monkeypatch.setattr(
-        restore_module.time, "time", lambda: reservation.created_at + 901
+        restore_module, "_now", lambda: reservation.created_monotonic + 901
     )
 
     with pytest.raises(RpcError):
@@ -1067,8 +1071,11 @@ async def test_expired_restore_is_reaped_before_unrelated_project_mutation(
     token = validated["restore_token"]
     reservation = manager.get(token)
     assert reservation is not None
+    # Advance the lease's own clock rather than the wall clock. Patching
+    # `time.time` used to work only because the lease read it; that coupling
+    # WAS the defect, since a real NTP step moved it the same way.
     monkeypatch.setattr(
-        restore_module.time, "time", lambda: reservation.created_at + 901
+        restore_module, "_now", lambda: reservation.created_monotonic + 901
     )
 
     project = await ProjectMethods(
@@ -2718,3 +2725,37 @@ async def test_restore_publication_calls_the_active_platform_durability_adapter(
     assert observed[0] == adapter_name
     if sys.platform == "win32":
         assert "flush" in observed
+
+
+async def test_a_wall_clock_step_does_not_expire_a_live_restore_reservation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lease measures elapsed time, so a wall-clock step must not touch it.
+
+    `time.time()` moves by arbitrary amounts when NTP corrects a drifted clock or
+    a machine resumes from sleep. Reading it here meant a jump of more than the
+    fifteen-minute lifetime could expire a reservation seconds after it was made
+    -- and `restore_commit` answers an expired reservation by releasing the lease
+    and deleting the staging, so a legitimate restore would fail as "not found"
+    and the user would have to start over. `_now()` is monotonic, so only real
+    elapsed time counts.
+    """
+
+    import restore as restore_module
+
+    methods, manager, lease, owner_id, archive = _methods_with_pending_restore(tmp_path)
+    validated = await methods.restore_validate(
+        {"mutation_id": owner_id, "source_path": str(archive)}
+    )
+    reservation = manager.get(validated["restore_token"])
+    assert reservation is not None
+    assert manager.expired(reservation) is False
+
+    # NTP corrects a clock that had drifted twenty minutes slow. No real time
+    # has passed, and the reservation is seconds old.
+    real_time = time.time
+    monkeypatch.setattr(restore_module.time, "time", lambda: real_time() + 20 * 60)
+
+    assert manager.expired(reservation) is False
+    assert manager.get(validated["restore_token"]) is reservation

@@ -41,6 +41,24 @@ except ImportError:  # pragma: no cover - direct sidecar module imports
     from durability import is_link_or_reparse  # type: ignore[no-redef]
 
 _TOKEN_LIFETIME_SECONDS = 15 * 60
+
+
+def _now() -> float:
+    """Elapsed-time clock for the restore lease.
+
+    Monotonic on purpose. The lease measures how long a reservation has been
+    held, and `time.time()` is the wall clock: NTP stepping a drifted clock,
+    or a resume from sleep correcting it, moves it by an arbitrary amount in
+    either direction. A forward step inside the window would expire a
+    reservation that is seconds old -- and `restore_commit` reacts to an
+    expired reservation by releasing the lease and tearing down the staging,
+    so a legitimate restore would fail with 'not found' and have to start
+    over. A backward step would keep a reservation alive past its bound.
+    """
+
+    return time.monotonic()
+
+
 _STREAM_CHUNK_BYTES = 1024 * 1024
 _MAX_PROFILE_BYTES = 8 * 1024 * 1024
 
@@ -57,7 +75,7 @@ class RestoreFaultInjector(Protocol):
 class RestoreReservation:
     token: str
     staging_dir: Path
-    created_at: float
+    created_monotonic: float
     archive_identity: str
     archive_path: Path
     host_snapshot_dir: Path
@@ -124,7 +142,7 @@ class RestoreManager:
         reservation = RestoreReservation(
             token=token,
             staging_dir=staging,
-            created_at=time.time(),
+            created_monotonic=_now(),
             archive_identity=archive_identity,
             archive_path=path,
             host_snapshot_dir=staging,
@@ -154,7 +172,7 @@ class RestoreManager:
         return reservation
 
     def expired(self, reservation: RestoreReservation) -> bool:
-        return time.time() - reservation.created_at >= _TOKEN_LIFETIME_SECONDS
+        return _now() - reservation.created_monotonic >= _TOKEN_LIFETIME_SECONDS
 
     def revalidate_archive(self, reservation: RestoreReservation) -> bool:
         """Reject replacement or content drift before candidate publication."""
