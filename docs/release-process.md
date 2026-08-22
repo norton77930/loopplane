@@ -133,6 +133,20 @@ A published version is immutable: a bad release is corrected by a new PATCH rele
 if genuinely broken, by yanking the bad version on the index). Never re-tag a published
 version.
 
+### What a dry run cannot tell you
+
+Dry run is what keeps a rehearsal from publishing, and that is also its blind spot — the
+`publish` and `release` jobs never execute, so nothing on the publishing path has ever run.
+Concretely, `actions/download-artifact` appears only in those two jobs, so the **first real
+publish is the first time it runs**. `actions/upload-artifact` is exercised every time,
+because it lives in `validate` and `build`.
+
+This is not a reason to hesitate: if that step fails, it fails BEFORE anything reaches the
+index, so nothing is published and the tag stays usable. Re-run the workflow for the same
+tag once the cause is fixed. Expect the first real publish to be the run that discovers any
+problem in that half of the pipeline, and read its log rather than assuming a rehearsal
+already covered it.
+
 ## Recommended next release
 
 `v0.5.0` covering units **064–083** (the current `[Unreleased]` line). All of them are
