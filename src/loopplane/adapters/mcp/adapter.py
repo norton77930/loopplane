@@ -17,6 +17,14 @@ from typing import Any
 import anyio
 
 from loopplane.adapters.mcp.config import MCPServerConfig
+from loopplane.adapters.mcp.oauth import (
+    AUTHORIZATION_FAILED_MESSAGE,
+    InMemoryMcpTokenStore,
+    McpAuthorizationError,
+    McpAuthorizationHandler,
+    McpTokenStore,
+    build_oauth_auth,
+)
 from loopplane.adapters.mcp.schema import translate_schema
 from loopplane.context import RunContext
 from loopplane.errors import ErrorCategory
@@ -51,13 +59,33 @@ def _auth_headers(config: MCPServerConfig) -> dict[str, str] | None:
     return None
 
 
+def _is_interactive(config: MCPServerConfig) -> bool:
+    """Whether this server authorizes a person rather than presenting a token (084)."""
+
+    return config.authorization == "interactive"
+
+
 class MCPToolAdapter:
     """Use as an async context manager: connection lifetimes are owned by
     the entering task (FR-041).
     """
 
-    def __init__(self, configs: Sequence[MCPServerConfig]) -> None:
+    def __init__(
+        self,
+        configs: Sequence[MCPServerConfig],
+        *,
+        authorization_handler: McpAuthorizationHandler | None = None,
+        token_store: McpTokenStore | None = None,
+        principal_id: str | None = None,
+    ) -> None:
+        # 084 — the two seams are constructor parameters, not RuntimeConfig knobs
+        # (ADR 0019 D2): they are host capabilities, and RuntimeConfig must not
+        # become a place credentials pass through. Both default to absent, which is
+        # what makes a configuration without interactive servers byte-identical.
         self._configs = list(configs)
+        self._authorization_handler = authorization_handler
+        self._token_store = token_store
+        self._principal_id = principal_id
         self._stack = AsyncExitStack()
         self._descriptors: list[ToolDescriptor] = []
         self._tools: dict[
@@ -67,6 +95,7 @@ class MCPToolAdapter:
         self._resource_tools: dict[str, tuple[Any, str]] = {}
         self._failures: dict[str, str] = {}
         self._fallback_schemas: list[str] = []
+        self._fallback_store: McpTokenStore | None = None
 
     @property
     def connection_failures(self) -> dict[str, str]:
@@ -100,9 +129,25 @@ class MCPToolAdapter:
                 await self._connect_one(config, server_stack)
             except Exception as exc:  # isolation per server (FR-043)
                 await self._safe_aclose(server_stack)
-                self._failures[config.name] = f"{type(exc).__name__}: {exc}"
+                self._failures[config.name] = self._failure_text(config, exc)
             else:
                 await self._stack.enter_async_context(server_stack)
+
+    @staticmethod
+    def _failure_text(config: MCPServerConfig, exc: BaseException) -> str:
+        """The per-server failure string, reduced to a fixed message when a
+        credential could be inside the exception (084; contract C6.2).
+
+        An ordinary connect failure keeps its detail, which is what makes a
+        misconfigured URL diagnosable. An authorization failure does not: the SDK's
+        own errors interpolate the ``state`` values it compared, and a token
+        endpoint's error body is remote text. Neither may reach a caller who reads
+        ``connection_failures`` and logs it.
+        """
+
+        if _is_interactive(config) or isinstance(exc, McpAuthorizationError):
+            return AUTHORIZATION_FAILED_MESSAGE
+        return f"{type(exc).__name__}: {exc}"
 
     @staticmethod
     async def _safe_aclose(stack: AsyncExitStack) -> None:
@@ -112,6 +157,49 @@ class MCPToolAdapter:
             # Cleanup of a failed server must not mask the original failure
             # or abort connecting the remaining servers.
             pass
+
+    async def _transport_auth_kwargs(self, config: MCPServerConfig) -> dict[str, Any]:
+        """The auth keyword arguments for the http/sse transport clients.
+
+        Empty for an ordinary server, so the transport call is exactly what it was
+        before 084. An interactive server with no host handler raises here rather
+        than falling through to an unauthenticated connection — the whole point of
+        failing closed is that a missing credential must not become a silent
+        misconfiguration (ADR 0019 D7).
+        """
+
+        if _is_interactive(config):
+            if self._authorization_handler is None:
+                raise McpAuthorizationError("no authorization handler is configured")
+            assert config.url is not None
+            store = self._token_store
+            if store is None:
+                # Default to process-lifetime storage rather than refusing: the host
+                # opted into interactive authorization by supplying a handler, and
+                # durability is a separate decision it may legitimately not have made.
+                store = self._default_store()
+            return {
+                "auth": await build_oauth_auth(
+                    server_url=config.url,
+                    server_name=config.name,
+                    principal=self._principal_id,
+                    handler=self._authorization_handler,
+                    store=store,
+                )
+            }
+        headers = _auth_headers(config)
+        return {"headers": headers} if headers else {}
+
+    def _default_store(self) -> McpTokenStore:
+        """Create and remember the in-memory store, so one adapter keeps one.
+
+        Cached rather than rebuilt: a fresh store per connect would discard material
+        between a connect and a later reconnect within the same adapter.
+        """
+
+        if self._fallback_store is None:
+            self._fallback_store = InMemoryMcpTokenStore()
+        return self._fallback_store
 
     async def _connect_one(
         self, config: MCPServerConfig, server_stack: AsyncExitStack
@@ -132,21 +220,19 @@ class MCPToolAdapter:
 
             assert config.url is not None
             # 059 — host-supplied bearer on the http transport (never logged).
-            headers = _auth_headers(config)
+            # 084 — or the SDK OAuth client, when the server authorizes a person.
+            # Both stay absent for an ordinary server, so the call is unchanged.
+            kwargs = await self._transport_auth_kwargs(config)
             read, write, _ = await server_stack.enter_async_context(
-                streamablehttp_client(config.url, headers=headers)
-                if headers
-                else streamablehttp_client(config.url)
+                streamablehttp_client(config.url, **kwargs)
             )
         elif config.transport == "sse":
             from mcp.client.sse import sse_client
 
             assert config.url is not None
-            headers = _auth_headers(config)  # 059 — host-supplied bearer (sse)
+            kwargs = await self._transport_auth_kwargs(config)  # 059 / 084
             read, write = await server_stack.enter_async_context(
-                sse_client(config.url, headers=headers)
-                if headers
-                else sse_client(config.url)
+                sse_client(config.url, **kwargs)
             )
         else:
             from mcp.client.websocket import websocket_client

@@ -216,6 +216,14 @@ The MCP tool adapter boundary.
 - `MCPServerConfig` — configuration for an MCP server.
 - `translate_schema` — translate an MCP tool schema.
 - `merge_layers` — merge MCP capability layers.
+- `McpAuthorizationHandler` — the host presents the authorization URL and returns the redirect result;
+  the runtime never opens a browser and never binds a listener.
+- `McpTokenStore` — where authorization material lives, keyed by principal and server. Supplying none
+  means process-lifetime storage only.
+- `InMemoryMcpTokenStore` — the only store shipped: nothing is written to disk.
+- `AuthorizationResult` — the code and `state` a host returns from the redirect.
+- `StoredAuthorizationMaterial` — the durable tokens, client identity, and absolute expiry.
+- `McpAuthorizationError` — an authorization failure, carrying a fixed public-safe message.
 
 ### `loopplane.adapters.anthropic`
 

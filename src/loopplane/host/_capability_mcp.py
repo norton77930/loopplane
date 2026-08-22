@@ -19,6 +19,7 @@ from loopplane.host.capabilities import (
     CapabilityAction,
     CapabilityOperationResult,
     CapabilityStatus,
+    ManagedMcpAuthorization,
     ManagedMcpConfiguration,
     ManagedMcpTransport,
     is_valid_managed_mcp_endpoint,
@@ -35,6 +36,10 @@ _MCP_TRANSPORTS: tuple[ManagedMcpTransport, ...] = (
     "sse",
     "websocket",
 )
+
+# 084 — the transports that can carry interactive authorization. websocket cannot:
+# the SDK's client accepts neither headers nor an auth handler (ADR 0007 D3).
+_MCP_AUTH: tuple[ManagedMcpTransport, ...] = ("http", "sse")
 
 
 class _McpMixin(_CommonMixin):
@@ -55,6 +60,7 @@ class _McpMixin(_CommonMixin):
         command: str | None,
         args: Sequence[str],
         principal_id: str | None,
+        authorization: str | None = None,
     ) -> CapabilityOperationResult:
         del command, args
         refusal = self._mutation_refusal()
@@ -63,6 +69,25 @@ class _McpMixin(_CommonMixin):
         mcp_id = name.strip()
         endpoint = (url or "").strip()
         principal = self._principal(principal_id)
+        # 084 — a mode, never a credential. Anything but the one known mode (or
+        # nothing) is a configuration error, not a value to store and puzzle over
+        # later; and interactive authorization has no meaning on websocket.
+        mode = (authorization or "").strip() or None
+        if mode is not None and (mode != "interactive" or transport not in _MCP_AUTH):
+            self._update_mcp_record(
+                principal,
+                mcp_id,
+                status="invalid",
+                problem="configuration unavailable",
+                tools=(),
+            )
+            await self._deactivate_mcp(principal, mcp_id)
+            return CapabilityOperationResult(
+                ok=False,
+                resource_id=mcp_id or None,
+                status="invalid",
+                message="mcp configuration is invalid",
+            )
         if not mcp_id or not is_valid_managed_mcp_endpoint(transport, endpoint):
             if mcp_id:
                 self._update_mcp_record(
@@ -111,10 +136,18 @@ class _McpMixin(_CommonMixin):
                 "name": mcp_id,
                 "transport": normalized_transport,
                 "url": endpoint,
-                "status": "disconnected",
+                # 084 — a server that authorizes a person starts out unauthorized
+                # rather than merely disconnected, so the surface can say which of
+                # the two it is without holding any material to check.
+                "status": "needs_authorization" if mode else "disconnected",
                 "tool_count": 0,
                 "tools": [],
                 "problem": None,
+                # Persisted as "auth_mode", not "authorization": the settings store
+                # rejects credential-shaped keys outright (_FORBIDDEN_KEY_PARTS),
+                # because this document lives in the profile root and reaches
+                # backups. That guard is right; the field name moves, not the guard.
+                "auth_mode": mode,
                 "updated_at": timestamp.isoformat(),
             }
 
@@ -238,11 +271,25 @@ class _McpMixin(_CommonMixin):
         status = cast(
             CapabilityStatus,
             status_value
-            if status_value in {"connected", "disconnected", "failed", "unavailable"}
+            if status_value
+            in {
+                "connected",
+                "disconnected",
+                "failed",
+                "needs_authorization",
+                "unavailable",
+            }
             else "unavailable",
+        )
+        # 084 — the mode round-trips; material never does, because none is stored.
+        authorization_value = self._optional_string(record.get("auth_mode"))
+        authorization = cast(
+            "ManagedMcpAuthorization | None",
+            authorization_value if authorization_value == "interactive" else None,
         )
         tools = self._string_sequence(record.get("tools"))
         return ManagedMcpConfiguration(
+            authorization=authorization,
             id=self._string(record, "id"),
             name=self._string(record, "name"),
             status=status,
@@ -322,6 +369,30 @@ class _McpMixin(_CommonMixin):
                 message="mcp endpoint is not allowed",
             )
 
+        # 084 — the stored mode decides whether this connection authorizes a person.
+        stored = self._load(principal)
+        record = (stored.mcp.get(mcp_id) if stored is not None else None) or {}
+        mode = self._optional_string(record.get("auth_mode"))
+        interactive = mode == "interactive"
+        config = self._config
+
+        # The seams are the host's collaborators, passed straight through — but only
+        # for a server that actually authorizes a person. An ordinary server is
+        # constructed with exactly the arguments it was before 084, which is what
+        # makes "default-unused is byte-identical" true at this call site and not
+        # merely in the adapter's behaviour (FR-016). When the seams are absent and
+        # the server needs them, the adapter fails closed on its own; this layer
+        # does not second-guess it.
+        seams: dict[str, object] = {}
+        if interactive:
+            seams = {
+                "authorization_handler": (
+                    config.mcp_authorization_handler if config is not None else None
+                ),
+                "token_store": config.mcp_token_store if config is not None else None,
+                "principal_id": principal,
+            }
+
         try:
             candidate = MCPToolAdapter(
                 [
@@ -329,8 +400,10 @@ class _McpMixin(_CommonMixin):
                         name=mcp_id,
                         transport=transport,
                         url=endpoint,
+                        authorization="interactive" if interactive else None,
                     )
-                ]
+                ],
+                **seams,  # type: ignore[arg-type]
             )
             await candidate.connect()
             failures = candidate.connection_failures
@@ -339,10 +412,10 @@ class _McpMixin(_CommonMixin):
             candidate_value = locals().get("candidate")
             if isinstance(candidate_value, MCPToolAdapter):
                 await self._shutdown_mcp_candidate(candidate_value)
-            return await self._mcp_failure(principal, mcp_id)
+            return await self._mcp_failure(principal, mcp_id, interactive=interactive)
         if failures:
             await self._shutdown_mcp_candidate(candidate)
-            return await self._mcp_failure(principal, mcp_id)
+            return await self._mcp_failure(principal, mcp_id, interactive=interactive)
 
         tools = tuple(sorted(descriptor.name for descriptor in descriptors))
         if not self._update_mcp_record(
@@ -407,13 +480,20 @@ class _McpMixin(_CommonMixin):
             return False
 
     async def _mcp_failure(
-        self, principal_id: str, mcp_id: str
+        self, principal_id: str, mcp_id: str, *, interactive: bool = False
     ) -> CapabilityOperationResult:
+        # 084 — an interactive server that will not connect is, from the operator's
+        # side, a thing to authorize rather than a thing that is broken. Saying
+        # "failed" would send them looking for a misconfiguration that is not there.
+        # The distinction costs no material: it comes from the stored mode.
+        status: CapabilityStatus = "needs_authorization" if interactive else "failed"
         updated = self._update_mcp_record(
             principal_id,
             mcp_id,
-            status="failed",
-            problem="connection unavailable",
+            status=status,
+            problem=(
+                "authorization required" if interactive else "connection unavailable"
+            ),
             tools=(),
         )
         await self._deactivate_mcp(principal_id, mcp_id)
@@ -422,8 +502,10 @@ class _McpMixin(_CommonMixin):
         return CapabilityOperationResult(
             ok=False,
             resource_id=mcp_id,
-            status="failed",
-            message="mcp reconnect failed",
+            status=status,
+            message=(
+                "mcp needs authorization" if interactive else "mcp reconnect failed"
+            ),
         )
 
     def _update_mcp_record(

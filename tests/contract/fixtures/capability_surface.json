@@ -118,7 +118,7 @@
     },
     "upsert_mcp": {
       "async": true,
-      "signature": "(self, *, name: 'str', transport: 'str', url: 'str | None', command: 'str | None', args: 'Sequence[str]', principal_id: 'str | None') -> 'CapabilityOperationResult'"
+      "signature": "(self, *, name: 'str', transport: 'str', url: 'str | None', command: 'str | None', args: 'Sequence[str]', principal_id: 'str | None', authorization: 'str | None' = None) -> 'CapabilityOperationResult'"
     },
     "upsert_schedule": {
       "async": false,
@@ -340,7 +340,7 @@
     },
     "upsert_managed_mcp": {
       "async": true,
-      "signature": "(self, *, name: 'str', transport: 'str', url: 'str | None' = None, command: 'str | None' = None, args: 'Sequence[str]' = (), principal_id: 'str | None' = None) -> 'CapabilityOperationResult'"
+      "signature": "(self, *, name: 'str', transport: 'str', url: 'str | None' = None, command: 'str | None' = None, args: 'Sequence[str]' = (), principal_id: 'str | None' = None, authorization: 'str | None' = None) -> 'CapabilityOperationResult'"
     },
     "upsert_managed_schedule": {
       "async": false,

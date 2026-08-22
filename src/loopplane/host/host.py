@@ -694,6 +694,7 @@ class LoopPlaneHost:
         command: str | None = None,
         args: Sequence[str] = (),
         principal_id: str | None = None,
+        authorization: str | None = None,
     ) -> CapabilityOperationResult:
         return await self._assembled.capability_manager.upsert_mcp(
             name=name,
@@ -702,6 +703,7 @@ class LoopPlaneHost:
             command=command,
             args=args,
             principal_id=principal_id,
+            authorization=authorization,
         )
 
     async def reconnect_managed_mcp(
