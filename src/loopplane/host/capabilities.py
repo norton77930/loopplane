@@ -65,10 +65,53 @@ CapabilityStatus = Literal[
     "failed",
     "fallback",
     "invalid",
+    "needs_authorization",
     "read_only",
     "running",
     "unavailable",
 ]
+
+# 084 — the authorization *mode* of a managed MCP server. A mode, never a
+# credential: this record is persisted inside the LoopPlane profile root, which is
+# inside the backup whitelist, so material must never reach it (ADR 0019 D8).
+ManagedMcpAuthorization = Literal["interactive"]
+
+
+class ManagedMcpAuthorizationHandler(Protocol):
+    """The host's half of an interactive MCP authorization (084; ADR 0019 D1).
+
+    Declared here rather than imported from ``loopplane.adapters.mcp.oauth`` so the
+    host→adapters edge stays confined to the one file that already declares it
+    (``host/_capability_mcp.py``). Protocols are structural, so an object written
+    against the adapter's protocol satisfies this one automatically;
+    ``tests/contract/test_mcp_oauth_boundary.py`` pins the two shapes together so
+    the duplication cannot drift.
+    """
+
+    def redirect_uri(self, *, server: str) -> str: ...
+
+    async def present(
+        self, url: str, *, server: str, principal: str | None
+    ) -> None: ...
+
+    async def await_result(self, *, server: str, principal: str | None) -> object: ...
+
+
+class ManagedMcpTokenStore(Protocol):
+    """Where authorization material lives — the host's decision (ADR 0019 D3).
+
+    ``material`` is deliberately opaque at this boundary: the host layer stores and
+    returns it and has no business inspecting it, and a type it cannot read is a
+    type it cannot accidentally log.
+    """
+
+    async def load(self, *, principal: str | None, server: str) -> object | None: ...
+
+    async def save(
+        self, *, principal: str | None, server: str, material: object
+    ) -> None: ...
+
+    async def discard(self, *, principal: str | None, server: str) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -131,6 +174,8 @@ class ManagedMcpConfiguration:
     owner_id: str | None = None
     scope: CapabilityScope = "owned"
     actions: tuple[CapabilityAction, ...] = ()
+    # 084 — which authorization mode this server uses, never any material (D8).
+    authorization: ManagedMcpAuthorization | None = None
 
 
 @dataclass(frozen=True)

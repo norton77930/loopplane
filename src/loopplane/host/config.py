@@ -28,7 +28,9 @@ from loopplane.governance import (
 )
 from loopplane.host.capabilities import (
     AllowedWorkspaceContextProvider,
+    ManagedMcpAuthorizationHandler,
     ManagedMcpEndpointPolicy,
+    ManagedMcpTokenStore,
     ManagedScheduleRunner,
 )
 from loopplane.host.storage_authority import StorageAuthorityFactory
@@ -107,6 +109,13 @@ class CapabilityManagementConfig:
     mcp_endpoint_policy: ManagedMcpEndpointPolicy | None = None
     schedule_runner: ManagedScheduleRunner | None = None
     allowed_context_provider: AllowedWorkspaceContextProvider | None = None
+    # 084 — the host's half of an interactive MCP authorization (ADR 0019 D1/D2).
+    # Collaborators, like the policy and runner above; not RuntimeConfig knobs, so
+    # the credential path never passes through the run configuration. Both absent
+    # means this deployment cannot authorize interactively — the fail-closed
+    # default, which is what a headless or CI process should be.
+    mcp_authorization_handler: ManagedMcpAuthorizationHandler | None = None
+    mcp_token_store: ManagedMcpTokenStore | None = None
 
 
 @dataclass(frozen=True)

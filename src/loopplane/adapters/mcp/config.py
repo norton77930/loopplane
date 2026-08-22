@@ -20,6 +20,9 @@ class MCPServerConfig(BaseModel):
     args: tuple[str, ...] = ()
     url: str | None = None
     auth_token: str | None = None  # 059 — host-supplied bearer (http/sse); never echoed
+    # 084 — the authorization *mode*, never a credential (ADR 0019 D4). `None` is
+    # today's behaviour; "interactive" asks the host to authorize a person.
+    authorization: Literal["interactive"] | None = None
 
     @model_validator(mode="after")
     def _check_transport_fields(self) -> MCPServerConfig:
@@ -27,6 +30,17 @@ class MCPServerConfig(BaseModel):
             raise ValueError("stdio transport requires a command")
         if self.transport in ("http", "sse", "websocket") and not self.url:
             raise ValueError(f"{self.transport} transport requires a url")
+        if self.authorization is not None:
+            # Two credentials would leave "which one wins" to chance; ambiguity in a
+            # credential path is a defect, not a convenience (ADR 0019 D4).
+            if self.auth_token:
+                raise ValueError("authorization and auth_token are mutually exclusive")
+            if self.transport not in ("http", "sse"):
+                # stdio is a local subprocess with no authorization endpoint;
+                # websocket_client accepts neither headers nor auth (ADR 0007 D3).
+                raise ValueError(
+                    f"{self.transport} transport cannot use interactive authorization"
+                )
         return self
 
 
