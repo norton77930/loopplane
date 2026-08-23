@@ -111,6 +111,83 @@ def test_from_mapping_preserves_storage_authority(tmp_path: Path) -> None:
     assert config.storage.authority is authority
 
 
+def test_from_mapping_preserves_the_mcp_authorization_seams() -> None:
+    """084 — the two interactive-authorization collaborators must pass through like
+    their siblings.
+
+    Dropping them fails *closed* (every interactive server reports
+    needs_authorization), which is safe but silent: a host that supplied a handler
+    would see it discarded with no signal, and could not tell that apart from a
+    server genuinely waiting for a person. Found by architecture review; the
+    dataclass had the fields and this coercion did not.
+    """
+
+    class _Handler:
+        def redirect_uri(self, *, server: str) -> str:
+            return "http://127.0.0.1:0/callback"
+
+        async def present(
+            self, url: str, *, server: str, principal: str | None
+        ) -> None:
+            return None
+
+        async def await_result(self, *, server: str, principal: str | None) -> object:
+            return object()
+
+    class _Store:
+        async def load(self, *, principal: str | None, server: str) -> object | None:
+            return None
+
+        async def save(
+            self, *, principal: str | None, server: str, material: object
+        ) -> None:
+            return None
+
+        async def discard(self, *, principal: str | None, server: str) -> None:
+            return None
+
+    handler, store = _Handler(), _Store()
+    config = RuntimeConfig.from_mapping(
+        {
+            "model": _model(),
+            "capability_management": {
+                "mutations_enabled": True,
+                "mcp_authorization_handler": handler,
+                "mcp_token_store": store,
+            },
+        }
+    )
+
+    assert config.capability_management is not None
+    assert config.capability_management.mcp_authorization_handler is handler
+    assert config.capability_management.mcp_token_store is store
+
+
+def test_malformed_mcp_authorization_seams_are_rejected() -> None:
+    """A shape error must surface as a configuration error, not as every
+    interactive server quietly reporting that it needs authorizing."""
+    # Shape checks run at assembly, like every other collaborator check — building
+    # the config object alone does not validate it.
+    with pytest.raises(ConfigError, match="mcp_authorization_handler"):
+        LoopPlaneHost(
+            RuntimeConfig.from_mapping(
+                {
+                    "model": _model(),
+                    "capability_management": {"mcp_authorization_handler": object()},
+                }
+            )
+        )
+    with pytest.raises(ConfigError, match="mcp_token_store"):
+        LoopPlaneHost(
+            RuntimeConfig.from_mapping(
+                {
+                    "model": _model(),
+                    "capability_management": {"mcp_token_store": object()},
+                }
+            )
+        )
+
+
 def test_from_mapping_without_model_is_rejected() -> None:
     with pytest.raises(ConfigError):
         RuntimeConfig.from_mapping({"tools": []})

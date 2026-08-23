@@ -16,6 +16,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
+import anyio
 import pytest
 from pydantic import ValidationError
 
@@ -790,6 +791,155 @@ async def test_the_leak_sweep_actually_catches_a_leak(
         assert any(SENTINEL in text for text in _sweep_surfaces(adapter, store))
     finally:
         await adapter.shutdown()
+
+
+# --- review remediation: three defects the four green gates did not see --------
+
+
+def test_config_repr_and_errors_do_not_echo_the_token() -> None:
+    """F2, corrected by measurement.
+
+    A review reported that the new mutual-exclusion rule printed the live bearer,
+    because pydantic interpolates the rejected input and `merge_layers` forwards
+    the exception string. Isolating the two settings showed that half is wrong:
+    pydantic emits `input_value=` for the **offending field only**, and no error is
+    raised on `auth_token` itself, so neither path ever carried the token.
+
+    The real leak was simpler and older — `repr(config)` printed it, and had since
+    059. Both are pinned here: the repr assertion is the one that goes red when the
+    fix is removed, and the error assertions are a regression guard against a
+    pydantic behaviour change.
+    """
+    from loopplane.adapters.mcp import merge_layers
+
+    with pytest.raises(ValidationError) as caught:
+        MCPServerConfig(
+            name="x",
+            transport="http",
+            url="https://host/mcp",
+            authorization="interactive",
+            auth_token=SENTINEL,
+        )
+    assert SENTINEL not in str(caught.value)
+
+    _effective, problems = merge_layers(
+        [
+            {
+                "bad": {
+                    "transport": "http",
+                    "url": "https://host/mcp",
+                    "authorization": "interactive",
+                    "auth_token": SENTINEL,
+                }
+            }
+        ]
+    )
+    assert problems and all(SENTINEL not in problem for problem in problems)
+
+    # The leak that was actually there, and is actually closed.
+    cfg = MCPServerConfig(
+        name="x", transport="http", url="https://host/mcp", auth_token=SENTINEL
+    )
+    assert SENTINEL not in repr(cfg)
+    assert SENTINEL not in str(cfg)
+    assert cfg.auth_token == SENTINEL  # still readable by the transport
+
+
+async def test_failed_renewal_fails_closed_without_prompting() -> None:
+    """F3 — the SDK, on a failed refresh, clears the tokens, sends the request
+    **unauthenticated**, and drives a full interactive flow off the 401. C5.3
+    forbids the first and C5.2 forbids the second: an unattended job must surface
+    "needs authorization", not block on a handler nobody is watching.
+    """
+    import httpx
+
+    handler = _RecordingHandler()
+    store, seeded = _authorized_store(
+        access="stale", refresh="refresh-084", expires_in=3600
+    )
+    await _seed(store, seeded)
+    material = await store.load(principal="alice", server="srv")
+    assert material is not None
+    material.expires_at = time.time() - 1
+
+    auth = await build_oauth_auth(
+        server_url="https://host/mcp",
+        server_name="srv",
+        principal="alice",
+        handler=handler,
+        store=store,
+    )
+
+    flow = auth.async_auth_flow(httpx.Request("POST", "https://host/mcp"))
+    refresh_request = await flow.__anext__()
+    assert b"refresh_token" in refresh_request.content
+
+    # The authorization server rejects the refresh token (revoked / expired).
+    with pytest.raises(McpAuthorizationError):
+        await flow.asend(
+            httpx.Response(
+                400, request=refresh_request, json={"error": "invalid_grant"}
+            )
+        )
+
+    # Neither forbidden thing happened: no unauthenticated resource request was
+    # yielded, and no person was asked.
+    assert handler.await_calls == 0
+    assert handler.presented == []
+    await flow.aclose()
+
+
+def test_the_sdk_refresh_hook_still_exists() -> None:
+    """The fail-closed override hangs off an SDK method. If a future SDK renames
+    it, the override silently stops applying and the unsafe path returns — so pin
+    the seam rather than trusting it."""
+    from mcp.client.auth import OAuthClientProvider
+
+    assert callable(getattr(OAuthClientProvider, "_handle_refresh_response", None))
+
+
+async def test_waiting_for_a_person_is_bounded() -> None:
+    """F1 — the SDK accepts a `timeout` and never enforces it (it is stored on the
+    context and read by nothing), and the sse flow fires at transport context
+    entry, outside the adapter's connect budget. A handler that never resolves
+    would hang `connect()` forever. The bound belongs on the one await that waits
+    for a person.
+    """
+
+    class _NeverAnswers(_RecordingHandler):
+        async def await_result(
+            self, *, server: str, principal: str | None
+        ) -> AuthorizationResult:
+            await anyio.sleep_forever()
+            raise AssertionError("unreachable")
+
+    auth = await build_oauth_auth(
+        server_url="https://host/mcp",
+        server_name="srv",
+        principal=None,
+        handler=_NeverAnswers(),
+        store=InMemoryMcpTokenStore(),
+        timeout=0.05,
+    )
+    with pytest.raises(TimeoutError):
+        await auth.context.callback_handler()
+
+
+def test_interactive_connect_budget_exceeds_the_human_bound() -> None:
+    """F1's other half: the OAuth flow fires inside `initialize()` on http, which
+    the adapter wraps in its connect timeout. A 15s budget for a person to open a
+    browser, log in, and consent is not a budget — and being cut short discards
+    the pending state and verifier, so the retry starts over."""
+    from loopplane.adapters.mcp.adapter import (
+        _AUTHORIZATION_CONNECT_TIMEOUT_SECONDS,
+        _CONNECT_TIMEOUT_SECONDS,
+    )
+    from loopplane.adapters.mcp.oauth import DEFAULT_AUTHORIZATION_TIMEOUT_SECONDS
+
+    assert _CONNECT_TIMEOUT_SECONDS < DEFAULT_AUTHORIZATION_TIMEOUT_SECONDS
+    assert (
+        _AUTHORIZATION_CONNECT_TIMEOUT_SECONDS > DEFAULT_AUTHORIZATION_TIMEOUT_SECONDS
+    )
 
 
 async def test_empty_code_fails_before_the_token_endpoint() -> None:

@@ -8,18 +8,33 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 
 class MCPServerConfig(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    # 084 — two settings, and it is worth being precise about which one does what,
+    # because a review flagged this and got the mechanism backwards.
+    #
+    # `repr=False` on `auth_token` closes a **real** leak that has existed since
+    # 059: `repr(config)` printed the live bearer, so any log line, traceback, or
+    # debugger view holding a config echoed it.
+    #
+    # `hide_input_in_errors` closes **nothing today** — measured, not assumed.
+    # Pydantic interpolates `input_value=` for the *offending field only*, and no
+    # validation error is raised on `auth_token` itself, so the token never appears
+    # in a `ValidationError` or in `merge_layers`' reported problems either way. It
+    # is kept as defence in depth: it makes that class of leak impossible rather
+    # than accidentally absent, which matters if a later change ever validates this
+    # field directly.
+    model_config = ConfigDict(frozen=True, extra="forbid", hide_input_in_errors=True)
 
     name: str
     transport: Literal["stdio", "http", "sse", "websocket"]
     command: str | None = None
     args: tuple[str, ...] = ()
     url: str | None = None
-    auth_token: str | None = None  # 059 — host-supplied bearer (http/sse); never echoed
+    # 059 — host-supplied bearer (http/sse); never echoed.
+    auth_token: str | None = Field(default=None, repr=False)
     # 084 — the authorization *mode*, never a credential (ADR 0019 D4). `None` is
     # today's behaviour; "interactive" asks the host to authorize a person.
     authorization: Literal["interactive"] | None = None

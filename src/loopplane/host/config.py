@@ -373,6 +373,13 @@ def _coerce_capability_management(
         mcp_endpoint_policy=value.get("mcp_endpoint_policy"),
         schedule_runner=value.get("schedule_runner"),
         allowed_context_provider=value.get("allowed_context_provider"),
+        # 084 — these must pass through like the collaborators above. Dropping them
+        # here fails *closed* (every interactive server reports needs_authorization),
+        # which is safe but silent: a host that supplied a handler would see it
+        # discarded with no signal, and would have no way to tell that apart from a
+        # server genuinely awaiting a person.
+        mcp_authorization_handler=value.get("mcp_authorization_handler"),
+        mcp_token_store=value.get("mcp_token_store"),
     )
 
 
@@ -467,6 +474,28 @@ def validate_config(config: RuntimeConfig) -> None:
         ):
             raise ConfigError(
                 "capability_management.allowed_context_provider must be callable"
+            )
+        # 084 — shape-check the two authorization seams like their siblings. A
+        # malformed handler would otherwise surface as "needs authorization" on
+        # every interactive server, which reads as a user problem rather than a
+        # configuration one.
+        authorization_handler = capability_management.mcp_authorization_handler
+        if authorization_handler is not None and not all(
+            callable(getattr(authorization_handler, name, None))
+            for name in ("redirect_uri", "present", "await_result")
+        ):
+            raise ConfigError(
+                "capability_management.mcp_authorization_handler must provide "
+                "redirect_uri(), present() and await_result()"
+            )
+        token_store = capability_management.mcp_token_store
+        if token_store is not None and not all(
+            callable(getattr(token_store, name, None))
+            for name in ("load", "save", "discard")
+        ):
+            raise ConfigError(
+                "capability_management.mcp_token_store must provide "
+                "load(), save() and discard()"
             )
 
     names = collect_tool_names(config)

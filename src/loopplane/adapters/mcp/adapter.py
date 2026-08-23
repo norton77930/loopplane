@@ -19,6 +19,7 @@ import anyio
 from loopplane.adapters.mcp.config import MCPServerConfig
 from loopplane.adapters.mcp.oauth import (
     AUTHORIZATION_FAILED_MESSAGE,
+    DEFAULT_AUTHORIZATION_TIMEOUT_SECONDS,
     InMemoryMcpTokenStore,
     McpAuthorizationError,
     McpAuthorizationHandler,
@@ -33,6 +34,16 @@ from loopplane.model.boundary import ToolDescriptor
 from loopplane.model.content import ImageBlock, TextBlock
 
 _CONNECT_TIMEOUT_SECONDS = 15.0
+
+# 084 — an interactive server's `initialize()` is where the OAuth flow actually
+# fires on the http transport, so the 15s connect budget would be the budget for a
+# person to open a browser, log in, and consent. It is not enough, and cutting the
+# flow short discards the pending `state` and verifier, so a retry starts over.
+# The human wait itself is bounded inside `oauth.py` (the SDK's own `timeout` is
+# stored and never enforced); this margin only has to be larger than that bound.
+_AUTHORIZATION_CONNECT_TIMEOUT_SECONDS = (
+    DEFAULT_AUTHORIZATION_TIMEOUT_SECONDS + _CONNECT_TIMEOUT_SECONDS
+)
 
 # 059 — input schemas for the synthetic resource tools.
 _LIST_RESOURCES_SCHEMA: dict[str, object] = {
@@ -247,7 +258,14 @@ class MCPToolAdapter:
         session = await server_stack.enter_async_context(ClientSession(read, write))
         # The timeout may only wrap plain awaits: wrapping the context
         # entries above would interleave cancel scopes across the exit stack.
-        with anyio.fail_after(_CONNECT_TIMEOUT_SECONDS):
+        # 084 — an interactive server needs the wider budget, because the OAuth
+        # flow fires inside `initialize()` on the http transport.
+        connect_timeout = (
+            _AUTHORIZATION_CONNECT_TIMEOUT_SECONDS
+            if _is_interactive(config)
+            else _CONNECT_TIMEOUT_SECONDS
+        )
+        with anyio.fail_after(connect_timeout):
             await session.initialize()
             listed = await session.list_tools()
         for tool in listed.tools:

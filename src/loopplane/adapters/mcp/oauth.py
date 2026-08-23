@@ -34,6 +34,8 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
+import anyio
+
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import httpx
 
@@ -304,7 +306,15 @@ async def build_oauth_auth(
         await handler.present(url, server=server_name, principal=principal)
 
     async def callback_handler() -> tuple[str, str | None]:
-        result = await handler.await_result(server=server_name, principal=principal)
+        # The bound belongs here, on the one await that waits for a person.
+        #
+        # The SDK accepts a `timeout` and never enforces it — it is stored on the
+        # context and read by nothing. Relying on it would leave an sse connect
+        # hanging forever on a handler that never resolves, because the sse flow
+        # fires at transport context entry, outside the adapter's connect timeout.
+        # Bounding it at this await covers every transport and every call site.
+        with anyio.fail_after(timeout):
+            result = await handler.await_result(server=server_name, principal=principal)
         if not result.code:
             # Fail before handing an empty code to the token endpoint, so the
             # failure reads as "the host returned nothing" rather than as a remote
@@ -323,7 +333,29 @@ async def build_oauth_auth(
     except (ValidationError, ValueError) as exc:
         raise McpAuthorizationError("host supplied an invalid redirect uri") from exc
 
-    provider = OAuthClientProvider(
+    class _FailClosedProvider(OAuthClientProvider):
+        """Makes a failed renewal fail closed, which the SDK does not.
+
+        The SDK's flow, on a refresh that fails, clears the tokens and then sends
+        the resource request **without** an Authorization header; the resulting 401
+        drives a full interactive authorization. Both halves violate this unit's
+        contract: C5.3 forbids an unauthenticated attempt, and C5.2 says a failed
+        renewal disconnects and reports that re-authorization is needed rather than
+        prompting a person who, in an unattended job, is not there.
+
+        Raising here aborts the flow before the unauthenticated request is yielded.
+        `tests/contract/test_mcp_oauth_boundary.py` asserts this method still exists
+        on the SDK class, so an upstream rename goes red instead of silently
+        restoring the unsafe path.
+        """
+
+        async def _handle_refresh_response(self, response: Any) -> bool:
+            refreshed = bool(await super()._handle_refresh_response(response))
+            if not refreshed:
+                raise McpAuthorizationError(AUTHORIZATION_FAILED_MESSAGE)
+            return refreshed
+
+    provider = _FailClosedProvider(
         server_url=server_url,
         client_metadata=metadata,
         storage=_StoreBridge(store, principal=principal, server=server_name),
