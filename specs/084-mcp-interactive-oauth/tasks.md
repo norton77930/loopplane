@@ -188,6 +188,25 @@ Adding a sidecar method touches six registries plus their pins; the list is in
       Plus `mcp.reconnect` gains an optional `material` so main can inject what it decrypted.
       Polling is less elegant than a push, but it stays inside the one direction the protocol
       already has, and its blast radius is three method names rather than the event contract.
+
+      **Required, or D7 breaks on Desktop after one refresh** (architecture review, 2026-08-24).
+      The four methods above carry material back to main only *inside* an interactive flow. But
+      the client is public (`token_endpoint_auth_method="none"`), which is exactly the
+      configuration under which authorization servers rotate the refresh token on every use, and
+      a D7 renewal is silent by design — `_StoreBridge.set_tokens` writes the rotated material
+      into the **sidecar-side** store, where nothing carries it to the vault. One silent refresh
+      later, the vault's refresh token is stale; the next app restart fails renewal and prompts a
+      person, which is the precise failure FR-008 and the ADR 0019 implementation note exist to
+      prevent.
+
+      So the protocol needs a **material write-back outside the authorize flow**: a read the main
+      process can make after any operation that could have refreshed (a tool call or a reconnect),
+      returning the current material plus a version//etag so main persists only on change. Settle
+      the exact shape when building, but do not build T038 without it.
+
+      Two smaller gaps from the same review, worth closing while the shape is still on paper:
+      abandoned `request_id` lifecycle and concurrency are unstated, and `authorize_status`
+      re-delivers material on every poll where a one-shot consume is cheaper and safer.
 - [ ] **T039** [US6] Register the new methods in `apps/desktop/sidecar/bridge.py`
       `_DESKTOP_METHOD_NAMES` (the `mcp.*` block, currently lines 442-446), and update the pinned
       method count in `tests/contract/test_desktop_rpc_v1.py:186` from 64 to 67 — deliberately, as a
