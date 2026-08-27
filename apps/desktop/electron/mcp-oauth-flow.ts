@@ -47,6 +47,20 @@ const FAILED_PAGE =
   "<!doctype html><meta charset=utf-8><title>LoopPlane</title>" +
   "<p>Authorization did not complete. Return to LoopPlane and try again.";
 
+function isSafeAuthorizationUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    if (parsed.username || parsed.password) return false;
+    if (parsed.protocol === "https:") return true;
+    return (
+      parsed.protocol === "http:" &&
+      (parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]")
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * A loopback listener on an OS-assigned port, bound to 127.0.0.1 only.
  *
@@ -134,8 +148,13 @@ export async function runAuthorization(
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
     const authorizationUrl = await begin(listener.redirectUri);
+    if (!isSafeAuthorizationUrl(authorizationUrl)) {
+      throw new Error("authorization URL is unsafe");
+    }
+    const expectedState = new URL(authorizationUrl).searchParams.get("state");
+    if (!expectedState) throw new Error("authorization state is missing");
     await deps.openExternal(authorizationUrl);
-    return await Promise.race([
+    const result = await Promise.race([
       delivered,
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(
@@ -144,6 +163,10 @@ export async function runAuthorization(
         );
       }),
     ]);
+    if (result.state !== expectedState) {
+      throw new Error("authorization state mismatch");
+    }
+    return result;
   } finally {
     if (timer !== null) clearTimeout(timer);
     await listener.close();

@@ -12,6 +12,7 @@ import json
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
     from profile import ProfileState
@@ -150,11 +151,16 @@ def bootstrap_desktop_owner(profile_root: Path) -> DesktopRuntimeOwner:
 
 
 def desktop_runtime_config(
-    *, model: Any, profile_root: Path, generation_id: str
+    *,
+    model: Any,
+    profile_root: Path,
+    generation_id: str,
+    mcp_oauth: Any | None = None,
 ) -> RuntimeConfig:
     """Compose Desktop's required SQLite storage below one active generation id."""
 
     from loopplane.host import (
+        CapabilityManagementConfig,
         DesktopStorageAuthorityFactory,
         RuntimeConfig,
         StorageConfig,
@@ -166,12 +172,43 @@ def desktop_runtime_config(
         from durability import initialize_runtime_storage
 
     storage_root = initialize_runtime_storage(profile_root, generation_id)
+
+    def desktop_endpoint_policy(_principal: str, transport: str, endpoint: str) -> bool:
+        parsed = urlsplit(endpoint)
+        secure_scheme = {
+            "http": "https",
+            "sse": "https",
+            "websocket": "wss",
+        }.get(transport)
+        if parsed.scheme == secure_scheme:
+            return True
+        insecure_scheme = {
+            "http": "http",
+            "sse": "http",
+            "websocket": "ws",
+        }.get(transport)
+        return parsed.scheme == insecure_scheme and parsed.hostname in {
+            "127.0.0.1",
+            "::1",
+        }
+
     return RuntimeConfig(
         model=model,
         storage=StorageConfig(
             authority=DesktopStorageAuthorityFactory(profile_root),
             checkpoint_backend="sqlite",
             root=storage_root,
+        ),
+        capability_management=(
+            CapabilityManagementConfig(
+                mutations_enabled=True,
+                runtime_activation_enabled=True,
+                mcp_endpoint_policy=desktop_endpoint_policy,
+                mcp_authorization_handler=mcp_oauth,
+                mcp_token_store=mcp_oauth,
+            )
+            if mcp_oauth is not None
+            else None
         ),
     )
 
@@ -189,6 +226,7 @@ def build_rpc_dispatcher(
     runtime_config: RuntimeConfig | None = None,
     runtime_owner: DesktopRuntimeOwner | None = None,
     configured_model_id: str | None = None,
+    mcp_oauth: object | None = None,
 ) -> object:
     """Compose dispatcher + Host-only methods after bootstrap."""
 
@@ -196,7 +234,7 @@ def build_rpc_dispatcher(
     from interaction import InteractionLease
     from methods.audit import AuditMethods
     from methods.backup import BackupMethods
-    from methods.capability import CapabilityMethods
+    from methods.capability import CapabilityMethods, DesktopMcpOAuth
     from methods.command import CommandMethods
     from methods.cost import CostMethods
     from methods.governance import GovernanceMethods
@@ -316,14 +354,14 @@ def build_rpc_dispatcher(
             principal_provider=current_principal,
         ).handlers()
     )
-    handlers.update(
-        CapabilityMethods(
-            host_for_methods,  # type: ignore[arg-type]
-            principal_id=principal_id,
-            principal_provider=current_principal,
-            mutation_lease=mut_lease,
-        ).handlers()
+    capability_methods = CapabilityMethods(
+        host_for_methods,  # type: ignore[arg-type]
+        principal_id=principal_id,
+        principal_provider=current_principal,
+        mutation_lease=mut_lease,
+        mcp_oauth=mcp_oauth if isinstance(mcp_oauth, DesktopMcpOAuth) else None,
     )
+    handlers.update(capability_methods.handlers())
     handlers.update(
         GovernanceMethods(
             host_for_methods,  # type: ignore[arg-type]
@@ -387,6 +425,7 @@ def build_rpc_dispatcher(
         if torn_down["value"]:
             return
         await lease.shutdown()
+        await capability_methods.aclose()
         shutting_down["value"] = True
         if backup_methods is not None:
             backup_methods.shutdown()
@@ -439,9 +478,14 @@ _DESKTOP_METHOD_NAMES = (
     "interaction.answerQuestion",
     "interaction.cancel",
     "interaction.submit",
+    "mcp.authorize",
+    "mcp.authorize_complete",
+    "mcp.authorize_status",
     "mcp.delete",
+    "mcp.disconnect",
     "mcp.get",
     "mcp.list",
+    "mcp.material",
     "mcp.reconnect",
     "mcp.upsert",
     "memory.delete",
@@ -734,10 +778,17 @@ def main() -> None:  # pragma: no cover - real stdio entry (manual smoke)
         sys.stderr.write(f"sidecar bootstrap failed: {type(exc).__name__}\n")
         sys.exit(2)
 
+    try:
+        from .methods.capability import DesktopMcpOAuth
+    except ImportError:  # pragma: no cover - script-path load
+        from methods.capability import DesktopMcpOAuth
+
+    mcp_oauth = DesktopMcpOAuth()
     config = desktop_runtime_config(
         model=model,
         profile_root=profile,
         generation_id=owner.generation_id,
+        mcp_oauth=mcp_oauth,
     )
     host = owner.attach_host(config)
     profile_state = owner.ensure_profile_state()
@@ -768,6 +819,7 @@ def main() -> None:  # pragma: no cover - real stdio entry (manual smoke)
         configured_model_id=(
             (os.environ.get(DESKTOP_MODEL_ID_ENV) or "").strip() or None
         ),
+        mcp_oauth=mcp_oauth,
     )
     dispatcher.state.initialized = True  # type: ignore[attr-defined]
 

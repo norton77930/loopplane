@@ -6,7 +6,16 @@ Semantic Versioning.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **084** MCP interactive OAuth (`loopplane.adapters.mcp`, `loopplane.host`,
+  `apps/desktop`) — opt-in authorization-code flow for HTTP/SSE MCP servers through
+  host-owned browser/callback and token-store seams, with a bounded human wait,
+  single-use state validation, fail-closed unattended refresh, and refresh-token
+  write-back. Desktop owns the system browser and OS-encrypted persistence outside the
+  portable profile; the renderer, backups, events, and public errors receive no token
+  material. Static bearer tokens, Web, `stdio`, and `websocket` behavior are unchanged;
+  there is no new dependency, migration, schema change, or default change.
 
 ## [0.5.0] - 2026-08-22
 

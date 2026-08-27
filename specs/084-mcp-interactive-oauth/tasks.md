@@ -165,7 +165,7 @@ Adding a sidecar method touches six registries plus their pins; the list is in
       `provider-credentials.ts`'s vault/IO seam so it is unit-testable without Electron.
 - [x] **T037** [US6] `apps/desktop/electron/mcp-oauth-flow.ts` — open the system browser, run the
       loopback listener, validate `state`, hand the result back (C9.1).
-- [ ] **T038** [US6] Sidecar: implement both runtime Protocols in
+- [x] **T038** [US6] Sidecar: implement both runtime Protocols in
       `apps/desktop/sidecar/methods/capability.py`.
 
       **Protocol shape, settled during implementation — read before starting.** Research R8 assumed
@@ -174,8 +174,8 @@ Adding a sidecar method touches six registries plus their pins; the list is in
       enumerated in the dispatcher's `NOTIFICATIONS` registry, which is part of the versioned stdio
       protocol ADR 0015 gates. Extending that is a larger, separately-reviewable change.
 
-      Use **three request-direction methods instead**, so the notification enumeration and the
-      `initialize` capability list are untouched:
+      Use **four request-direction methods instead**, so the notification enumeration stays
+      untouched; the `initialize` method list changes deliberately and is pinned by T039:
 
       1. `mcp.authorize {mcp_id, redirect_uri}` → `{request_id}`. Starts the connect in a background
          task and returns immediately; the sidecar's handler records the URL that `present()`
@@ -184,13 +184,15 @@ Adding a sidecar method touches six registries plus their pins; the list is in
          `awaiting` / `authorized` / `failed`. Main polls this to learn the URL, then to learn the
          outcome, and takes the serialized material to persist.
       3. `mcp.authorize_complete {request_id, code, state}` → resolves the blocked handler.
+      4. `mcp.material {mcp_id, known_version?}` → `{principal, version, material?}`. Main uses
+         the opaque version as an etag and receives material only when it changed.
 
       Plus `mcp.reconnect` gains an optional `material` so main can inject what it decrypted.
       Polling is less elegant than a push, but it stays inside the one direction the protocol
-      already has, and its blast radius is three method names rather than the event contract.
+      already has, and its blast radius is four method names rather than the event contract.
 
       **Required, or D7 breaks on Desktop after one refresh** (architecture review, 2026-08-24).
-      The four methods above carry material back to main only *inside* an interactive flow. But
+      The first three methods carry material back to main only *inside* an interactive flow. But
       the client is public (`token_endpoint_auth_method="none"`), which is exactly the
       configuration under which authorization servers rotate the refresh token on every use, and
       a D7 renewal is silent by design — `_StoreBridge.set_tokens` writes the rotated material
@@ -199,48 +201,47 @@ Adding a sidecar method touches six registries plus their pins; the list is in
       person, which is the precise failure FR-008 and the ADR 0019 implementation note exist to
       prevent.
 
-      So the protocol needs a **material write-back outside the authorize flow**: a read the main
-      process can make after any operation that could have refreshed (a tool call or a reconnect),
-      returning the current material plus a version//etag so main persists only on change. Settle
-      the exact shape when building, but do not build T038 without it.
+      The fourth method is therefore the required **material write-back outside the authorize
+      flow**: main calls it after any operation that could have refreshed (a tool call or a
+      reconnect), and persists only when the version/etag changed.
 
       Two smaller gaps from the same review, worth closing while the shape is still on paper:
       abandoned `request_id` lifecycle and concurrency are unstated, and `authorize_status`
       re-delivers material on every poll where a one-shot consume is cheaper and safer.
-- [ ] **T039** [US6] Register the new methods in `apps/desktop/sidecar/bridge.py`
-      `_DESKTOP_METHOD_NAMES` (the `mcp.*` block, currently lines 442-446), and update the pinned
-      method count in `tests/contract/test_desktop_rpc_v1.py:186` from 64 to 67 — deliberately, as a
-      protocol change, not as a number that drifted.
-- [ ] **T040** [US6] Wire `apps/desktop/electron/{ipc-channels,ipc-handlers,sidecar-rpc,main}.ts`.
-- [ ] **T041** [US6] Renderer service in `apps/desktop/src/services/capability-services.ts` — the
+- [x] **T039** [US6] Register the new methods in `apps/desktop/sidecar/bridge.py`
+      `_DESKTOP_METHOD_NAMES` and every exact Electron/integration registry pin. Keep the
+      sidecar client's pending-request cache capacity at 64: the old `test_desktop_rpc_v1.py:186`
+      citation was that cache limit, not a method count.
+- [x] **T040** [US6] Wire `apps/desktop/electron/{ipc-channels,ipc-handlers,sidecar-rpc,main}.ts`.
+- [x] **T041** [US6] Renderer service in `apps/desktop/src/services/capability-services.ts` — the
       projection is `{server, mode, state}` only, no hint characters (C9.3).
-- [ ] **T042** [US6] `packages/cowork-presentation/src/components/settings/McpSettings.tsx` plus i18n
+- [x] **T042** [US6] `packages/cowork-presentation/src/components/settings/McpSettings.tsx` plus i18n
       — mode selection, the three states, and a connect action.
-- [ ] **T043** [P] [US6] Test — `tests/contract/test_desktop_public_safety_routing.py` and
+- [x] **T043** [P] [US6] Test — `tests/contract/test_desktop_public_safety_routing.py` and
       `tests/integration/test_desktop_sidecar.py` extended for the new methods.
 - [x] **T044** [P] [US6] Vitest — vault refuses when encryption is unavailable; the renderer never
       receives a value; `apps/desktop/electron/__tests__/helpers.ts` and
       `apps/desktop/src/__tests__/sidecar-rpc.test.ts` updated.
-- [ ] **T045** [US6] Test — a profile backup archive contains no material, proven from the placement
+- [x] **T045** [US6] Test — a profile backup archive contains no material, proven from the placement
       in T036 rather than from a backup-side exclusion rule (C9.4).
-- [ ] **T046** [US6] Test — restart reconnects without a new approval (C9.5).
-- [ ] **T061** [US6] Disconnect from the settings surface discards the stored material; reconnecting
+- [x] **T046** [US6] Test — restart reconnects without a new approval (C9.5).
+- [x] **T061** [US6] Disconnect from the settings surface discards the stored material; reconnecting
       requires approval again, with no stale material left behind. *Added at analyze — US6 acceptance
       scenario 3 had runtime coverage (T028/T029) but no Desktop-level task.*
-- [ ] **T062** [P] [US6] Test — the whole Desktop path needs **zero** configuration files edited,
+- [x] **T062** [P] [US6] Test — the whole Desktop path needs **zero** configuration files edited,
       environment variables set, or Python written (SC-010). *Added at analyze.*
 
 ---
 
 ## Phase 8: Documentation
 
-- [ ] **T047** [P] `docs/capabilities.md` and `docs/gap-analysis.md` — G12 moves from "partially
+- [x] **T047** [P] `docs/capabilities.md` and `docs/gap-analysis.md` — G12 moves from "partially
       closed" to closed; remove the "MCP interactive OAuth" line from the P1 forward roadmap.
-- [ ] **T048** [P] `docs/desktop-gui.md` — the new settings behaviour.
-- [ ] **T049** [P] `CHANGELOG.md` `[Unreleased]` — unit 084.
+- [x] **T048** [P] `docs/desktop-gui.md` — the new settings behaviour.
+- [x] **T049** [P] `CHANGELOG.md` `[Unreleased]` — unit 084.
 - [x] **T050** `docs/api-reference.md` — the two new public Protocols, keeping the reference
       bijection the repo's contract test enforces.
-- [ ] **T063** [P] Record the **rollback path** (C10.3, Constitution X): the feature is inert unless a
+- [x] **T063** [P] Record the **rollback path** (C10.3, Constitution X): the feature is inert unless a
       host supplies both seams and a server declares the mode, so reverting is removing the seams —
       no data migration, no schema change. *Added at analyze: Principle X requires rollback guidance
       to be documented, and it existed only inside ADR 0019's consequences.*
@@ -249,25 +250,25 @@ Adding a sidecar method touches six registries plus their pins; the list is in
 
 ## Phase 9: Final review
 
-- [ ] **T051** Four gates: `ruff format --check`, `ruff check`, `mypy src`, `pytest` — run through
+- [x] **T051** Four gates: `ruff format --check`, `ruff check`, `mypy src`, `pytest` — run through
       **PowerShell**, never Bash (a Bash PATH override displaces System32 PowerShell and produces
       ~64 false failures in `tests/contract/test_desktop_delivery_gate.py`). Never run two pytest
       processes concurrently: the shared `tmp/pytest` base inside the repo causes WinError 32.
-- [ ] **T052** `uv lock` **only if `pyproject.toml` changed** — which FR-018 says it should not.
+- [x] **T052** `uv lock` **only if `pyproject.toml` changed** — which FR-018 says it should not.
       Verify with `uv lock --check`; the local gates run against an existing `.venv` and cannot see
       lock drift, while CI's first step `uv sync --locked` will.
-- [ ] **T053** Public-safety scan over the changed files, including untracked ones.
-- [ ] **T064** Assert the extras membership is unchanged via `tests/contract/test_packaging.py`
+- [x] **T053** Public-safety scan over the changed files, including untracked ones.
+- [x] **T064** Assert the extras membership is unchanged via `tests/contract/test_packaging.py`
       (C10.2, FR-018). The `oauth` extra belongs to unit 056 — token *verification* — and must not be
       reused or renamed for this feature; `loopplane[oauth]` meaning two unrelated things would be a
       worse outcome than a new extra. *Added at analyze.*
-- [ ] **T054** **`code-reviewer`** — mandatory (FR-019).
-- [ ] **T055** **`architecture-reviewer`** — mandatory, because Phase 6 changes an exposed interface
+- [x] **T054** **`code-reviewer`** — mandatory (FR-019).
+- [x] **T055** **`architecture-reviewer`** — mandatory, because Phase 6 changes an exposed interface
       (FR-019, FR-020).
-- [ ] **T056** Reconcile the test count item by item against the baseline — pytest 2236 passed /
+- [x] **T056** Reconcile the test count item by item against the baseline — pytest 2236 passed /
       33 skipped, `tests/contract` 482 passed / 13 skipped — so an accidentally skipped or dropped
       test cannot hide inside a larger total.
-- [ ] **T057** Set ADR 0019 to `Accepted` if that has not already happened at T000, and update
+- [x] **T057** Set ADR 0019 to `Accepted` if that has not already happened at T000, and update
       `docs/loopplane-agent-board.md` §3 and §4 for unit 084.
 
 **Known local flake**: `tests/integration/test_desktop_restore.py` (`restore.commit`) fails

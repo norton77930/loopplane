@@ -507,6 +507,8 @@ export type RegisterHandlersOptions = {
    * and only `get()`'s public view is allowed to answer the renderer.
    */
   providerVault?: ProviderVaultPort;
+  /** Main-owned browser/vault orchestration; no material may cross this port. */
+  mcpOAuth?: McpOAuthPort;
 };
 
 export type ProviderVaultPort = {
@@ -515,6 +517,18 @@ export type ProviderVaultPort = {
   clear(): void;
   /** Relaunch the app so a new provider setting reaches a fresh sidecar. */
   relaunch(): void;
+};
+
+export type McpOAuthPort = {
+  upsert(input: {
+    name: string;
+    transport: unknown;
+    url: unknown;
+    authorization?: "interactive";
+  }): Promise<unknown>;
+  reconnect(server: string): Promise<unknown>;
+  disconnect(server: string): Promise<unknown>;
+  remove(server: string): Promise<unknown>;
 };
 
 /**
@@ -560,6 +574,7 @@ export function registerDesktopIpcHandlers(options: RegisterHandlersOptions): ()
     IPC.capabilityMcpGet,
     IPC.capabilityMcpUpsert,
     IPC.capabilityMcpReconnect,
+    IPC.capabilityMcpDisconnect,
     IPC.capabilityMcpDelete,
     IPC.capabilitySkillList,
     IPC.capabilitySkillGet,
@@ -1326,16 +1341,21 @@ export function registerDesktopIpcHandlers(options: RegisterHandlersOptions): ()
   ipcMain.handle(IPC.capabilityMcpUpsert, async (event, raw) => {
     guard(event);
     const params = asRecord(raw);
+    const mode = params.mode;
+    if (mode !== undefined && mode !== "none" && mode !== "interactive") {
+      invalidParams();
+    }
     try {
-      return await rpc.request(
-        "mcp.upsert",
-        {
-          name: params.name,
-          transport: params.transport,
-          url: params.url,
-        },
-        { mutationId: rpc.newMutationId() },
-      );
+      const input = {
+        name: params.name as string,
+        transport: params.transport,
+        url: params.url,
+        ...(mode === "interactive" ? { authorization: "interactive" as const } : {}),
+      };
+      if (options.mcpOAuth) return await options.mcpOAuth.upsert(input);
+      return await rpc.request("mcp.upsert", input, {
+        mutationId: rpc.newMutationId(),
+      });
     } catch (err) {
       fail(err);
     }
@@ -1346,6 +1366,9 @@ export function registerDesktopIpcHandlers(options: RegisterHandlersOptions): ()
     const params = asRecord(raw);
     const mcpId = requireString({ mcp_id: params.mcpId }, "mcp_id");
     try {
+      if (options.mcpOAuth) {
+        return await options.mcpOAuth.reconnect(mcpId);
+      }
       return await rpc.request(
         "mcp.reconnect",
         { mcp_id: mcpId },
@@ -1356,11 +1379,28 @@ export function registerDesktopIpcHandlers(options: RegisterHandlersOptions): ()
     }
   });
 
+  ipcMain.handle(IPC.capabilityMcpDisconnect, async (event, raw) => {
+    guard(event);
+    const params = asRecord(raw);
+    const mcpId = requireString({ mcp_id: params.mcpId }, "mcp_id");
+    try {
+      if (!options.mcpOAuth) {
+        throw new Error("MCP authorization is unavailable");
+      }
+      return await options.mcpOAuth.disconnect(mcpId);
+    } catch (err) {
+      fail(err);
+    }
+  });
+
   ipcMain.handle(IPC.capabilityMcpDelete, async (event, raw) => {
     guard(event);
     const params = asRecord(raw);
     const mcpId = requireString({ mcp_id: params.mcpId }, "mcp_id");
     try {
+      if (options.mcpOAuth) {
+        return await options.mcpOAuth.remove(mcpId);
+      }
       return await rpc.request(
         "mcp.delete",
         { mcp_id: mcpId },

@@ -132,14 +132,18 @@ const loopplaneDesktop = Object.freeze({
         name: string;
         transport: string;
         url: string;
+        mode?: "none" | "interactive";
       }): Promise<unknown> =>
         ipcRenderer.invoke(IPC.capabilityMcpUpsert, {
           name: input.name,
           transport: input.transport,
           url: input.url,
+          mode: input.mode,
         }),
       reconnect: (mcpId: string): Promise<unknown> =>
         ipcRenderer.invoke(IPC.capabilityMcpReconnect, { mcpId }),
+      disconnect: (mcpId: string): Promise<unknown> =>
+        ipcRenderer.invoke(IPC.capabilityMcpDisconnect, { mcpId }),
       remove: (mcpId: string): Promise<unknown> =>
         ipcRenderer.invoke(IPC.capabilityMcpDelete, { mcpId }),
     }),

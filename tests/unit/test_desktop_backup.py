@@ -114,6 +114,38 @@ def test_canonical_archive_records_safe_profile_and_integrity(tmp_path: Path) ->
     assert "credentials" not in profile
 
 
+def test_external_electron_oauth_vault_cannot_enter_profile_backup(
+    tmp_path: Path,
+) -> None:
+    sentinel = b"refresh-token-084-outside-profile"
+    user_data = tmp_path / "userData"
+    user_data.mkdir()
+    (user_data / "mcp-authorization.bin").write_bytes(sentinel)
+
+    snapshot = tmp_path / "profile-snapshot"
+    (snapshot / "sessions").mkdir(parents=True)
+    (snapshot / "sessions" / "checkpoints.sqlite3").write_bytes(b"sqlite")
+    destination = tmp_path / "portable.zip"
+    create_portable_archive(
+        destination,
+        profile_portable={
+            "schema_version": 1,
+            "profile_id": "profile-opaque",
+            "principal_id": "principal-opaque",
+            "projects": [],
+            "preferences": {},
+            "workspace_references": [],
+        },
+        snapshot_root=snapshot,
+        disclosure_acknowledged=True,
+    )
+
+    with zipfile.ZipFile(destination) as archive:
+        payload = b"".join(archive.read(name) for name in archive.namelist())
+        assert all("mcp-authorization" not in name for name in archive.namelist())
+    assert sentinel not in payload
+
+
 async def test_snapshot_failure_uses_the_sole_fallback_without_replacing_destination(
     tmp_path: Path,
 ) -> None:

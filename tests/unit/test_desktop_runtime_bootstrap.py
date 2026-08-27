@@ -39,6 +39,39 @@ from durability import (  # noqa: E402
 from runtime import DesktopRuntimeOwner, RestoreJournalsPresent  # noqa: E402
 
 
+def test_desktop_runtime_config_wires_shared_mcp_oauth_seams(tmp_path: Path) -> None:
+    from bridge import desktop_runtime_config
+    from methods.capability import DesktopMcpOAuth
+
+    oauth = DesktopMcpOAuth()
+    profile_root = tmp_path / "profile"
+    profile_root.mkdir()
+    config = desktop_runtime_config(
+        model=ScriptedModel(script=[], context_capacity=100_000),
+        profile_root=profile_root,
+        generation_id="g0",
+        mcp_oauth=oauth,
+    )
+
+    capabilities = config.capability_management
+    assert capabilities is not None
+    assert capabilities.mutations_enabled is True
+    assert capabilities.runtime_activation_enabled is True
+    assert capabilities.mcp_authorization_handler is oauth
+    assert capabilities.mcp_token_store is oauth
+    assert capabilities.mcp_endpoint_policy is not None
+    assert (
+        capabilities.mcp_endpoint_policy("alice", "http", "https://mcp.example") is True
+    )
+    assert (
+        capabilities.mcp_endpoint_policy("alice", "http", "http://mcp.example") is False
+    )
+    assert (
+        capabilities.mcp_endpoint_policy("alice", "http", "http://127.0.0.1:9000/mcp")
+        is True
+    )
+
+
 def _create_directory_alias(link: Path, target: Path) -> None:
     if sys.platform == "win32":
         result = subprocess.run(
