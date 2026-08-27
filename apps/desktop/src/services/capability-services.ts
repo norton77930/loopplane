@@ -45,14 +45,66 @@ function items<T>(value: unknown): T[] {
   return Array.isArray(list) ? (list as T[]) : [];
 }
 
+function mcpAuthorization(value: unknown): McpRecord["authorization"] {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  if (
+    typeof raw.server !== "string" ||
+    (raw.mode !== "none" && raw.mode !== "interactive") ||
+    (raw.state !== "authorized" &&
+      raw.state !== "needs_authorization" &&
+      raw.state !== "failed")
+  ) {
+    return undefined;
+  }
+  return { server: raw.server, mode: raw.mode, state: raw.state };
+}
+
+function mcpRecord(value: unknown): McpRecord | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.id !== "string" || typeof raw.name !== "string") return null;
+  return {
+    id: raw.id,
+    name: raw.name,
+    transport: typeof raw.transport === "string" ? raw.transport : null,
+    status: typeof raw.status === "string" ? raw.status : null,
+    scope: typeof raw.scope === "string" ? raw.scope : null,
+    actions: Array.isArray(raw.actions)
+      ? raw.actions.filter((item): item is string => typeof item === "string")
+      : [],
+    authorization: mcpAuthorization(raw.authorization),
+  };
+}
+
 export function createMcpSettingsService(
   bridge: CapabilityBridge,
 ): McpSettingsService {
   return {
-    list: async () => items<McpRecord>(await bridge.mcp.list()),
-    get: async (id) => (await bridge.mcp.get(id)) as McpDetail,
+    interactiveAuthorization: true,
+    list: async () =>
+      items<unknown>(await bridge.mcp.list())
+        .map(mcpRecord)
+        .filter((record): record is McpRecord => record !== null),
+    get: async (id) => {
+      const raw = await bridge.mcp.get(id);
+      const projected = mcpRecord(raw);
+      if (projected === null) return { name: "" };
+      const detail = raw as Record<string, unknown>;
+      return {
+        ...projected,
+        tools: Array.isArray(detail.tools)
+          ? detail.tools.filter((item): item is string => typeof item === "string")
+          : [],
+        tool_count:
+          typeof detail.tool_count === "number" ? detail.tool_count : 0,
+      } satisfies McpDetail;
+    },
     upsert: async (input) => opResult(await bridge.mcp.upsert(input)),
     reconnect: async (id) => opResult(await bridge.mcp.reconnect(id)),
+    disconnect: async (id) => opResult(await bridge.mcp.disconnect(id)),
     remove: async (id) => opResult(await bridge.mcp.remove(id)),
   };
 }

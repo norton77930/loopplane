@@ -13,7 +13,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -35,6 +35,291 @@ def _load_bridge() -> ModuleType:
 
 
 bridge = _load_bridge()
+
+
+async def test_mcp_authorization_rpc_is_non_blocking_and_one_shot() -> None:
+    import anyio
+
+    sidecar = Path(__file__).resolve().parents[2] / "apps" / "desktop" / "sidecar"
+    sys.path.insert(0, str(sidecar))
+    from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+    from methods.capability import CapabilityMethods, DesktopMcpOAuth
+    from protocol import RpcError
+
+    from loopplane.adapters.mcp import StoredAuthorizationMaterial
+
+    oauth = DesktopMcpOAuth()
+
+    class _Host:
+        async def reconnect_managed_mcp(
+            self, mcp_id: str, *, principal_id: str | None = None
+        ) -> object:
+            assert oauth.redirect_uri(server=mcp_id).endswith(":7842/callback")
+            await oauth.present(
+                "https://idp.example/authorize?state=state-084",
+                server=mcp_id,
+                principal=principal_id,
+            )
+            result = await oauth.await_result(server=mcp_id, principal=principal_id)
+            assert (result.code, result.state) == ("code-084", "state-084")
+            await oauth.save(
+                principal=principal_id,
+                server=mcp_id,
+                material=StoredAuthorizationMaterial(
+                    tokens=OAuthToken(
+                        access_token="access-084",
+                        refresh_token="refresh-084",
+                    ),
+                    client_info=OAuthClientInformationFull(
+                        redirect_uris=["http://127.0.0.1:7842/callback"],
+                        client_id="client-084",
+                    ),
+                ),
+            )
+            return SimpleNamespace(ok=True, message="connected")
+
+    methods = CapabilityMethods(
+        _Host(),
+        principal_id="alice",
+        mcp_oauth=oauth,  # type: ignore[arg-type]
+    )
+    started = await methods.mcp_authorize(
+        {
+            "mcp_id": "docs",
+            "redirect_uri": "http://127.0.0.1:7842/callback",
+        }
+    )
+    request_id = started["request_id"]
+    assert isinstance(request_id, str) and request_id
+    with pytest.raises(RpcError) as concurrent:
+        await methods.mcp_authorize(
+            {
+                "mcp_id": "docs",
+                "redirect_uri": "http://127.0.0.1:7843/callback",
+            }
+        )
+    assert concurrent.value.category == "busy"
+
+    for _ in range(20):
+        status = await methods.mcp_authorize_status({"request_id": request_id})
+        if status.get("url"):
+            break
+        await anyio.sleep(0)
+    assert status == {
+        "state": "awaiting",
+        "url": "https://idp.example/authorize?state=state-084",
+    }
+    assert await methods.mcp_authorize_complete(
+        {"request_id": request_id, "code": "code-084", "state": "state-084"}
+    ) == {"ok": True}
+    for _ in range(20):
+        status = await methods.mcp_authorize_status({"request_id": request_id})
+        if status.get("state") != "awaiting":
+            break
+        await anyio.sleep(0)
+    assert status["state"] == "authorized"
+    assert isinstance(status.get("material"), str)
+    assert isinstance(status.get("version"), str)
+    with pytest.raises(RpcError) as consumed:
+        await methods.mcp_authorize_status({"request_id": request_id})
+    assert consumed.value.category == "not_found"
+    await methods.aclose()
+
+
+async def test_mcp_authorization_waits_without_lease_and_expires_abandoned_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import anyio
+
+    sidecar = Path(__file__).resolve().parents[2] / "apps" / "desktop" / "sidecar"
+    sys.path.insert(0, str(sidecar))
+    import methods.capability as capability
+    from methods.capability import CapabilityMethods, DesktopMcpOAuth
+    from mutation_lease import ProfileMutationLease
+    from protocol import RpcError
+
+    monkeypatch.setattr(capability, "_AUTHORIZATION_REQUEST_TTL_SECONDS", 0.01)
+    oauth = DesktopMcpOAuth()
+    lease = ProfileMutationLease()
+
+    class _Host:
+        async def reconnect_managed_mcp(
+            self, mcp_id: str, *, principal_id: str | None = None
+        ) -> object:
+            await oauth.await_result(server=mcp_id, principal=principal_id)
+            return SimpleNamespace(ok=False, message="not reached")
+
+    methods = CapabilityMethods(
+        _Host(),  # type: ignore[arg-type]
+        principal_id="alice",
+        mutation_lease=lease,
+        mcp_oauth=oauth,
+    )
+    started = await methods.mcp_authorize(
+        {
+            "mcp_id": "docs",
+            "redirect_uri": "http://127.0.0.1:7842/callback",
+        }
+    )
+    assert not lease.held()
+
+    await anyio.sleep(0.03)
+    assert not lease.held()
+    with pytest.raises(RpcError) as expired:
+        await methods.mcp_authorize_status({"request_id": started["request_id"]})
+    assert expired.value.category == "not_found"
+    await methods.aclose()
+
+
+async def test_mcp_authorization_takes_lease_only_after_callback() -> None:
+    import anyio
+
+    sidecar = Path(__file__).resolve().parents[2] / "apps" / "desktop" / "sidecar"
+    sys.path.insert(0, str(sidecar))
+    from methods.capability import CapabilityMethods, DesktopMcpOAuth
+    from mutation_lease import ProfileMutationLease
+
+    oauth = DesktopMcpOAuth()
+    lease = ProfileMutationLease()
+    connected = anyio.Event()
+    finish = anyio.Event()
+
+    class _Host:
+        async def reconnect_managed_mcp(
+            self, mcp_id: str, *, principal_id: str | None = None
+        ) -> object:
+            await oauth.await_result(server=mcp_id, principal=principal_id)
+            connected.set()
+            await finish.wait()
+            return SimpleNamespace(ok=False, message="expected failure")
+
+    methods = CapabilityMethods(
+        _Host(),  # type: ignore[arg-type]
+        principal_id="alice",
+        mutation_lease=lease,
+        mcp_oauth=oauth,
+    )
+    started = await methods.mcp_authorize(
+        {
+            "mcp_id": "docs",
+            "redirect_uri": "http://127.0.0.1:7842/callback",
+        }
+    )
+    assert not lease.held()
+    await methods.mcp_authorize_complete(
+        {"request_id": started["request_id"], "code": "code", "state": "state"}
+    )
+    await connected.wait()
+    assert lease.held_by("capability", started["request_id"])
+    finish.set()
+    for _ in range(20):
+        if not lease.held():
+            break
+        await anyio.sleep(0)
+    assert not lease.held()
+    await methods.aclose()
+
+
+async def test_mcp_material_write_back_reports_only_rotated_material() -> None:
+    sidecar = Path(__file__).resolve().parents[2] / "apps" / "desktop" / "sidecar"
+    sys.path.insert(0, str(sidecar))
+    from mcp.shared.auth import OAuthToken
+    from methods.capability import CapabilityMethods, DesktopMcpOAuth
+    from mutation_lease import ProfileMutationLease
+    from protocol import RpcError
+
+    from loopplane.adapters.mcp import StoredAuthorizationMaterial
+
+    seed = DesktopMcpOAuth()
+    await seed.save(
+        principal="alice",
+        server="docs",
+        material=StoredAuthorizationMaterial(
+            tokens=OAuthToken(
+                access_token="old-access",
+                refresh_token="old-refresh",
+            )
+        ),
+    )
+    seeded = seed.snapshot("alice", "docs")
+    assert seeded is not None
+    old_material, old_version = seeded
+
+    blocked_oauth = DesktopMcpOAuth()
+    blocked_lease = ProfileMutationLease()
+    blocked_lease.acquire("backup", "other")
+    blocked_methods = CapabilityMethods(
+        SimpleNamespace(),  # type: ignore[arg-type]
+        principal_id="alice",
+        mutation_lease=blocked_lease,
+        mcp_oauth=blocked_oauth,
+    )
+    with pytest.raises(RpcError) as busy:
+        await blocked_methods.mcp_reconnect(
+            {
+                "mutation_id": "m-blocked",
+                "mcp_id": "docs",
+                "material": old_material,
+            }
+        )
+    assert busy.value.category == "busy"
+    assert blocked_oauth.snapshot("alice", "docs") is None
+    await blocked_methods.aclose()
+
+    oauth = DesktopMcpOAuth()
+
+    class _Host:
+        def get_managed_mcp(
+            self, mcp_id: str, *, principal_id: str | None = None
+        ) -> object:
+            return SimpleNamespace(authorization="interactive")
+
+        async def reconnect_managed_mcp(
+            self, mcp_id: str, *, principal_id: str | None = None
+        ) -> object:
+            loaded = await oauth.load(principal=principal_id, server=mcp_id)
+            assert loaded is not None
+            assert loaded.tokens.refresh_token == "old-refresh"
+            await oauth.save(
+                principal=principal_id,
+                server=mcp_id,
+                material=StoredAuthorizationMaterial(
+                    tokens=OAuthToken(
+                        access_token="new-access",
+                        refresh_token="rotated-refresh",
+                    )
+                ),
+            )
+            return SimpleNamespace(ok=True, message="connected")
+
+    methods = CapabilityMethods(
+        _Host(),
+        principal_id="alice",
+        mcp_oauth=oauth,  # type: ignore[arg-type]
+    )
+    result = await methods.mcp_reconnect(
+        {
+            "mutation_id": "m-reconnect",
+            "mcp_id": "docs",
+            "material": old_material,
+        }
+    )
+    assert result["ok"] is True
+
+    changed = await methods.mcp_material(
+        {"mcp_id": "docs", "known_version": old_version}
+    )
+    assert changed["version"] != old_version
+    assert isinstance(changed["material"], str)
+    unchanged = await methods.mcp_material(
+        {"mcp_id": "docs", "known_version": changed["version"]}
+    )
+    assert unchanged == {
+        "principal": "alice",
+        "version": changed["version"],
+        "material": None,
+    }
+    await methods.aclose()
 
 
 async def test_collect_events_streams_a_run() -> None:
@@ -163,9 +448,14 @@ def test_entrypoint_negotiates_before_profile_bootstrap(tmp_path: Path) -> None:
         "interaction.answerQuestion",
         "interaction.cancel",
         "interaction.submit",
+        "mcp.authorize",
+        "mcp.authorize_complete",
+        "mcp.authorize_status",
         "mcp.delete",
+        "mcp.disconnect",
         "mcp.get",
         "mcp.list",
+        "mcp.material",
         "mcp.reconnect",
         "mcp.upsert",
         "memory.delete",
@@ -326,9 +616,14 @@ async def test_rpc_session_list_star_and_project_workspace(tmp_path: Path) -> No
         "interaction.answerQuestion",
         "interaction.cancel",
         "interaction.submit",
+        "mcp.authorize",
+        "mcp.authorize_complete",
+        "mcp.authorize_status",
         "mcp.delete",
+        "mcp.disconnect",
         "mcp.get",
         "mcp.list",
+        "mcp.material",
         "mcp.reconnect",
         "mcp.upsert",
         "memory.delete",

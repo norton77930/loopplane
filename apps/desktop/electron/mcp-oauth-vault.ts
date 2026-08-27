@@ -35,6 +35,8 @@ const FORMAT_VERSION = 1;
 export interface McpAuthorizationEntry {
   /** The sidecar's serialized material. Never inspected here. */
   material: string;
+  /** Opaque sidecar etag used to avoid rewriting unchanged material. */
+  version: string | null;
 }
 
 export type McpVaultFailure =
@@ -100,7 +102,11 @@ function readDocument(deps: McpVaultDeps): VaultDocument {
         value !== null &&
         typeof (value as Record<string, unknown>).material === "string"
       ) {
-        out[key] = { material: (value as Record<string, unknown>).material as string };
+        const version = (value as Record<string, unknown>).version;
+        out[key] = {
+          material: (value as Record<string, unknown>).material as string,
+          version: typeof version === "string" ? version : null,
+        };
       }
     }
     return out;
@@ -146,15 +152,26 @@ export function readMcpAuthorization(
   return readDocument(deps)[vaultKey(principal, server)]?.material ?? null;
 }
 
+/** Stored material and its sidecar etag, or `null`. Never throws. */
+export function readMcpAuthorizationEntry(
+  deps: McpVaultDeps,
+  principal: string | null,
+  server: string,
+): McpAuthorizationEntry | null {
+  if (!server) return null;
+  return readDocument(deps)[vaultKey(principal, server)] ?? null;
+}
+
 export function writeMcpAuthorization(
   deps: McpVaultDeps,
   principal: string | null,
   server: string,
   material: string,
+  version: string | null = null,
 ): McpVaultResult {
   if (!server) return { ok: false, reason: "invalid_key" };
   const document = readDocument(deps);
-  document[vaultKey(principal, server)] = { material };
+  document[vaultKey(principal, server)] = { material, version };
   return writeDocument(deps, document);
 }
 

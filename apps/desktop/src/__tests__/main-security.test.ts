@@ -17,6 +17,7 @@ import {
 import { IPC } from "../../electron/ipc-channels";
 import {
   registerDesktopIpcHandlers,
+  type McpOAuthPort,
   type ProviderVaultPort,
 } from "../../electron/ipc-handlers";
 import { SidecarRpcClient } from "../../electron/sidecar-rpc";
@@ -346,6 +347,7 @@ describe("capability management IPC (083 Wave 4)", () => {
     IPC.capabilityMcpGet,
     IPC.capabilityMcpUpsert,
     IPC.capabilityMcpReconnect,
+    IPC.capabilityMcpDisconnect,
     IPC.capabilityMcpDelete,
     IPC.capabilitySkillList,
     IPC.capabilitySkillGet,
@@ -358,7 +360,7 @@ describe("capability management IPC (083 Wave 4)", () => {
     IPC.capabilityMemoryDelete,
   ] as const;
 
-  function registerHandlers(rpc: SidecarRpcClient) {
+  function registerHandlers(rpc: SidecarRpcClient, mcpOAuth?: McpOAuthPort) {
     const handlers = new Map<
       string,
       (event: IpcEventLike, ...args: unknown[]) => unknown | Promise<unknown>
@@ -377,7 +379,12 @@ describe("capability management IPC (083 Wave 4)", () => {
         handlers.delete(channel);
       },
     };
-    registerDesktopIpcHandlers({ ...TRUSTED_HANDLER_OPTIONS, ipcMain, rpc });
+    registerDesktopIpcHandlers({
+      ...TRUSTED_HANDLER_OPTIONS,
+      ipcMain,
+      rpc,
+      ...(mcpOAuth ? { mcpOAuth } : {}),
+    });
     return handlers;
   }
 
@@ -460,6 +467,7 @@ describe("capability management IPC (083 Wave 4)", () => {
       name: "srv",
       transport: "http",
       url: "https://mcp.example",
+      mode: "interactive",
       mutationId: "renderer-mut-1",
       mutation_id: "renderer-mut-2",
     });
@@ -470,6 +478,7 @@ describe("capability management IPC (083 Wave 4)", () => {
       params: Record<string, unknown>;
     };
     expect(last.method).toBe("mcp.upsert");
+    expect(last.params.authorization).toBe("interactive");
     expect(String(last.params.mutation_id)).toMatch(/^mut-/);
     expect(JSON.stringify(last.params)).not.toContain("renderer-mut");
     child.emitStdout(
@@ -480,6 +489,59 @@ describe("capability management IPC (083 Wave 4)", () => {
       }),
     );
     await expect(upsertP).resolves.toEqual({ ok: true, message: "saved" });
+  });
+
+  it("delegates MCP mutations to the main-owned OAuth controller", async () => {
+    const calls: string[] = [];
+    const mcpOAuth: McpOAuthPort = {
+      upsert: async (input) => {
+        calls.push(`upsert:${input.name}`);
+        return { ok: true };
+      },
+      reconnect: async (server) => {
+        calls.push(`reconnect:${server}`);
+        return { ok: true };
+      },
+      disconnect: async (server) => {
+        calls.push(`disconnect:${server}`);
+        return { ok: true };
+      },
+      remove: async (server) => {
+        calls.push(`remove:${server}`);
+        return { ok: true };
+      },
+    };
+    const handlers = registerHandlers(
+      new SidecarRpcClient({ child: createChildProcessDouble() }),
+      mcpOAuth,
+    );
+    const sender = createIpcSenderFrom(
+      createWebContentsDouble({ url: "file:///app/dist/index.html" }),
+    );
+
+    await expect(
+      handlers.get(IPC.capabilityMcpUpsert)!(sender, {
+        name: "docs",
+        transport: "http",
+        url: "https://mcp.example",
+        mode: "interactive",
+      }),
+    ).resolves.toEqual({ ok: true });
+    await expect(
+      handlers.get(IPC.capabilityMcpReconnect)!(sender, { mcpId: "docs" }),
+    ).resolves.toEqual({ ok: true });
+    await expect(
+      handlers.get(IPC.capabilityMcpDisconnect)!(sender, { mcpId: "docs" }),
+    ).resolves.toEqual({ ok: true });
+    await expect(
+      handlers.get(IPC.capabilityMcpDelete)!(sender, { mcpId: "docs" }),
+    ).resolves.toEqual({ ok: true });
+    expect(calls).toEqual([
+      "upsert:docs",
+      "reconnect:docs",
+      "disconnect:docs",
+      "remove:docs",
+    ]);
   });
 });
 

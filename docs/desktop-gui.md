@@ -131,6 +131,28 @@ leaves the endpoint field blank). Every durable mutation acquires the profile mu
 lease under a **main-generated** mutation id (a renderer-supplied id never reaches the
 sidecar) and a held lease refuses with a public busy reason rather than queueing.
 
+### MCP browser sign-in (unit 084)
+
+Desktop's MCP form adds an **Authorization** choice for HTTP and SSE servers: **None** or
+**Browser sign-in**. WebSocket keeps the pre-existing no-interactive-auth path. Saving a
+browser-sign-in server records only the mode and initially shows **Needs authorization**;
+press **Connect** to open the system browser and complete the loopback callback. The card
+then shows **Authorized** or **Authorization failed**. The browser wait is bounded; an
+expired or abandoned attempt fails visibly and a later Connect starts a fresh flow.
+
+The Electron main process owns the browser, callback listener, and OS `safeStorage` vault.
+The vault lives under Electron's user-data directory, outside the portable profile, and
+refuses persistence when OS encryption is unavailable — there is no plaintext fallback.
+The renderer and sidecar's public projections see only `{server, mode, state}`. Neither
+portable backup nor restore carries token material.
+
+On restart, main restores saved material without opening a browser. Successful unattended
+refresh writes rotated material back to the vault; a refresh failure stays fail-closed and
+returns to **Needs authorization** instead of sending an anonymous request or waiting on an
+unobserved browser handler. **Disconnect** deletes both the durable vault copy and the
+sidecar's process copy while retaining the server configuration; the next Connect therefore
+requires approval again. **Delete** removes the configuration as well.
+
 **Adding a sidecar method touches six registries in one change** — miss any and either a
 test or the packaged handshake fails closed: `_DESKTOP_METHOD_NAMES` in
 `sidecar/bridge.py`, the two hardcoded exact-equality lists in

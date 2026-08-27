@@ -166,7 +166,9 @@ a commit message. It changes no decision above; it is what D7 costs in practice.
   Note that `tests/contract/test_public_safety.py` enumerates files through `git ls-files` and
   therefore sees **tracked files only** — a token-shaped fixture must be tracked before that scan is
   evidence of anything.
-- **Reversible**: the feature is inert unless a host supplies both seams and a server declares the
-  mode. Reverting is removing the seams; no data migration, no schema change, no `SCHEMA_VERSION`
+- **Reversible**: the feature is inert unless a host supplies an authorization handler and a server
+  declares the mode. The token-store seam is optional and defaults to process-only memory; hosts
+  supply it when they need durability. Reverting is removing the handler/mode; no data migration,
+  no schema change, no `SCHEMA_VERSION`
   bump, and no change to what the model sees (Constitution VI is untouched — authorization is never a
   tool and never a content block).

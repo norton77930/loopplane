@@ -534,9 +534,8 @@ async def test_connect_uses_the_host_store_not_a_fresh_one(
 async def test_state_and_code_reach_the_sdk_callback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The SDK compares `state` in constant time and fails the flow on a mismatch
-    (oauth2.py:361), so the runtime's job is to deliver the host's result faithfully
-    and to refuse an empty code before it becomes a remote error we must suppress."""
+    """The boundary captures the SDK-generated state from the presented URL and
+    returns a matching host result without exposing either value."""
     handler = _RecordingHandler(result=AuthorizationResult(code="abc", state="xyz"))
     auth = await build_oauth_auth(
         server_url="https://host/mcp",
@@ -545,11 +544,55 @@ async def test_state_and_code_reach_the_sdk_callback(
         handler=handler,
         store=InMemoryMcpTokenStore(),
     )
+    await auth.context.redirect_handler("https://idp/authorize?state=xyz")
+    assert handler.presented == ["https://idp/authorize?state=xyz"]
     assert await auth.context.callback_handler() == ("abc", "xyz")
     assert handler.await_calls == 1
 
-    await auth.context.redirect_handler("https://idp/authorize?state=xyz")
-    assert handler.presented == ["https://idp/authorize?state=xyz"]
+
+async def test_state_mismatch_is_consumed_without_echoing_transient_values() -> None:
+    expected = "expected-state-must-not-reach-logs"
+    returned = "returned-state-must-not-reach-logs"
+    handler = _RecordingHandler(result=AuthorizationResult(code="abc", state=returned))
+    auth = await build_oauth_auth(
+        server_url="https://host/mcp",
+        server_name="srv",
+        principal="alice",
+        handler=handler,
+        store=InMemoryMcpTokenStore(),
+    )
+    await auth.context.redirect_handler(f"https://idp/authorize?state={expected}")
+
+    with pytest.raises(McpAuthorizationError) as caught:
+        await auth.context.callback_handler()
+
+    message = str(caught.value)
+    assert message == AUTHORIZATION_FAILED_MESSAGE
+    assert expected not in message and returned not in message
+    with pytest.raises(McpAuthorizationError, match=AUTHORIZATION_FAILED_MESSAGE):
+        await auth.context.callback_handler()
+    assert handler.await_calls == 1
+
+
+async def test_token_endpoint_failure_does_not_echo_remote_body() -> None:
+    import httpx
+
+    auth = await build_oauth_auth(
+        server_url="https://host/mcp",
+        server_name="srv",
+        principal="alice",
+        handler=_RecordingHandler(),
+        store=InMemoryMcpTokenStore(),
+    )
+    request = httpx.Request("POST", "https://host/token")
+
+    with pytest.raises(McpAuthorizationError) as caught:
+        await auth._handle_token_response(  # noqa: SLF001
+            httpx.Response(400, request=request, text=f"invalid {SENTINEL}")
+        )
+
+    assert str(caught.value) == AUTHORIZATION_FAILED_MESSAGE
+    assert SENTINEL not in str(caught.value)
 
 
 # --- T016/T018: renewal never needs a person (C5.1) --------------------------
@@ -886,6 +929,7 @@ async def test_failed_renewal_fails_closed_without_prompting() -> None:
     # yielded, and no person was asked.
     assert handler.await_calls == 0
     assert handler.presented == []
+    assert await store.load(principal="alice", server="srv") is None
     await flow.aclose()
 
 
@@ -921,7 +965,8 @@ async def test_waiting_for_a_person_is_bounded() -> None:
         store=InMemoryMcpTokenStore(),
         timeout=0.05,
     )
-    with pytest.raises(TimeoutError):
+    await auth.context.redirect_handler("https://idp/authorize?state=waiting")
+    with pytest.raises(McpAuthorizationError, match=AUTHORIZATION_FAILED_MESSAGE):
         await auth.context.callback_handler()
 
 
@@ -950,5 +995,6 @@ async def test_empty_code_fails_before_the_token_endpoint() -> None:
         handler=_RecordingHandler(result=AuthorizationResult(code="", state="xyz")),
         store=InMemoryMcpTokenStore(),
     )
-    with pytest.raises(McpAuthorizationError, match="no authorization code"):
+    await auth.context.redirect_handler("https://idp/authorize?state=xyz")
+    with pytest.raises(McpAuthorizationError, match=AUTHORIZATION_FAILED_MESSAGE):
         await auth.context.callback_handler()

@@ -126,6 +126,36 @@ def test_fixed_public_error_catalogue_is_secondary_safe() -> None:
     assert scan_secondary_surfaces(payloads) == []
 
 
+def test_mcp_oauth_private_rpcs_have_no_renderer_route() -> None:
+    """084: material and browser-flow RPCs terminate in Electron main."""
+
+    root = Path(__file__).resolve().parents[2]
+    controller = (
+        root / "apps" / "desktop" / "electron" / "mcp-oauth-controller.ts"
+    ).read_text(encoding="utf-8")
+    preload = (root / "apps" / "desktop" / "electron" / "preload.ts").read_text(
+        encoding="utf-8"
+    )
+    channels = (root / "apps" / "desktop" / "electron" / "ipc-channels.ts").read_text(
+        encoding="utf-8"
+    )
+    renderer = (
+        root / "apps" / "desktop" / "src" / "services" / "capability-services.ts"
+    ).read_text(encoding="utf-8")
+
+    private_methods = (
+        "mcp.authorize",
+        "mcp.authorize_status",
+        "mcp.authorize_complete",
+        "mcp.material",
+    )
+    for method in private_methods:
+        assert method in controller
+        assert method not in preload
+        assert method not in channels
+        assert method not in renderer
+
+
 @pytest.mark.anyio
 async def test_cost_projection_discloses_no_marker_bearing_host_state() -> None:
     """083: marker-bearing host failures degrade to explicit absence on the wire."""

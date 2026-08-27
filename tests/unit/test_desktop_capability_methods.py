@@ -33,7 +33,7 @@ from tests.helpers.public_safety import (
 SIDECAR = Path(__file__).resolve().parents[2] / "apps" / "desktop" / "sidecar"
 sys.path.insert(0, str(SIDECAR))
 
-from methods.capability import CapabilityMethods  # noqa: E402
+from methods.capability import CapabilityMethods, DesktopMcpOAuth  # noqa: E402
 from methods.inspection import InspectionMethods  # noqa: E402
 from mutation_lease import ProfileMutationLease  # noqa: E402
 from protocol import RpcError  # noqa: E402
@@ -54,7 +54,9 @@ _MARKERS = (
 )
 
 
-def _mcp(status: str = "unavailable") -> ManagedMcpConfiguration:
+def _mcp(
+    status: str = "unavailable", *, authorization: str | None = None
+) -> ManagedMcpConfiguration:
     return ManagedMcpConfiguration(
         id="mcp-1",
         name="internal tools",
@@ -65,6 +67,7 @@ def _mcp(status: str = "unavailable") -> ManagedMcpConfiguration:
         tools=("alpha", "beta"),
         problem=POISON_TEXT,
         owner_id=POISON_OWNER,
+        authorization=authorization,  # type: ignore[arg-type]
         actions=("open", "reconnect", "delete"),
     )
 
@@ -227,11 +230,13 @@ class _FakeHost:
 def _methods(
     host: _FakeHost | None = None,
     lease: ProfileMutationLease | None = None,
+    oauth: DesktopMcpOAuth | None = None,
 ) -> CapabilityMethods:
     return CapabilityMethods(
         host or _FakeHost(),  # type: ignore[arg-type]
         principal_provider=lambda: "principal-1",
         mutation_lease=lease,
+        mcp_oauth=oauth,
     )
 
 
@@ -254,6 +259,12 @@ async def test_mcp_list_projects_metadata_only() -> None:
         "scope",
         "actions",
         "reason",
+        "authorization",
+    }
+    assert item["authorization"] == {
+        "server": "mcp-1",
+        "mode": "none",
+        "state": "authorized",
     }
     assert item["status"] == "unavailable"
     assert isinstance(item["reason"], str) and item["reason"]
@@ -277,6 +288,7 @@ async def test_mcp_mutations_require_a_mutation_id() -> None:
     for call, params in (
         (methods.mcp_upsert, {"name": "x", "transport": "http", "url": "https://a"}),
         (methods.mcp_delete, {"mcp_id": "mcp-1"}),
+        (methods.mcp_disconnect, {"mcp_id": "mcp-1"}),
         (methods.mcp_reconnect, {"mcp_id": "mcp-1"}),
     ):
         with pytest.raises(RpcError) as exc:
@@ -310,6 +322,7 @@ async def test_mcp_upsert_delegates_and_answers_public_result() -> None:
             "name": "srv",
             "transport": "sse",
             "url": "https://mcp.example/sse",
+            "authorization": "interactive",
         }
     )
     assert result == {"ok": True, "message": "saved"}
@@ -318,7 +331,40 @@ async def test_mcp_upsert_delegates_and_answers_public_result() -> None:
     assert kwargs["name"] == "srv"
     assert kwargs["transport"] == "sse"
     assert kwargs["url"] == "https://mcp.example/sse"
+    assert kwargs["authorization"] == "interactive"
     assert not lease.held()
+
+
+async def test_mcp_upsert_discards_material_when_endpoint_identity_changes() -> None:
+    host = _FakeHost()
+    host.get_managed_mcp = lambda mcp_id, principal_id=None: _mcp(  # type: ignore[method-assign]
+        "connected", authorization="interactive"
+    )
+    oauth = DesktopMcpOAuth()
+    oauth.import_material(
+        "principal-1",
+        "mcp-1",
+        '{"client_info":null,"expires_at":null,'
+        '"tokens":{"access_token":"old-endpoint-token","token_type":"Bearer"},'
+        '"v":1}',
+    )
+
+    result = await _methods(host, oauth=oauth).mcp_upsert(
+        {
+            "mutation_id": "m-endpoint-change",
+            "name": "  mcp-1  ",
+            "transport": "http",
+            "url": "https://new.example/mcp",
+            "authorization": "interactive",
+        }
+    )
+
+    assert result == {
+        "ok": True,
+        "message": "saved",
+        "authorization_reset": True,
+    }
+    assert oauth.snapshot("principal-1", "mcp-1") is None
 
 
 async def test_mcp_upsert_rejects_unknown_transport() -> None:
@@ -338,6 +384,40 @@ async def test_mcp_delete_confirms_and_reconnect_reports_result() -> None:
         {"mutation_id": "m-5", "mcp_id": "mcp-1"}
     )
     assert reconnected == {"ok": False, "message": "unreachable"}
+
+
+async def test_mcp_disconnect_retains_configuration_and_discards_material() -> None:
+    host = _FakeHost()
+    host.get_managed_mcp = lambda mcp_id, principal_id=None: _mcp(  # type: ignore[method-assign]
+        "connected", authorization="interactive"
+    )
+    oauth = DesktopMcpOAuth()
+    oauth.import_material(
+        "principal-1",
+        "mcp-1",
+        (
+            '{"client_info":null,"expires_at":null,'
+            '"tokens":{"access_token":"access","token_type":"Bearer"},'
+            '"v":1}'
+        ),
+    )
+    methods = _methods(host, oauth=oauth)
+
+    result = await methods.mcp_disconnect(
+        {"mutation_id": "m-sign-out", "mcp_id": "mcp-1"}
+    )
+
+    assert result == {"ok": True, "message": "saved"}
+    assert oauth.snapshot("principal-1", "mcp-1") is None
+    name, kwargs = host.calls[-1]
+    assert name == "upsert_managed_mcp"
+    assert kwargs == {
+        "name": "mcp-1",
+        "transport": "http",
+        "url": POISON_URL,
+        "principal_id": "principal-1",
+        "authorization": "interactive",
+    }
 
 
 async def test_skill_detail_returns_instructions_never_source() -> None:

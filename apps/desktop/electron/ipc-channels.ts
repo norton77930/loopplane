@@ -39,6 +39,7 @@ export const IPC = {
   capabilityMcpGet: "lp:capability:mcpGet",
   capabilityMcpUpsert: "lp:capability:mcpUpsert",
   capabilityMcpReconnect: "lp:capability:mcpReconnect",
+  capabilityMcpDisconnect: "lp:capability:mcpDisconnect",
   capabilityMcpDelete: "lp:capability:mcpDelete",
   capabilitySkillList: "lp:capability:skillList",
   capabilitySkillGet: "lp:capability:skillGet",

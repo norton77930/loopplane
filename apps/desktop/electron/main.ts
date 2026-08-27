@@ -5,9 +5,23 @@ import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, session } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  safeStorage,
+  session,
+  shell,
+} from "electron";
 
 import { registerDesktopIpcHandlers } from "./ipc-handlers";
+import {
+  McpMaterialSyncCoordinator,
+  McpOAuthController,
+  mcpNotificationMayRefresh,
+} from "./mcp-oauth-controller";
+import { runAuthorization } from "./mcp-oauth-flow";
 import {
   clearProviderConfig,
   nodeCredentialFileIo,
@@ -34,6 +48,7 @@ type WindowRuntime = {
   started: boolean;
   shuttingDown: boolean;
   shutdownPromise: Promise<void> | null;
+  flushBeforeShutdown: (() => Promise<void>) | null;
 };
 
 type PackagedSmokeScenario =
@@ -101,9 +116,10 @@ async function teardownRuntime(
   { force = false }: { force?: boolean } = {},
 ): Promise<void> {
   runtime.shutdownPromise ??= (async () => {
-    runtime.shuttingDown = true;
     runtime.disposeHandlers?.();
     runtime.disposeHandlers = null;
+    if (!force) await runtime.flushBeforeShutdown?.();
+    runtime.shuttingDown = true;
     try {
       if (runtime.started && !force) {
         await runtime.rpc.shutdown();
@@ -249,6 +265,14 @@ function createWindow(
     started: false,
     shuttingDown: false,
     shutdownPromise: null,
+    flushBeforeShutdown: null,
+  };
+
+  let mcpOAuth: McpOAuthController | null = null;
+  let materialSync: McpMaterialSyncCoordinator | null = null;
+  const syncMcpMaterial = (): void => {
+    if (mcpOAuth === null || materialSync === null || runtime.shuttingDown) return;
+    materialSync.trigger();
   };
 
   const rpc = new SidecarRpcClient({
@@ -271,8 +295,10 @@ function createWindow(
       },
     },
     onNotification: (method, params) => {
+      if (runtime.shuttingDown) return;
+      if (mcpNotificationMayRefresh(method, params)) syncMcpMaterial();
       const window = runtime.window;
-      if (!window || window.isDestroyed() || runtime.shuttingDown) return;
+      if (!window || window.isDestroyed()) return;
       // Never start new durable work during shutdown; route only exact V1 methods.
       if (
         method === "runtime.event" ||
@@ -302,6 +328,21 @@ function createWindow(
     },
   });
   runtime.rpc = rpc;
+  mcpOAuth = new McpOAuthController({
+    rpc,
+    vault: vaultDeps(),
+    authorize: (begin) =>
+      runAuthorization(
+        {
+          openExternal: async (url) => {
+            await shell.openExternal(url);
+          },
+        },
+        begin,
+      ),
+  });
+  materialSync = new McpMaterialSyncCoordinator(() => mcpOAuth!.syncAll());
+  runtime.flushBeforeShutdown = () => materialSync!.flush();
   active = runtime;
 
   const openRendererWindow = (): BrowserWindow => {
@@ -389,6 +430,7 @@ function createWindow(
             app.quit();
           },
         },
+        mcpOAuth,
       });
 
     runtime.disposeHandlers = bindHandlers();
@@ -435,6 +477,10 @@ function createWindow(
   const sidecarStart = (async () => {
     await waitForSidecarWarmup(spawnedAt);
     await rpc.start();
+    // Restoration is intentionally background work: an unreachable remote MCP
+    // server must not hold the Desktop window behind the adapter's human-sized
+    // interactive authorization budget.
+    void mcpOAuth?.restoreAll().catch(() => {});
   })();
   // Keep the rejection handled until the join below re-raises it in context.
   sidecarStart.catch(() => {});

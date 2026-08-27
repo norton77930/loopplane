@@ -147,8 +147,10 @@ export type LoopPlaneDesktopApi = {
         name: string;
         transport: string;
         url: string;
+        mode?: "none" | "interactive";
       }): Promise<unknown>;
       reconnect(mcpId: string): Promise<unknown>;
+      disconnect(mcpId: string): Promise<unknown>;
       remove(mcpId: string): Promise<unknown>;
     };
     skills: {

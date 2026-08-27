@@ -17,10 +17,11 @@
   tools, parallel executor, swarm peer messaging, background tasks, scheduling, STT/TTS,
   model proxy + billing, 3 sandbox modes, 4 MCP transports + OAuth, multi-level budgets,
   Postgres).
-- **LoopPlane** — its own specs (001–083; 001–063 released as v0.4.0, 064–083 verified on
-  `main` and pending release) verified against `src/loopplane/` and `apps/`. The v0.4.0
-  line (044–063) closed the large majority of the gaps below and the 064–075 line closed
-  most of what remained; this document reflects status through unit 083.
+- **LoopPlane** — its own specs (001–084; 001–083 released through v0.5.0, 084 implemented
+  in the current worktree and awaiting its final board gate) verified against
+  `src/loopplane/` and `apps/`. The v0.4.0 line (044–063) closed the large majority of the
+  gaps below and the later line closed most of what remained; this document reflects the
+  implemented capability surface through unit 084.
 
 Matrix legend: ✅ has an equivalent capability · ◑ partial / different shape · ❌ absent.
 Cells reflect *presence of an equivalent capability*, not feature-for-feature parity. The
@@ -52,7 +53,7 @@ snapshots above.
 | Plugins / skills | ✅ | ✅ | ✅ |
 | MCP tools | ✅ | ✅ | ✅ (stdio/http/sse/ws 057) |
 | MCP resources | ✅ | ✅ | ✅ (059) |
-| MCP transports (SSE/WS) + OAuth | ✅ | ✅ | ◑ (SSE/WS 057; interactive OAuth deferred) |
+| MCP transports (SSE/WS) + OAuth | ✅ | ✅ | ✅ (SSE/WS 057; interactive OAuth 084) |
 | TodoWrite / task list tool | ✅ | ✅ | ✅ (044) |
 | NotebookEdit | ✅ | ✅ | ✅ (046) |
 | Background / long-running task tools | ✅ | ✅ | ✅ (048) |
@@ -105,7 +106,7 @@ worth stating rather than leaving a reader to infer it from silence.
 - **G22 — Multi-level budget caps** (per-message / session / user-monthly USD) →
   **055 + 062 + 063** (in-loop USD caps + a durable per-(principal, month) ledger).
 
-### Closed in 064–075 (verified, pending release)
+### Closed in 064–084
 
 - **G10 — Named permission modes** → **066** (acceptEdits / bypassPermissions / dontAsk /
   plan as preset rule sets over the 039 DSL, selected by `RuntimeConfig.permission_mode`).
@@ -118,15 +119,16 @@ worth stating rather than leaving a reader to infer it from silence.
 - **G24 — PDF / `DocumentBlock` input** → **069** (a new `DocumentBlock` content type with
   native Anthropic / Gemini mappings, ADR 0011; unsupported adapters fail safely before
   provider submission — binary artifact durability remains a separate deferral).
+- **G12 — MCP breadth** → **057** (SSE + WebSocket transports) + **059** (resources as
+  gateway-routed synthetic tools + host-injected bearer token) + **084** (host-owned,
+  authorization-code OAuth for HTTP/SSE, including Desktop persistence and unattended
+  refresh). The tracked G12 transport/resource/interactive-authorization scope is closed.
 
 ### Partially closed
 
 - **G11 — Sandbox execution isolation** → **052** (a POSIX `LocalJailCommandExecutor`:
   rlimits / env-scrub / `setsid`). Still open: Windows (raises) and docker / container
   isolation.
-- **G12 — MCP breadth** → **057** (SSE + WebSocket transports) + **059** (resources as
-  gateway-routed synthetic tools + host-injected bearer token). Still open: interactive
-  OAuth authorization-code flow.
 - **G20 — Concurrent multi-user execution** → **061** (a per-principal `TenantHostPool`,
   ADR 0009) + **072** (per-tenant fairness / quota above the pool, ADR 0013, in-process).
   Still open: the in-process single-worker limit and the many-writer / distributed tail.
@@ -163,7 +165,7 @@ The comparison is not one-directional. LoopPlane leads on:
 - **Clean boundaries** — a single Tool Gateway (V) and Event Bus (VI) with enforced
   import boundaries, making the runtime auditable and embeddable.
 
-## C4. Forward roadmap (through unit 083, prioritized)
+## C4. Forward roadmap (through unit 084, prioritized)
 
 The previous edition of this roadmap (written post-v0.4.0) has itself been largely
 executed by the 064–077 line plus the out-of-sequence 080–081 delivery work: every former
@@ -179,11 +181,12 @@ completion authority; new roadmap items would be specced as later units.
 
 Since that paragraph was written, **078** (Desktop cowork parity), **079** (CLI/remote
 parity), **082** (open-source release readiness) and **083** (Desktop capability parity)
-have all closed `Verified`. None of them changes the tail below: 078 and 083 brought Desktop
-to parity with an existing surface rather than adding a new capability class, 079 added
-remote *control* rather than the remote *execution* G9 asks for, and 082 was repository
-tooling. G13 (IDE extension) in particular is untouched — a packaged Desktop app is not
-an IDE integration.
+have all closed `Verified`; **084** closes the tracked G12 interactive-OAuth tail in the
+current worktree. The other units do not change the remaining tail below: 078 and 083
+brought Desktop to parity with an existing surface, 079 added remote *control* rather than
+the remote *execution* G9 asks for, and 082 was repository tooling. G13 (IDE extension) in
+particular is untouched — a packaged Desktop app is not an IDE integration. The agent board
+remains the authority for 084's final delivery status.
 
 **P1 — platform depth (the remaining distributed tail)**
 - **G20 distributed tail** — cross-process / multi-worker execution above the
@@ -192,8 +195,6 @@ an IDE integration.
   itself is still in-process single-worker).
 - **Docker / container sandbox** for `run_command` (G11 tail; the POSIX jail shipped in
   052; Windows still raises).
-- **MCP interactive OAuth** authorization-code flow (G12 tail; bearer token shipped in
-  059).
 
 **P2 — tail & parity**
 - Remote / distributed agent execution (G9).

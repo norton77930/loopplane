@@ -65,6 +65,117 @@ describe("settings ports (083 Wave 3)", () => {
     await expectRendersEmpty(container, list);
   });
 
+  it("shows interactive authorization state and connects through the service", async () => {
+    const reconnect = vi.fn(ok);
+    render(
+      <McpSettings
+        service={{
+          interactiveAuthorization: true,
+          list: async () => [
+            {
+              id: "docs",
+              name: "docs",
+              transport: "http",
+              actions: ["reconnect"],
+              authorization: {
+                server: "docs",
+                mode: "interactive",
+                state: "needs_authorization",
+              },
+            },
+          ],
+          get: async () => ({ name: "docs" }),
+          upsert: ok,
+          reconnect,
+          remove: ok,
+        }}
+        canMutate
+      />,
+    );
+
+    await screen.findByTestId("mcp-docs");
+    expect(
+      screen.getByText("settings.mcp.auth.needs_authorization"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "settings.mcp.connect" }));
+    await waitFor(() => expect(reconnect).toHaveBeenCalledWith("docs"));
+  });
+
+  it("signs out an authorized interactive server without deleting it", async () => {
+    const disconnect = vi.fn(ok);
+    const remove = vi.fn(ok);
+    render(
+      <McpSettings
+        service={{
+          interactiveAuthorization: true,
+          list: async () => [
+            {
+              id: "docs",
+              name: "docs",
+              transport: "http",
+              actions: ["reconnect", "delete"],
+              authorization: {
+                server: "docs",
+                mode: "interactive",
+                state: "authorized",
+              },
+            },
+          ],
+          get: async () => ({ name: "docs" }),
+          upsert: ok,
+          reconnect: ok,
+          disconnect,
+          remove,
+        }}
+        canMutate
+      />,
+    );
+
+    await screen.findByTestId("mcp-docs");
+    fireEvent.click(
+      screen.getByRole("button", { name: "settings.mcp.disconnect" }),
+    );
+    await waitFor(() => expect(disconnect).toHaveBeenCalledWith("docs"));
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("configures interactive OAuth entirely through the settings service", async () => {
+    const upsert = vi.fn(ok);
+    render(
+      <McpSettings
+        service={{
+          interactiveAuthorization: true,
+          list: async () => [],
+          get: async () => ({ name: "docs" }),
+          upsert,
+          reconnect: ok,
+          remove: ok,
+        }}
+        canMutate
+      />,
+    );
+    await screen.findByText("settings.mcp.empty");
+    fireEvent.change(screen.getByLabelText("settings.mcp.name"), {
+      target: { value: "docs" },
+    });
+    fireEvent.change(screen.getByLabelText("settings.mcp.endpoint"), {
+      target: { value: "https://mcp.example" },
+    });
+    fireEvent.change(screen.getByLabelText("settings.mcp.authorization"), {
+      target: { value: "interactive" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "settings.mcp.save" }));
+
+    await waitFor(() =>
+      expect(upsert).toHaveBeenCalledWith({
+        name: "docs",
+        transport: "http",
+        url: "https://mcp.example",
+        mode: "interactive",
+      }),
+    );
+  });
+
   it("renders MemorySettings from an injected service", async () => {
     const list = vi.fn(async () => []);
     const { container } = render(

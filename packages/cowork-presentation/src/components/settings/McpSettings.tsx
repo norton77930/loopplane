@@ -12,6 +12,13 @@ import { EmptySection } from "./EmptySection";
 // apps/web adapts its HTTP client to this interface. Behavior is unchanged.
 
 type NetworkMcpTransport = "http" | "sse" | "websocket";
+type McpAuthorizationMode = "none" | "interactive";
+
+export interface McpAuthorizationView {
+  server: string;
+  mode: McpAuthorizationMode;
+  state: "authorized" | "needs_authorization" | "failed";
+}
 
 export interface CapabilityActionResult {
   ok: boolean;
@@ -25,6 +32,7 @@ export interface McpRecord {
   status?: string | null;
   scope?: string | null;
   actions: readonly string[];
+  authorization?: McpAuthorizationView;
 }
 
 export interface McpDetail {
@@ -34,17 +42,23 @@ export interface McpDetail {
   tools?: readonly string[];
   tool_count?: number;
   url?: string | null;
+  authorization?: McpAuthorizationView;
 }
 
 export interface McpSettingsService {
+  /** Desktop-only; Web deliberately leaves interactive authorization absent. */
+  interactiveAuthorization?: boolean;
   list(): Promise<readonly McpRecord[]>;
   get(id: string): Promise<McpDetail>;
   upsert(input: {
     name: string;
     transport: NetworkMcpTransport;
     url: string;
+    mode?: McpAuthorizationMode;
   }): Promise<CapabilityActionResult>;
   reconnect(id: string): Promise<CapabilityActionResult>;
+  /** Desktop-only credential sign-out; the server configuration is retained. */
+  disconnect?(id: string): Promise<CapabilityActionResult>;
   remove(id: string): Promise<CapabilityActionResult>;
 }
 
@@ -64,6 +78,8 @@ export function McpSettings({
   const [name, setName] = useState("");
   const [transport, setTransport] = useState<NetworkMcpTransport>("http");
   const [endpoint, setEndpoint] = useState("");
+  const [authorizationMode, setAuthorizationMode] =
+    useState<McpAuthorizationMode>("none");
   const [detail, setDetail] = useState<{
     title: string;
     fields: CapabilityDetailField[];
@@ -91,6 +107,9 @@ export function McpSettings({
         name,
         transport,
         url: endpoint,
+        ...(service.interactiveAuthorization
+          ? { mode: authorizationMode }
+          : {}),
       });
       if (!result.ok) {
         setProblem(result.message);
@@ -131,6 +150,7 @@ export function McpSettings({
       setName(loaded.name);
       setTransport((loaded.transport as NetworkMcpTransport) ?? "http");
       setEndpoint(loaded.url ?? "");
+      setAuthorizationMode(loaded.authorization?.mode ?? "none");
     } catch {
       setProblem(t("settings.mcp.detailsUnavailable"));
     }
@@ -169,6 +189,23 @@ export function McpSettings({
     }
   }
 
+  async function disconnect(id: string) {
+    if (!service.disconnect) return;
+    setBusy(true);
+    try {
+      const result = await service.disconnect(id);
+      if (!result.ok) {
+        setProblem(result.message);
+        return;
+      }
+      await refresh();
+    } catch {
+      setProblem(t("settings.mcp.unavailable"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="capability-section" aria-labelledby="mcp-settings-title">
       <div className="capability-section-heading">
@@ -188,9 +225,11 @@ export function McpSettings({
           <span>{t("settings.mcp.transport")}</span>
           <select
             value={transport}
-            onChange={(event) =>
-              setTransport(event.target.value as NetworkMcpTransport)
-            }
+            onChange={(event) => {
+              const next = event.target.value as NetworkMcpTransport;
+              setTransport(next);
+              if (next === "websocket") setAuthorizationMode("none");
+            }}
             disabled={!canMutate || busy}
           >
             <option value="http">HTTP</option>
@@ -198,6 +237,23 @@ export function McpSettings({
             <option value="websocket">WebSocket</option>
           </select>
         </label>
+        {service.interactiveAuthorization && (
+          <label>
+            <span>{t("settings.mcp.authorization")}</span>
+            <select
+              value={authorizationMode}
+              onChange={(event) =>
+                setAuthorizationMode(event.target.value as McpAuthorizationMode)
+              }
+              disabled={!canMutate || busy || transport === "websocket"}
+            >
+              <option value="none">{t("settings.mcp.auth.none")}</option>
+              <option value="interactive">
+                {t("settings.mcp.auth.interactive")}
+              </option>
+            </select>
+          </label>
+        )}
         <label>
           <span>{t("settings.mcp.endpoint")}</span>
           <input
@@ -236,6 +292,14 @@ export function McpSettings({
                     .filter(Boolean)
                     .join(" / ")}
                 </span>
+                {service.interactiveAuthorization &&
+                  configuration.authorization?.mode === "interactive" && (
+                    <span className="settings-state">
+                      {t(
+                        `settings.mcp.auth.${configuration.authorization.state}`,
+                      )}
+                    </span>
+                  )}
               </div>
               {configuration.scope === "shared_read_only" && (
                 <span className="settings-state">{t("settings.readOnly")}</span>
@@ -255,9 +319,25 @@ export function McpSettings({
                     disabled={busy}
                     onClick={() => void reconnect(configuration.id)}
                   >
-                    {t("settings.action.reconnect")}
+                    {configuration.authorization?.mode === "interactive" &&
+                    configuration.authorization.state === "needs_authorization"
+                      ? t("settings.mcp.connect")
+                      : t("settings.action.reconnect")}
                   </button>
                 )}
+                {service.disconnect &&
+                  canMutate &&
+                  configuration.actions.includes("reconnect") &&
+                  configuration.authorization?.mode === "interactive" &&
+                  configuration.authorization.state === "authorized" && (
+                    <button
+                      type="button"
+                      disabled={!canMutate || busy}
+                      onClick={() => void disconnect(configuration.id)}
+                    >
+                      {t("settings.mcp.disconnect")}
+                    </button>
+                  )}
                 {configuration.actions.includes("delete") && (
                   <button
                     type="button"

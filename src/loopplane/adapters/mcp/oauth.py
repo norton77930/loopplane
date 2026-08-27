@@ -30,9 +30,11 @@ needs it: importing this module does not require ``loopplane[mcp]``.
 
 from __future__ import annotations
 
+import secrets
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
+from urllib.parse import parse_qs, urlsplit
 
 import anyio
 
@@ -76,10 +78,10 @@ class McpAuthorizationError(Exception):
 class AuthorizationResult:
     """What the host got back from the redirect.
 
-    The ``state`` is handed straight to the SDK, which compares it in constant time
-    against the value it put in the authorization URL and fails the flow on any
-    mismatch. Each flow issues a fresh ``state``, so a replayed redirect finds
-    nothing to match.
+    The boundary compares ``state`` in constant time before returning the result to
+    the SDK, which repeats the check. A mismatch becomes a fixed public-safe error,
+    so neither compared value can reach the SDK's exception logging. Each flow
+    issues a fresh ``state``, so a replayed redirect finds nothing to match.
     """
 
     code: str
@@ -302,10 +304,24 @@ async def build_oauth_auth(
     if not redirect:
         raise McpAuthorizationError("host supplied no redirect uri")
 
+    expected_state: str | None = None
+    callback_consumed = False
+
     async def redirect_handler(url: str) -> None:
+        nonlocal expected_state
+        states = parse_qs(urlsplit(str(url)).query, keep_blank_values=True).get(
+            "state", []
+        )
+        if len(states) != 1 or not states[0]:
+            raise McpAuthorizationError(AUTHORIZATION_FAILED_MESSAGE)
+        expected_state = states[0]
         await handler.present(url, server=server_name, principal=principal)
 
     async def callback_handler() -> tuple[str, str | None]:
+        nonlocal callback_consumed
+        if callback_consumed or expected_state is None:
+            raise McpAuthorizationError(AUTHORIZATION_FAILED_MESSAGE)
+        callback_consumed = True
         # The bound belongs here, on the one await that waits for a person.
         #
         # The SDK accepts a `timeout` and never enforces it — it is stored on the
@@ -313,13 +329,22 @@ async def build_oauth_auth(
         # hanging forever on a handler that never resolves, because the sse flow
         # fires at transport context entry, outside the adapter's connect timeout.
         # Bounding it at this await covers every transport and every call site.
-        with anyio.fail_after(timeout):
-            result = await handler.await_result(server=server_name, principal=principal)
-        if not result.code:
+        try:
+            with anyio.fail_after(timeout):
+                result = await handler.await_result(
+                    server=server_name, principal=principal
+                )
+        except Exception:
+            raise McpAuthorizationError(AUTHORIZATION_FAILED_MESSAGE) from None
+        if (
+            not result.code
+            or result.state is None
+            or not secrets.compare_digest(result.state, expected_state)
+        ):
             # Fail before handing an empty code to the token endpoint, so the
             # failure reads as "the host returned nothing" rather than as a remote
             # error whose body we would then have to suppress.
-            raise McpAuthorizationError("host returned no authorization code")
+            raise McpAuthorizationError(AUTHORIZATION_FAILED_MESSAGE)
         return result.code, result.state
 
     try:
@@ -352,8 +377,17 @@ async def build_oauth_auth(
         async def _handle_refresh_response(self, response: Any) -> bool:
             refreshed = bool(await super()._handle_refresh_response(response))
             if not refreshed:
+                await store.discard(principal=principal, server=server_name)
                 raise McpAuthorizationError(AUTHORIZATION_FAILED_MESSAGE)
             return refreshed
+
+        async def _handle_token_response(self, response: Any) -> None:
+            try:
+                await super()._handle_token_response(response)
+            except Exception:
+                # The SDK includes the token endpoint's response body in its
+                # exception, and its outer flow logs that exception verbatim.
+                raise McpAuthorizationError(AUTHORIZATION_FAILED_MESSAGE) from None
 
     provider = _FailClosedProvider(
         server_url=server_url,
