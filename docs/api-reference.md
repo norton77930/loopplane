@@ -355,7 +355,7 @@ The Host Application Interface that exposes the runtime to host applications.
 
 - `AllowedWorkspaceContextProvider` — optional host-owned, principal-aware source of safe read-only workspace contexts.
 - `CapabilityManagementConfig` — default-off durable capability mutation, runtime activation, MCP endpoint policy, schedule-runner, and allowed-context-provider configuration.
-- `LoopPlaneHost` — the host-facing runtime entry point; managed-MCP upsert/delete operations are asynchronous, and `agent_controls(session_id)` returns the owner-routed browser-safe, non-durable execution posture used by unit 077.
+- `LoopPlaneHost` — the host-facing runtime entry point; managed-MCP upsert/delete operations are asynchronous, `platform_fairness` is the configured 072 collaborator (or None), and `agent_controls(session_id)` returns the owner-routed browser-safe, non-durable execution posture used by unit 077.
 - `RuntimeConfig` — programmatic runtime configuration.
 - `Session` — a host-driven run session with idempotent asynchronous `aclose()` cleanup.
 - `RunOutcome` — the terminal outcome of a run.
@@ -630,6 +630,13 @@ The web/API host transport over the Host Application Interface.
 - `token_authenticator` — a reference token→principal verifier (dev/tests).
 - `jwt_authenticator` — a host-supplied OAuth/JWT/OIDC verifier (JWKS, iss/aud/exp/nbf; 056).
 - `TenantHostPool` — a per-principal host pool for concurrent multi-tenant serving (061; ADR 0009).
+- `AdmissionStore` — protocol for cluster-scoped principal grants (085; ADR 0020).
+- `AdmissionGrant` — an ephemeral serving lease (not a session/checkpoint record).
+- `AdmissionRejected` — public-safe admit failure (`conflict` → 409, `capacity` → 429).
+- `AdmissionCoordinator` — take / heartbeat / release wrapper supplied to `create_app`; caps are passed to `hold`, not stored on the coordinator.
+- `InMemoryAdmissionStore` — process-lifetime store; tests share one instance across workers.
+- `PostgresAdmissionStore` — cross-process-honest grants (`loopplane[postgres]`).
+- `bound_run` — cluster grant then local `TenantHostPool.in_flight` (either side optional). `hold_local` is the 061 path flag (`POST /runs` true; streaming/session false); cluster admission still takes local in-flight on every path.
 - `EventReplayRecord` — a replayable session SSE frame record.
 - `EventReplayStore` — the durable event replay store protocol.
 - `FileEventReplayStore` — a filesystem event replay store.

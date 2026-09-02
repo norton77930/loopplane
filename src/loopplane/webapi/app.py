@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from loopplane.commands import default_registry
 from loopplane.host import ContentBlock, LoopPlaneHost, TextBlock
+from loopplane.webapi.admission import AdmissionCoordinator
 from loopplane.webapi.auth import (
     DENY_ALL,
     Authenticator,
@@ -62,6 +63,7 @@ def create_app(
     event_replay_poll_interval_seconds: float = 0.25,
     event_replay_idle_polls: int | None = None,
     host_pool: TenantHostPool | None = None,
+    admission: AdmissionCoordinator | None = None,
 ) -> FastAPI:
     """Build the WebAPI host over ``host`` behind the auth boundary.
 
@@ -227,6 +229,7 @@ def create_app(
         event_replay_poll_interval_seconds=event_replay_poll_interval_seconds,
         event_replay_idle_polls=event_replay_idle_polls,
         host_pool=host_pool,
+        admission=admission,
         select=_select,
         resolve=_resolve,
         read_upload_available=_read_upload_available,

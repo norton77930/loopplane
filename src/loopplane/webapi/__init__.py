@@ -12,6 +12,15 @@ This package requires the ``web`` extra (``pip install loopplane[web]``).
 
 from __future__ import annotations
 
+from loopplane.webapi.admission import (
+    AdmissionCoordinator,
+    AdmissionGrant,
+    AdmissionRejected,
+    AdmissionStore,
+    InMemoryAdmissionStore,
+    bound_run,
+)
+from loopplane.webapi.admission_postgres import PostgresAdmissionStore
 from loopplane.webapi.app import create_app
 from loopplane.webapi.auth import Authenticator, Principal, token_authenticator
 from loopplane.webapi.auth_jwt import jwt_authenticator
@@ -38,6 +47,10 @@ from loopplane.webapi.replay import (
 )
 
 __all__ = [
+    "AdmissionCoordinator",
+    "AdmissionGrant",
+    "AdmissionRejected",
+    "AdmissionStore",
     "ArtifactContent",
     "Authenticator",
     "ErrorResponse",
@@ -45,8 +58,10 @@ __all__ = [
     "EventReplayStore",
     "FileEventReplayStore",
     "HistoryEntryView",
+    "InMemoryAdmissionStore",
     "OpenedSession",
     "Principal",
+    "PostgresAdmissionStore",
     "QuestionAnswer",
     "PostgresEventReplayStore",
     "Resolved",
@@ -57,6 +72,7 @@ __all__ = [
     "SqliteEventReplayStore",
     "TenantHostPool",
     "UploadRef",
+    "bound_run",
     "create_app",
     "jwt_authenticator",
     "token_authenticator",

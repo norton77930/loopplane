@@ -21,6 +21,7 @@ from loopplane.checkpoint.base import SessionSummary
 from loopplane.controller.controller import RuntimeController
 from loopplane.events.emitter import EventSink
 from loopplane.events.envelope import ApprovalRequestedPayload
+from loopplane.fairness import PlatformFairnessGate
 from loopplane.host.agent_controls import (
     AcceptedRunPosture,
     AgentControlProjection,
@@ -150,6 +151,12 @@ class LoopPlaneHost:
     @property
     def skill_problems(self) -> tuple[str, ...]:
         return self._assembled.skill_problems
+
+    @property
+    def platform_fairness(self) -> PlatformFairnessGate | None:
+        """The configured 072 fairness collaborator, if any."""
+
+        return self._config.platform_fairness
 
     async def run(
         self,

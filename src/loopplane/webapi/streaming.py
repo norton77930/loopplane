@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import math
 from collections.abc import AsyncIterator, Callable
-from contextlib import suppress
+from contextlib import AbstractAsyncContextManager, nullcontext, suppress
 
 import anyio
 
 from loopplane.events import RuntimeEvent, serialize_event
 from loopplane.host import LoopPlaneHost, PlatformFairnessRejected, Prompt
+from loopplane.webapi.admission import AdmissionRejected
 from loopplane.webapi.models import ErrorResponse, RunResult
 
 _STREAM_CLOSED = (anyio.BrokenResourceError, anyio.ClosedResourceError)
@@ -36,6 +37,7 @@ async def run_event_stream(
     model: str | None = None,
     permission_mode: str | None = None,
     on_session: Callable[[str], None] | None = None,
+    bound: AbstractAsyncContextManager[object] | None = None,
 ) -> AsyncIterator[str]:
     """Drive one run and yield its normalized events as SSE frames in recorded
     order, then a final ``outcome`` frame (or an ``error`` frame on conflict).
@@ -53,14 +55,15 @@ async def run_event_stream(
     async def drive() -> None:
         try:
             try:
-                outcome = await host.run(
-                    prompt,
-                    sink,
-                    principal_id=principal_id,
-                    output_schema=output_schema,
-                    model=model,
-                    permission_mode=permission_mode,
-                )
+                async with bound if bound is not None else nullcontext():
+                    outcome = await host.run(
+                        prompt,
+                        sink,
+                        principal_id=principal_id,
+                        output_schema=output_schema,
+                        model=model,
+                        permission_mode=permission_mode,
+                    )
                 if on_session is not None:
                     on_session(outcome.session_id)
                 final = _frame(
@@ -71,6 +74,11 @@ async def run_event_stream(
                     ErrorResponse(
                         detail="permission mode unavailable"
                     ).model_dump_json(),
+                    event="error",
+                )
+            except AdmissionRejected as exc:
+                final = _frame(
+                    ErrorResponse(detail=str(exc)).model_dump_json(),
                     event="error",
                 )
             except PlatformFairnessRejected:

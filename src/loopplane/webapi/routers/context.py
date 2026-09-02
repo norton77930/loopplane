@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 
 from loopplane.commands import CommandRegistry
 from loopplane.host import ContentBlock, LoopPlaneHost
+from loopplane.webapi.admission import (
+    AdmissionCoordinator,
+    bound_run,
+    outstanding_cap_for,
+)
 from loopplane.webapi.auth import Principal
 from loopplane.webapi.live import LiveTicketStore
 from loopplane.webapi.models import RunRequest
@@ -57,6 +63,7 @@ class RouterState:
     event_replay_poll_interval_seconds: float
     event_replay_idle_polls: int | None
     host_pool: TenantHostPool | None
+    admission: AdmissionCoordinator | None
     select: SelectHost
     resolve: ResolveHost
     read_upload_available: ReadUploadAvailable
@@ -65,3 +72,20 @@ class RouterState:
     require_session: RequireSession
     owned_or_404: OwnedOr404
     agent_control_host_or_404: AgentControlHostOr404
+
+    def drive_bound(
+        self,
+        principal_id: str,
+        host: LoopPlaneHost,
+        *,
+        hold_local: bool = True,
+    ) -> AbstractAsyncContextManager[None]:
+        """Cluster grant + 061-path local in-flight for this principal."""
+
+        return bound_run(
+            admission=self.admission,
+            pool=self.host_pool,
+            principal_id=principal_id,
+            outstanding_cap=outstanding_cap_for(host),
+            hold_local=hold_local,
+        )
