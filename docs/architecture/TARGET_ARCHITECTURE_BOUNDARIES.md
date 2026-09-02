@@ -48,13 +48,13 @@ Each block covers: responsibility / allowed deps / forbidden deps / public API /
 
 ## 3. webapi
 
-- **Responsibility**: ASGI transport (HTTP/SSE/WS) over `LoopPlaneHost`; auth (token / JWT+JWKS, units 056/067); `EventReplayStore` (071); `TenantHostPool` (061); cost (064) and capability-management (075) endpoints.
+- **Responsibility**: ASGI transport (HTTP/SSE/WS) over `LoopPlaneHost`; auth (token / JWT+JWKS, units 056/067); `EventReplayStore` (071); `TenantHostPool` (061); optional cross-process admission leases (085, ADR 0020 — ephemeral serving grants, **not** session state); cost (064) and capability-management (075) endpoints.
 - **Allowed deps**: `host` public surface, `commands`, `events` (serialization), fastapi/starlette (G4 ③, package-level).
 - **Forbidden deps**: MUST NOT re-compose runtime internals, execute tools, or re-emit the live bus.
 - **Public API**: `create_app`, `token_authenticator`/`jwt_authenticator`, `EventReplayStore`, `TenantHostPool`, plus the outward HTTP/SSE/WS contract. `apps/web` and `apps/desktop` depend on it through backend-owned generated types; since unit 079 `loopplane.cli`'s remote bridge is a **third consumer**, hand-written and in-repo — it reads routes, JSON keys, and the SSE frame grammar directly (ADR 0018). Its integration tests run against a real `create_app`, so same-tree drift breaks them; cross-release skew is not covered, which is why a contract change must consider the CLI as well as the two apps.
 - **Internal-only**: streaming implementation, pool internals, JWKS resolver details.
 - **Event-stream rules**: SSE/WS are pure transport; replay persistence belongs to the web boundary, not the `events` package.
-- **Persistence rules**: replay-store backends; session state still flows through the controller (G3).
+- **Persistence rules**: replay-store backends; optional admission-grant tables (leases, not checkpoints); session state still flows through the controller (G3).
 - **Optional-dependency rules**: `web` package-level; oauth (jwt/httpx) and postgres lazy (G4 ①).
 - **Testing expectations**: unit + six web contract suites + ~18 integration suites.
 - **Docs & examples**: `docs/web-api-host.md`; contract changes regenerate the shared types.

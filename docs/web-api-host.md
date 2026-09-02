@@ -21,6 +21,14 @@ app = create_app(host, authenticator=my_verifier, api_prefix="/v1")
 with any ASGI server, or drive it in-process with a test client (no socket). See
 [`examples/webapi_quickstart.py`](../examples/webapi_quickstart.py).
 
+Optional `admission=` (unit 085, default `None`) is a cluster-scoped principal grant used when more
+than one worker serves the same deployment. Omit it for today's in-process 061/072 behaviour. When
+set, a second overlapping run for the same principal is **409** `a run is already active`; an
+outstanding-work overage is **429** `capacity exceeded` (the outstanding number comes from the
+host's 072 fairness object, not a second knob on the coordinator). Multi-worker production uses
+`PostgresAdmissionStore` (`loopplane[postgres]`); tests share one `InMemoryAdmissionStore` across
+simulated workers. Sticky load-balancing is not the enforcement.
+
 ## The surface
 
 All paths omit the configurable `api_prefix` (default `/v1`). Every route is behind the auth boundary.

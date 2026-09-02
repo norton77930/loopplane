@@ -16,6 +16,13 @@ Semantic Versioning.
   portable profile; the renderer, backups, events, and public errors receive no token
   material. Static bearer tokens, Web, `stdio`, and `websocket` behavior are unchanged;
   there is no new dependency, migration, schema change, or default change.
+- **085** Distributed host-pool admission (`loopplane.webapi`) — opt-in cluster-scoped
+  principal grants so two web/API workers cannot run the same principal twice or
+  multiply in-flight / outstanding-work caps. Default `create_app(admission=None)` is
+  unchanged; fail-closed if the store cannot confirm a take; in-memory for tests,
+  optional Postgres via `loopplane[postgres]`. Existing 409/429 phrases; no Event Bus,
+  Gateway, `_active`, extra, or default change. Cluster-wide fair turn scheduling
+  remains deferred (ADR 0020).
 
 ## [0.5.0] - 2026-08-22
 

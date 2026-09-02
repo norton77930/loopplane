@@ -1,1 +1,3 @@
-{"feature_directory":"specs/084-mcp-interactive-oauth"}
+{
+  "feature_directory": "specs/085-distributed-host-pool"
+}

@@ -55,6 +55,10 @@ class PlatformFairness:
         self._last_started_tenant: str | None = None
         self._consecutive_starts = 0
 
+    @property
+    def max_outstanding_per_tenant(self) -> int:
+        return self._policy.max_outstanding_per_tenant
+
     def admit(self, tenant_id: str) -> _Admission:
         return _Admission(self, tenant_id)
 

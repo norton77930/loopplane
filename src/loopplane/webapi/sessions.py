@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 from collections import deque
 from collections.abc import AsyncIterator, Iterable
-from contextlib import suppress
+from contextlib import AbstractAsyncContextManager, nullcontext, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -21,6 +21,7 @@ from anyio.streams.memory import MemoryObjectReceiveStream
 
 from loopplane.events import RuntimeEvent, serialize_event
 from loopplane.host import LoopPlaneHost, Session
+from loopplane.webapi.admission import AdmissionRejected
 from loopplane.webapi.replay import EventReplayRecord, EventReplayStore
 
 _STREAM_CLOSED = (anyio.BrokenResourceError, anyio.ClosedResourceError)
@@ -170,6 +171,7 @@ async def run_session(
     replay_buffer: int = 0,
     replay_store: EventReplayStore | None = None,
     model: str | None = None,
+    bound: AbstractAsyncContextManager[object] | None = None,
 ) -> None:
     """Hold a ``host.session`` open until closed; register its handle + SSE
     channel under its owning principal. On a sequential-host conflict, signal the
@@ -210,20 +212,24 @@ async def run_session(
 
     close = anyio.Event()
     try:
-        async with host.session(sink, principal_id=owner, model=model) as session:
-            box["sid"] = session.session_id
-            sessions[session.session_id] = SessionEntry(
-                session,
-                receive,
-                close,
-                owner,
-                accepts_media,
-                supports_structured_output,
-                replay_buffer=buf,
-                host=host,
-            )
-            ready.set()
-            await close.wait()
+        async with bound if bound is not None else nullcontext():
+            async with host.session(sink, principal_id=owner, model=model) as session:
+                box["sid"] = session.session_id
+                sessions[session.session_id] = SessionEntry(
+                    session,
+                    receive,
+                    close,
+                    owner,
+                    accepts_media,
+                    supports_structured_output,
+                    replay_buffer=buf,
+                    host=host,
+                )
+                ready.set()
+                await close.wait()
+    except AdmissionRejected as exc:
+        box["error"] = exc.kind
+        ready.set()
     except RuntimeError:
         box["error"] = "conflict"
         ready.set()

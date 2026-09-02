@@ -42,7 +42,7 @@ class TenantHostPool:
         self._factory = host_factory
         # A factory may take the selected model (028) or no argument.
         self._factory_takes_model = len(inspect.signature(host_factory).parameters) >= 1
-        self._per_principal_in_flight = per_principal_in_flight
+        self.per_principal_in_flight = per_principal_in_flight
         self._max_principals = max_principals
         self._hosts: dict[tuple[str, str | None], LoopPlaneHost] = {}
         self._semaphores: dict[str, anyio.Semaphore] = {}
@@ -82,7 +82,7 @@ class TenantHostPool:
         the per-principal cap is exceeded (a clear ``RuntimeError``)."""
 
         semaphore = self._semaphores.setdefault(
-            principal_id, anyio.Semaphore(self._per_principal_in_flight)
+            principal_id, anyio.Semaphore(self.per_principal_in_flight)
         )
         try:
             semaphore.acquire_nowait()

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext, suppress
+from contextlib import suppress
 
 import anyio
 from fastapi import (
@@ -20,6 +20,7 @@ from loopplane.events import RuntimeEvent
 from loopplane.host import (
     PlatformFairnessRejected,
 )
+from loopplane.webapi.admission import AdmissionRejected, admission_http
 from loopplane.webapi.auth import (
     Principal,
 )
@@ -59,7 +60,6 @@ def build_router(state: RouterState, app: FastAPI) -> APIRouter:
     sessions = state.sessions
     session_hosts = state.session_hosts
     live_tickets = state.live_tickets
-    host_pool = state.host_pool
     sse_replay_buffer = state.sse_replay_buffer
     event_replay_store = state.event_replay_store
     event_replay_limit = state.event_replay_limit
@@ -87,15 +87,8 @@ def build_router(state: RouterState, app: FastAPI) -> APIRouter:
             accepts_media,
             _read_upload_available(chosen),
         )
-        # 061: bound a principal's concurrent in-flight runs (no-op when no pool —
-        # nullcontext keeps the default path byte-identical).
-        in_flight = (
-            host_pool.in_flight(principal.id)
-            if host_pool is not None
-            else nullcontext()
-        )
         try:
-            async with in_flight:
+            async with state.drive_bound(principal.id, host=chosen):
                 outcome = await chosen.run(
                     blocks,
                     _discard,
@@ -108,6 +101,9 @@ def build_router(state: RouterState, app: FastAPI) -> APIRouter:
             raise HTTPException(
                 status_code=400, detail="permission mode unavailable"
             ) from exc
+        except AdmissionRejected as exc:
+            status, detail = admission_http(exc.kind)
+            raise HTTPException(status_code=status, detail=detail) from exc
         except PlatformFairnessRejected as exc:
             raise HTTPException(status_code=429, detail="capacity exceeded") from exc
         except RuntimeError as exc:
@@ -142,6 +138,7 @@ def build_router(state: RouterState, app: FastAPI) -> APIRouter:
                 on_session=lambda session_id: session_hosts.__setitem__(
                     session_id, (principal.id, chosen)
                 ),
+                bound=state.drive_bound(principal.id, host=chosen, hold_local=False),
             ),
             media_type="text/event-stream",
         )
@@ -166,22 +163,28 @@ def build_router(state: RouterState, app: FastAPI) -> APIRouter:
         chosen, accepts_media, supports_so = _resolve(model, principal)
         ready = anyio.Event()
         box: dict[str, str] = {}
-        app.state.session_tg.start_soon(
-            run_session,
-            chosen,
-            sessions,
-            ready,
-            box,
-            principal.id,
-            accepts_media,
-            supports_so,
-            sse_replay_buffer,
-            event_replay_store,
-            model,
-        )
+        bound = state.drive_bound(principal.id, host=chosen, hold_local=False)
+
+        async def _open_session() -> None:
+            await run_session(
+                chosen,
+                sessions,
+                ready,
+                box,
+                principal.id,
+                accepts_media,
+                supports_so,
+                sse_replay_buffer,
+                event_replay_store,
+                model,
+                bound=bound,
+            )
+
+        app.state.session_tg.start_soon(_open_session)
         await ready.wait()
-        if box.get("error"):
-            raise HTTPException(status_code=409, detail="a run is already active")
+        if err := box.get("error"):
+            status, detail = admission_http(err)
+            raise HTTPException(status_code=status, detail=detail)
         return OpenedSession(session_id=box["sid"])
 
     @router.get("/sessions/{session_id}/events")
