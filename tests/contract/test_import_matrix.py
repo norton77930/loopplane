@@ -165,7 +165,22 @@ MATRIX: dict[str, BoundaryMatrixEntry] = {
         notes="TARGET §1 / G2",
     ),
     "fairness": _entry(
-        runtime=(), type_checking=(), function_scoped=(), notes="TARGET §1"
+        runtime=("loopplane.fairness_permits",),
+        type_checking=(),
+        function_scoped=(),
+        notes="TARGET §1; 086 injects permit stores",
+    ),
+    "fairness_permits": _entry(
+        runtime=(),
+        type_checking=(),
+        function_scoped=(),
+        notes="086 turn-permit Protocol + in-memory store",
+    ),
+    "fairness_postgres": _entry(
+        runtime=("loopplane.fairness_permits",),
+        type_checking=(),
+        function_scoped=(),
+        notes="086 optional postgres turn permits; lazy psycopg",
     ),
     "gateway": _entry(
         runtime=(

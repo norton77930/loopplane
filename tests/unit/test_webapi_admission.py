@@ -11,7 +11,11 @@ from pathlib import Path
 import anyio
 import pytest
 
-from loopplane.fairness import PlatformFairness, PlatformFairnessPolicy
+from loopplane.fairness import (
+    InMemoryTurnPermitStore,
+    PlatformFairness,
+    PlatformFairnessPolicy,
+)
 from loopplane.model import ModelRequest, TextIncrement, TokenUsage, TurnEnd
 from loopplane.webapi.admission import (
     AdmissionCoordinator,
@@ -301,6 +305,43 @@ def test_pooled_idle_session_blocks_runs_when_admission_is_on(tmp_path: Path) ->
         run = client.post("/v1/runs", json={"prompt": "hi", "model": "beta"})
         assert run.status_code == 409
         assert run.json() == {"detail": "a run is already active"}
+
+
+def test_admission_conflict_holds_when_turn_permits_are_configured(
+    tmp_path: Path,
+) -> None:
+    started = threading.Event()
+    gate = threading.Event()
+    store = ExportedStore()
+    left = ExportedCoordinator(store, holder_id="w1")
+    right = ExportedCoordinator(store, holder_id="w2")
+    turns = InMemoryTurnPermitStore()
+    fairness_a = PlatformFairness(
+        PlatformFairnessPolicy(max_outstanding_per_tenant=4), turn_permits=turns
+    )
+    fairness_b = PlatformFairness(
+        PlatformFairnessPolicy(max_outstanding_per_tenant=4), turn_permits=turns
+    )
+    host_a = build_test_host(
+        tmp_path / "a", model=_GateModel(started, gate), platform_fairness=fairness_a
+    )
+    host_b = build_test_host(tmp_path / "b", platform_fairness=fairness_b)
+    client_a = make_client(create_app(host_a, authenticator=allow_all, admission=left))
+    client_b = make_client(create_app(host_b, authenticator=allow_all, admission=right))
+    first: list[int] = []
+
+    def _run_first() -> None:
+        first.append(client_a.post("/v1/runs", json={"prompt": "one"}).status_code)
+
+    thread = threading.Thread(target=_run_first)
+    thread.start()
+    assert started.wait(timeout=5)
+    second = client_b.post("/v1/runs", json={"prompt": "two"})
+    assert second.status_code == 409
+    assert second.json() == {"detail": "a run is already active"}
+    gate.set()
+    thread.join(timeout=5)
+    assert first == [200]
 
 
 def test_overlapping_http_runs_conflict_across_workers(tmp_path: Path) -> None:

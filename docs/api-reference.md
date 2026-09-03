@@ -184,17 +184,23 @@ turn can be refused before the model call with the same `budget-exceeded` reason
 
 ### Platform fairness (unit 072)
 
-In-process platform fairness (gap G20 tail; ADR 0013): a host-supplied,
-default-off collaborator for tenant-scoped outstanding-work quota and fair
-model-turn starts. It is process-local only; distributed fairness and durable
-queues are deferred.
+In-process platform fairness (gap G20 tail; ADR 0013) plus an optional injected
+cluster turn-permit store (086, ADR 0021). Default `PlatformFairness(policy)` is
+process-local and byte-identical; `turn_permits=` is constructor injection, not a
+`RuntimeConfig` or `create_app` knob. Weighted tiers and live migration remain
+deferred.
 
 - `PlatformFairnessPolicy` — positive local limits for per-tenant outstanding
   work, active model calls, and the consecutive-start fairness window.
-- `PlatformFairness` — the in-memory quota admission and model-turn permit gate.
+- `PlatformFairness` — the in-memory quota admission and model-turn permit gate;
+  optional `turn_permits=` shares those turn limits across workers.
 - `PlatformFairnessGate` — the Protocol accepted by `RuntimeConfig.platform_fairness`.
 - `PlatformFairnessRejected` — public-safe quota rejection; web/API maps it to
   `capacity exceeded`.
+- `TurnPermit` — an ephemeral model-turn lease (not a session or 085 grant).
+- `TurnPermitStore` — take / heartbeat / release Protocol for cluster turns.
+- `TurnPermitUnavailable` — store could not confirm a permit; `model_turn` degrades to local 072.
+- `InMemoryTurnPermitStore` — process-lifetime store; tests share one instance.
 
 ### `loopplane.ledger` (unit 062)
 

@@ -1,13 +1,35 @@
-"""In-process platform fairness for tenant-scoped model-call work (072)."""
+"""In-process platform fairness for tenant-scoped model-call work (072 / 086)."""
 
 from __future__ import annotations
 
+import uuid
 from collections import defaultdict
-from contextlib import AbstractAsyncContextManager, suppress
+from collections.abc import AsyncIterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Protocol
 
 import anyio
+
+from loopplane.fairness_permits import (
+    InMemoryTurnPermitStore,
+    TurnPermit,
+    TurnPermitStore,
+    TurnPermitUnavailable,
+    hold_turn,
+)
+
+__all__ = [
+    "InMemoryTurnPermitStore",
+    "PlatformFairness",
+    "PlatformFairnessGate",
+    "PlatformFairnessPolicy",
+    "PlatformFairnessRejected",
+    "TurnPermit",
+    "TurnPermitStore",
+    "TurnPermitUnavailable",
+]
 
 
 class PlatformFairnessRejected(RuntimeError):
@@ -46,14 +68,28 @@ class _Waiter:
 class PlatformFairness:
     """A process-local tenant quota and fair model-turn gate."""
 
-    def __init__(self, policy: PlatformFairnessPolicy) -> None:
+    def __init__(
+        self,
+        policy: PlatformFairnessPolicy,
+        *,
+        turn_permits: TurnPermitStore | None = None,
+    ) -> None:
         self._policy = policy
+        self._turn_permits = turn_permits
+        self._holder_id = uuid.uuid4().hex
+        self._permit_ttl = timedelta(seconds=60)
         self._lock = anyio.Lock()
         self._outstanding: defaultdict[str, int] = defaultdict(int)
         self._waiters: list[_Waiter] = []
         self._active_model_calls = 0
         self._last_started_tenant: str | None = None
         self._consecutive_starts = 0
+
+    def __repr__(self) -> str:
+        return "PlatformFairness()"
+
+    def __str__(self) -> str:
+        return "PlatformFairness()"
 
     @property
     def max_outstanding_per_tenant(self) -> int:
@@ -62,8 +98,8 @@ class PlatformFairness:
     def admit(self, tenant_id: str) -> _Admission:
         return _Admission(self, tenant_id)
 
-    def model_turn(self, tenant_id: str) -> _ModelTurn:
-        return _ModelTurn(self, tenant_id)
+    def model_turn(self, tenant_id: str) -> AbstractAsyncContextManager[object]:
+        return _bound_model_turn(self, tenant_id)
 
     async def _enter_admission(self, tenant_id: str) -> None:
         async with self._lock:
@@ -182,3 +218,34 @@ class _ModelTurn:
             return
         await self._fairness._exit_model_turn(self._waiter)
         self._waiter = None
+
+
+@asynccontextmanager
+async def _cluster_or_degrade(
+    fairness: PlatformFairness, tenant_id: str
+) -> AsyncIterator[None]:
+    store = fairness._turn_permits
+    if store is None:
+        yield
+        return
+    try:
+        async with hold_turn(
+            store,
+            tenant_id,
+            fairness._holder_id,
+            active_cap=fairness._policy.max_active_model_calls,
+            consecutive_cap=fairness._policy.max_consecutive_starts,
+            ttl=fairness._permit_ttl,
+        ):
+            yield
+    except TurnPermitUnavailable:
+        yield
+
+
+@asynccontextmanager
+async def _bound_model_turn(
+    fairness: PlatformFairness, tenant_id: str
+) -> AsyncIterator[None]:
+    async with _ModelTurn(fairness, tenant_id):
+        async with _cluster_or_degrade(fairness, tenant_id):
+            yield

@@ -132,8 +132,9 @@ worth stating rather than leaving a reader to infer it from silence.
 - **G20 — Concurrent multi-user execution** → **061** (a per-principal `TenantHostPool`,
   ADR 0009) + **072** (per-tenant fairness / quota above the pool, ADR 0013, in-process)
   + **085** (cross-process admission grants so in-flight / outstanding caps stay
-  cluster-scoped across web/API workers, ADR 0020). Still open: cluster-wide fair
-  *turn* interleaving, weighted tiers, and live run migration.
+  cluster-scoped across web/API workers, ADR 0020) + **086** (cluster-wide fair
+  *turn* interleaving for already-admitted work, ADR 0021, default-off). Still open:
+  weighted tenant tiers and live run migration.
 - **G21 — Model proxy / billing + server-side pricing** → **053** (a pure pricing table) +
   **064** (owner-scoped queryable spend endpoints) + **068** (a pre-turn predictive cost
   guard, ADR 0014). Still open: any model proxy / metering / billing layer.
@@ -191,9 +192,9 @@ particular is untouched — a packaged Desktop app is not an IDE integration. Th
 remains the authority for 084's final delivery status.
 
 **P1 — platform depth (the remaining distributed tail)**
-- **G20 remaining** — cluster-wide fair *turn* interleaving, weighted tenant tiers, and
-  live run migration (085 closed cross-process ownership / cluster-scoped admission
-  caps; 072's local scheduler is unchanged).
+- **G20 remaining** — weighted tenant tiers and live run migration (086 closed
+  cluster-wide fair *turn* interleaving; 085 closed cross-process ownership /
+  cluster-scoped admission caps).
 - **Docker / container sandbox** for `run_command` (G11 tail; the POSIX jail shipped in
   052; Windows still raises).
 

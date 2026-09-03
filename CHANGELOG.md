@@ -23,6 +23,12 @@ Semantic Versioning.
   optional Postgres via `loopplane[postgres]`. Existing 409/429 phrases; no Event Bus,
   Gateway, `_active`, extra, or default change. Cluster-wide fair turn scheduling
   remains deferred (ADR 0020).
+- **086** Cluster fair-turn (`loopplane.fairness`) — opt-in cluster-scoped model-turn
+  permits so already-admitted principals interleave starts across web/API workers.
+  `PlatformFairness(..., turn_permits=)` is default-off; store failure degrades to
+  the local 072 scheduler. Optional Postgres via `loopplane[postgres]`. No
+  `create_app` argument, extra, Event Bus, Gateway, or `_active` change. Weighted
+  tiers and live run migration remain deferred (ADR 0021).
 
 ## [0.5.0] - 2026-08-22
 
