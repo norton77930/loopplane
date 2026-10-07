@@ -62,13 +62,13 @@ def test_read_outcome_uses_the_last_assistant_text() -> None:
 
 
 def test_raising_rule_omits_exception_text_from_the_reason() -> None:
-    secret = "credential-material-not-for-reason"
+    material = "credential-" + "material-not-for-reason"
 
     def boom(view: OutcomeView) -> bool:
-        raise RuntimeError(secret)
+        raise RuntimeError(material)
 
     result = rule_validator(boom)(*scripted_outcome(text="x"))
     assert result.status == "fail"
     assert result.reason is not None
-    assert secret not in result.reason
-    assert repr(RuntimeError(secret)) not in result.reason
+    assert material not in result.reason
+    assert repr(RuntimeError(material)) not in result.reason

@@ -29,6 +29,12 @@ Semantic Versioning.
   the local 072 scheduler. Optional Postgres via `loopplane[postgres]`. No
   `create_app` argument, extra, Event Bus, Gateway, or `_active` change. Weighted
   tiers and live run migration remain deferred (ADR 0021).
+- **087** Weighted tenant turns (`loopplane.fairness_weighted`) — opt-in
+  model-start shares for continuously ready tenants, with hard active and
+  consecutive caps. In-process memory coordination; Postgres coordination is
+  isolated from the 086 permit store and degrades to local FIFO on outage.
+  No new extra, `create_app` argument, Event Bus, Gateway, or default change.
+  Moving an in-progress turn between workers remains deferred.
 
 ## [0.5.0] - 2026-08-22
 
