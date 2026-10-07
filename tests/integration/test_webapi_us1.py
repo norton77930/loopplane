@@ -59,14 +59,17 @@ def test_post_run_without_credential_is_denied(tmp_path: Path) -> None:
     assert response.json() == {"detail": "unauthorized"}
 
 
-def test_concurrent_run_returns_conflict(tmp_path: Path) -> None:
+def test_concurrent_run_returns_conflict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # The route maps the host's sequential-run RuntimeError to 409; the host's
     # sequential guarantee itself is covered by the Phase-2 host suite.
-    class _ConflictHost:
-        async def run(self, *args: object, **kwargs: object) -> object:
-            raise RuntimeError("a run is already active")
+    async def conflict(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("a run is already active")
 
-    client = make_client(create_app(_ConflictHost(), authenticator=allow_all))
+    host = build_test_host(tmp_path)
+    monkeypatch.setattr(host, "run", conflict)
+    client = make_client(create_app(host, authenticator=allow_all))
 
     response = client.post("/v1/runs", json={"prompt": "x"})
 

@@ -1,6 +1,6 @@
 # LoopPlane Capabilities
 
-> A functional-scope overview of what LoopPlane provides today, derived from units 001–084
+> A functional-scope overview of what LoopPlane provides today, derived from units 001–087
 > and verified against the source tree. For per-unit status and the
 > roadmap autopilot, see [`loopplane-agent-board.md`](loopplane-agent-board.md); for the
 > comparison against reference agent harnesses and the forward roadmap, see
@@ -16,6 +16,12 @@ model support, agent-capability tools, and full CLI / web / desktop host surface
 
 Units 001–083 are released through **v0.5.0**. Units 084–086 are recorded in the
 **Unreleased** section of [`../CHANGELOG.md`](../CHANGELOG.md).
+
+Unit 087 adds explicitly selected tenant-weighted model-start scheduling through
+`WeightedPlatformFairness`, with memory and isolated Postgres coordination. Weights
+divide start opportunities across ready tenants without multiplying entitlement by
+queue depth; active/consecutive caps remain hard. Coordinator outages fall back to
+local fairness. This unit is not a release; current validation status is on the board.
 
 LoopPlane is built under a project constitution. The principles most visible in the
 capability surface are:

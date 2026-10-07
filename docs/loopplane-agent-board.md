@@ -166,6 +166,7 @@ git history) — not invented.
 | **084-mcp-interactive-oauth** | `specs/084-mcp-interactive-oauth` | **Verified** | MCP authorization-code + PKCE for person-authorized HTTP/SSE servers. The reusable runtime accepts host-owned handler/store seams, remains browser/disk free, renews silently and fail-closed, and preserves the 059 static-token/default-unused paths. Desktop owns browser, loopback callback, OS-encrypted durability, restart restore, disconnect, and refresh-token write-back; material never reaches renderer/Web/model/event/checkpoint/backup surfaces. ADR 0019 is Accepted. | 057, 059 | None — Verified 2026-08-28. Merged via PR #4 (`b424864` on `origin/main`). |
 | **085-distributed-host-pool** | `specs/085-distributed-host-pool` | **Verified** | G20 remaining tail: opt-in cluster-scoped principal admission above the 061 host pool so two web/API workers cannot double-run a principal or multiply in-flight / outstanding-work caps. In-memory default; optional Postgres via `loopplane[postgres]`. ADR 0020 Accepted. Cluster-wide fair turn interleaving, G9, and G11 remain out of scope. | 061, 072 | None — Verified 2026-09-02. FR-021 code-reviewer pass; architecture-reviewer GO (second pass after G5: `admission=None` does not expand 061 `in_flight` onto streaming/session). PR #5. |
 | **086-cluster-fair-turn** | `specs/086-cluster-fair-turn` | **Verified** | G20 remaining: opt-in cluster-wide fair model-turn interleaving for already-admitted work so a noisy tenant cannot starve another ready principal across web/API workers. Weighted tiers, live run migration, G9, and G11 out of scope. ADR 0021 **Accepted**. | 085, 072, 061 | None — Verified 2026-09-03. FR-019 code-reviewer pass (second pass after `hold_turn` / shared `schedule()` / typed degrade); architecture-reviewer GO, 0 blocking. |
+| **087-weighted-tenant-turns** | `specs/087-weighted-tenant-turns` | **Verified** | Opt-in weighted tenant model-start shares; immutable consistent policy, hard active/consecutive limits, cancellation-safe leases and isolated memory/Postgres coordination. Live migration, billing and outward contracts remain out of scope. | 086, 085, 072, 061 | Verified 2026-09-07: 19/19 tasks; pytest **2383 passed / 33 skipped**, Ruff format/check, mypy and lock gates passed. Behavior and architecture review findings resolved. Postgres validation uses an offline transactional stub, not a live deployment/load test. Evidence: `specs/087-weighted-tenant-turns/implementation-evidence.md`. Committed on `087-weighted-tenant-turns`. No publication or deployment. |
 
 > **Parity roadmap constraint:** Claude Code and Orion are behavior references only. Do not copy
 > implementation code, private names, private paths, raw `openspec/`, credentials, tokens, or other
@@ -596,13 +597,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **086-cluster-fair-turn** — **Verified**; ADR 0021 **Accepted**. |
-| Active feature directory | `specs/086-cluster-fair-turn`, from `.specify/feature.json`. |
-| Current branch | `086-cluster-fair-turn` (from `085-distributed-host-pool`). 085 is PR #5 against `main`. |
-| Current Spec Kit step | **Verified.** Spec Kit flow complete. FR-019: code-reviewer pass; architecture-reviewer GO. |
-| Depends on | 085, 072, and 061 (all Verified). |
-| Next command | None — unit Verified. Next product work needs a new unit. |
-| Stop condition status | Architecture GO, 0 blocking. No new extra/default/Event Bus/Gateway/`_active`/`create_app` change. Optional `PlatformFairness(..., turn_permits=)`. |
+| Active unit | **087-weighted-tenant-turns** — **Verified** 2026-09-07; maintainer-authorized scope complete. |
+| Active feature directory | `specs/087-weighted-tenant-turns`, from `.specify/feature.json`. |
+| Current branch | `087-weighted-tenant-turns`, from `588bbfd`. No publication. |
+| Current Spec Kit step | Specify, plan, tasks, analyze, implement and final review complete; 19/19 tasks with validation evidence. |
+| Depends on | 086, 085, 072 and 061 (all Verified). |
+| Next command | None in the approved unit; await maintainer direction for integration or further roadmap work. |
+| Stop condition status | No new extra/default/Event Bus/Gateway/checkpoint/HTTP change. Explicit weighted opt-in, hard caps retained, isolated coordination state. |
 
 ---
 

@@ -385,8 +385,10 @@ def test_pooled_idle_session_blocks_runs_when_admission_is_on(tmp_path: Path) ->
         assert run.json() == {"detail": "a run is already active"}
 
 
+@pytest.mark.parametrize("weighted", [False, True])
 def test_admission_conflict_holds_when_turn_permits_are_configured(
     tmp_path: Path,
+    weighted: bool,
 ) -> None:
     started = threading.Event()
     gate = threading.Event()
@@ -400,6 +402,24 @@ def test_admission_conflict_holds_when_turn_permits_are_configured(
     fairness_b = PlatformFairness(
         PlatformFairnessPolicy(max_outstanding_per_tenant=4), turn_permits=turns
     )
+    if weighted:
+        from loopplane.fairness_weighted import (
+            WeightedInMemoryTurnPermitStore,
+            WeightedPlatformFairness,
+            WeightedTurnPolicy,
+        )
+
+        weighted_turns = WeightedInMemoryTurnPermitStore(
+            WeightedTurnPolicy({"alice": 3}, active_cap=1, consecutive_cap=1)
+        )
+        fairness_a = WeightedPlatformFairness(
+            PlatformFairnessPolicy(max_outstanding_per_tenant=4),
+            turn_permits=weighted_turns,
+        )
+        fairness_b = WeightedPlatformFairness(
+            PlatformFairnessPolicy(max_outstanding_per_tenant=4),
+            turn_permits=weighted_turns,
+        )
     host_a = build_test_host(
         tmp_path / "a", model=_GateModel(started, gate), platform_fairness=fairness_a
     )

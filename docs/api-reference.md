@@ -187,8 +187,8 @@ turn can be refused before the model call with the same `budget-exceeded` reason
 In-process platform fairness (gap G20 tail; ADR 0013) plus an optional injected
 cluster turn-permit store (086, ADR 0021). Default `PlatformFairness(policy)` is
 process-local and byte-identical; `turn_permits=` is constructor injection, not a
-`RuntimeConfig` or `create_app` knob. Weighted tiers and live migration remain
-deferred.
+`RuntimeConfig` or `create_app` knob. Unit 087 adds a separate opt-in weighted
+entry point below; live migration remains deferred.
 
 - `PlatformFairnessPolicy` — positive local limits for per-tenant outstanding
   work, active model calls, and the consecutive-start fairness window.
@@ -201,6 +201,41 @@ deferred.
 - `TurnPermitStore` — take / heartbeat / release Protocol for cluster turns.
 - `TurnPermitUnavailable` — store could not confirm a permit; `model_turn` degrades to local 072.
 - `InMemoryTurnPermitStore` — process-lifetime store; tests share one instance.
+
+### Weighted tenant turns (unit 087)
+
+Import the weighted policy, protocol, memory store and fairness entry point from
+`loopplane.fairness_weighted`; the optional durable store lives in
+`loopplane.fairness_weighted_postgres`. No top-level re-export or HTTP argument is added.
+
+- `WeightedTurnPolicy` — immutable copied tenant weights (integers 1..100, excluding
+  booleans), with required `active_cap` and `consecutive_cap`. Unlisted tenants get
+  weight 1 only in this explicitly selected mode. Representations hide the map.
+- `WeightedTurnPermitStore` — read-only `policy` plus the existing
+  `take` / `heartbeat` / `release` shapes; acquisition identities must be unique per
+  call and stable across retries. Request caps must match the store policy.
+- `WeightedInMemoryTurnPermitStore` — single-process weighted domain; share one
+  instance among workers simulated in that process. Optional clock injection.
+- `WeightedPlatformFairness` — accepts existing `PlatformFairnessPolicy` and required
+  `turn_permits=` with matching caps; provides `admit`, `model_turn` and
+  `max_outstanding_per_tenant` through the existing host fairness seam.
+- `WeightedPostgresTurnPermitStore` — `conninfo` plus required `policy=`; lazy
+  existing `loopplane[postgres]` dependency, dedicated atomic coordination state,
+  bounded connect/statement/lock waits and safe errors. Construct during host setup.
+
+Shares count model-start grants for continuously registered ready tenants, not tokens,
+cost or execution time. FIFO is preserved within a tenant. Hard active/consecutive
+limits take precedence: two contenders at consecutive cap 1 alternate even at 3:1
+weights. Idle tenants bank no credit. Coordination acquisition failure degrades to
+local FIFO/consecutive fairness; cluster capacity and weighted shares are then lost.
+Model-body exceptions propagate once and do not trigger fallback/replay.
+
+Activate by draining/stopping the worker group and restarting all workers with the
+same weighted policy and coordination database. Its state is isolated from 086;
+mixed legacy/weighted workers do not share a scheduling cap. Static policy mismatch
+fails explicitly; policy replacement is not performed automatically. Roll back by
+draining and restoring original fairness construction, leaving unused weighted state
+intact. See [the validation guide](../specs/087-weighted-tenant-turns/quickstart.md).
 
 ### `loopplane.ledger` (unit 062)
 

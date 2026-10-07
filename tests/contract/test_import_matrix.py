@@ -182,6 +182,18 @@ MATRIX: dict[str, BoundaryMatrixEntry] = {
         function_scoped=(),
         notes="086 optional postgres turn permits; lazy psycopg",
     ),
+    "fairness_weighted": _entry(
+        runtime=("loopplane.fairness", "loopplane.fairness_permits"),
+        type_checking=(),
+        function_scoped=(),
+        notes="087 opt-in weighted fairness; Phase-1 composition and permit state",
+    ),
+    "fairness_weighted_postgres": _entry(
+        runtime=("loopplane.fairness_permits", "loopplane.fairness_weighted"),
+        type_checking=(),
+        function_scoped=(),
+        notes="087 isolated weighted coordination; lazy existing postgres extra",
+    ),
     "gateway": _entry(
         runtime=(
             "loopplane.approval",

@@ -192,9 +192,12 @@ particular is untouched — a packaged Desktop app is not an IDE integration. Th
 remains the authority for 084's final delivery status.
 
 **P1 — platform depth (the remaining distributed tail)**
-- **G20 remaining** — weighted tenant tiers and live run migration (086 closed
-  cluster-wide fair *turn* interleaving; 085 closed cross-process ownership /
-  cluster-scoped admission caps).
+- **G20 remaining** — live run migration. Unit 087 implements opt-in weighted
+  tenant model-start shares, subject to hard active/consecutive caps, with isolated
+  memory/Postgres coordination (current verification status is on the agent board).
+  086 closed equal-principal cluster-wide fair *turn* interleaving; 085 closed
+  cross-process ownership / cluster-scoped admission caps. Weighted scheduling is
+  not billing, CPU-time allocation or a mixed-mode rolling deployment guarantee.
 - **Docker / container sandbox** for `run_command` (G11 tail; the POSIX jail shipped in
   052; Windows still raises).
 
