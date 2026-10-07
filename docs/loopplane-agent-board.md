@@ -167,6 +167,7 @@ git history) — not invented.
 | **085-distributed-host-pool** | `specs/085-distributed-host-pool` | **Verified** | G20 remaining tail: opt-in cluster-scoped principal admission above the 061 host pool so two web/API workers cannot double-run a principal or multiply in-flight / outstanding-work caps. In-memory default; optional Postgres via `loopplane[postgres]`. ADR 0020 Accepted. Cluster-wide fair turn interleaving, G9, and G11 remain out of scope. | 061, 072 | None — Verified 2026-09-02. FR-021 code-reviewer pass; architecture-reviewer GO (second pass after G5: `admission=None` does not expand 061 `in_flight` onto streaming/session). PR #5. |
 | **086-cluster-fair-turn** | `specs/086-cluster-fair-turn` | **Verified** | G20 remaining: opt-in cluster-wide fair model-turn interleaving for already-admitted work so a noisy tenant cannot starve another ready principal across web/API workers. Weighted tiers, live run migration, G9, and G11 out of scope. ADR 0021 **Accepted**. | 085, 072, 061 | None — Verified 2026-09-03. FR-019 code-reviewer pass (second pass after `hold_turn` / shared `schedule()` / typed degrade); architecture-reviewer GO, 0 blocking. |
 | **087-weighted-tenant-turns** | `specs/087-weighted-tenant-turns` | **Verified** | Opt-in weighted tenant model-start shares; immutable consistent policy, hard active/consecutive limits, cancellation-safe leases and isolated memory/Postgres coordination. Live migration, billing and outward contracts remain out of scope. | 086, 085, 072, 061 | Verified 2026-09-07: 19/19 tasks; pytest **2383 passed / 33 skipped**, Ruff format/check, mypy and lock gates passed. Behavior and architecture review findings resolved. Postgres validation uses an offline transactional stub, not a live deployment/load test. Evidence: `specs/087-weighted-tenant-turns/implementation-evidence.md`. Committed on `087-weighted-tenant-turns`. No publication or deployment. |
+| **088-worker-drain-handoff** | `specs/088-worker-drain-handoff` | **Implemented** | Opt-in per-worker drain: refuse new admits, finish the run already held, then let a peer accept that person. Mid-turn migration, new public phrases, and schema changes stay out of scope. | 085, 087 | Implemented 2026-10-08 on `088-worker-drain-handoff`. Admission tests 29 passed. Full pytest **2408 passed / 33 skipped** with `--timeout=180`. Mypy and repository-wide Ruff were not run. No publication. |
 
 > **Parity roadmap constraint:** Claude Code and Orion are behavior references only. Do not copy
 > implementation code, private names, private paths, raw `openspec/`, credentials, tokens, or other
@@ -597,13 +598,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **087-weighted-tenant-turns** — **Verified** 2026-09-07; maintainer-authorized scope complete. |
-| Active feature directory | `specs/087-weighted-tenant-turns`, from `.specify/feature.json`. |
-| Current branch | `087-weighted-tenant-turns`, from `588bbfd`. No publication. |
-| Current Spec Kit step | Specify, plan, tasks, analyze, implement and final review complete; 19/19 tasks with validation evidence. |
-| Depends on | 086, 085, 072 and 061 (all Verified). |
-| Next command | None in the approved unit; await maintainer direction for integration or further roadmap work. |
-| Stop condition status | No new extra/default/Event Bus/Gateway/checkpoint/HTTP change. Explicit weighted opt-in, hard caps retained, isolated coordination state. |
+| Active unit | **088-worker-drain-handoff** — **Implemented** 2026-10-08. |
+| Active feature directory | `specs/088-worker-drain-handoff`, from `.specify/feature.json`. |
+| Current branch | `088-worker-drain-handoff`. No publication. |
+| Current Spec Kit step | Specify, plan, tasks, and implement complete for the between-run drain slice. |
+| Depends on | 085 and 087 (both Verified). |
+| Next command | Final review before Verified. Mid-turn migration stays deferred. |
+| Stop condition status | No new extra, default, Event Bus, Gateway, checkpoint, termination reason, or HTTP phrase. Drain is opt-in and per worker. |
 
 ---
 

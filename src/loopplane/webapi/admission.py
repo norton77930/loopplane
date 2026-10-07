@@ -186,6 +186,17 @@ class AdmissionCoordinator:
         self._store = store
         self.holder_id = holder_id or uuid.uuid4().hex
         self._ttl = timedelta(seconds=ttl_seconds)
+        self._draining = False
+
+    def begin_drain(self) -> None:
+        """Refuse later admits on this worker. In-flight holds keep running."""
+
+        self._draining = True
+
+    def end_drain(self) -> None:
+        """Accept new admits on this worker again."""
+
+        self._draining = False
 
     def __repr__(self) -> str:
         return "AdmissionCoordinator()"
@@ -224,6 +235,8 @@ class AdmissionCoordinator:
         in_flight_cap: int,
         outstanding_cap: int | None,
     ) -> AdmissionGrant:
+        if self._draining:
+            raise AdmissionRejected("capacity")
         try:
             return await self._store.take(
                 principal_id,

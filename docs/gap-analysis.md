@@ -133,8 +133,10 @@ worth stating rather than leaving a reader to infer it from silence.
   ADR 0009) + **072** (per-tenant fairness / quota above the pool, ADR 0013, in-process)
   + **085** (cross-process admission grants so in-flight / outstanding caps stay
   cluster-scoped across web/API workers, ADR 0020) + **086** (cluster-wide fair
-  *turn* interleaving for already-admitted work, ADR 0021, default-off). Still open:
-  weighted tenant tiers and live run migration.
+  *turn* interleaving for already-admitted work, ADR 0021, default-off)
+  + **087** (opt-in weighted model-start shares). Still open: live run migration.
+  Unit **088** takes only the between-run handoff when one worker drains; moving
+  an in-progress turn stays open.
 - **G21 — Model proxy / billing + server-side pricing** → **053** (a pure pricing table) +
   **064** (owner-scoped queryable spend endpoints) + **068** (a pre-turn predictive cost
   guard, ADR 0014). Still open: any model proxy / metering / billing layer.
@@ -192,12 +194,11 @@ particular is untouched — a packaged Desktop app is not an IDE integration. Th
 remains the authority for 084's final delivery status.
 
 **P1 — platform depth (the remaining distributed tail)**
-- **G20 remaining** — live run migration. Unit 087 implements opt-in weighted
-  tenant model-start shares, subject to hard active/consecutive caps, with isolated
-  memory/Postgres coordination (current verification status is on the agent board).
-  086 closed equal-principal cluster-wide fair *turn* interleaving; 085 closed
-  cross-process ownership / cluster-scoped admission caps. Weighted scheduling is
-  not billing, CPU-time allocation or a mixed-mode rolling deployment guarantee.
+- **G20 remaining** — live run migration of an in-progress turn. Unit 087
+  implements opt-in weighted tenant model-start shares. Unit 088 lets one worker
+  drain: it refuses new runs, finishes the run it already holds, and then another
+  worker can accept that person. That is not billing, CPU-time allocation, or a
+  guarantee that an in-progress turn moves to another process.
 - **Docker / container sandbox** for `run_command` (G11 tail; the POSIX jail shipped in
   052; Windows still raises).
 

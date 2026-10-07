@@ -576,6 +576,72 @@ def test_postgres_dsn_is_never_echoed(
     assert "do-not-echo-pw" not in str(store)
 
 
+@pytest.mark.anyio
+async def test_drain_refuses_a_new_hold_and_peer_can_take() -> None:
+    store = InMemoryAdmissionStore()
+    leaving = AdmissionCoordinator(store, holder_id="old")
+    leaving.begin_drain()
+    leaving.begin_drain()
+    with pytest.raises(AdmissionRejected) as caught:
+        async with leaving.hold("alice"):
+            pass
+    assert caught.value.kind == "capacity"
+    assert admission_http(caught.value.kind) == (429, "capacity exceeded")
+    peer = AdmissionCoordinator(store, holder_id="new")
+    async with peer.hold("alice"):
+        pass
+    leaving.end_drain()
+    leaving.end_drain()
+    async with leaving.hold("alice"):
+        pass
+
+
+@pytest.mark.anyio
+async def test_drain_during_hold_releases_then_peer_takes() -> None:
+    store = InMemoryAdmissionStore()
+    leaving = AdmissionCoordinator(store, holder_id="old")
+    peer = AdmissionCoordinator(store, holder_id="new")
+    entered = anyio.Event()
+    release_body = anyio.Event()
+
+    async def body() -> None:
+        async with leaving.hold("alice"):
+            entered.set()
+            await release_body.wait()
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(body)
+        await entered.wait()
+        leaving.begin_drain()
+        with pytest.raises(AdmissionRejected) as caught:
+            async with peer.hold("alice"):
+                pass
+        assert caught.value.kind == "conflict"
+        assert repr(leaving) == "AdmissionCoordinator()"
+        release_body.set()
+    async with peer.hold("alice"):
+        pass
+    with pytest.raises(AdmissionRejected) as drained:
+        async with leaving.hold("alice"):
+            pass
+    assert drained.value.kind == "capacity"
+
+
+def test_draining_worker_returns_the_existing_capacity_response(tmp_path: Path) -> None:
+    coord = ExportedCoordinator(ExportedStore(), holder_id="w1")
+    coord.begin_drain()
+    client = make_client(
+        create_app(
+            build_test_host(tmp_path),
+            authenticator=allow_all,
+            admission=coord,
+        )
+    )
+    response = client.post("/v1/runs", json={"prompt": "hi"})
+    assert response.status_code == 429
+    assert response.json() == {"detail": "capacity exceeded"}
+
+
 def test_postgres_requires_extra(monkeypatch: pytest.MonkeyPatch) -> None:
     real_import = builtins.__import__
 

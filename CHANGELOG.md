@@ -35,6 +35,11 @@ Semantic Versioning.
   isolated from the 086 permit store and degrades to local FIFO on outage.
   No new extra, `create_app` argument, Event Bus, Gateway, or default change.
   Moving an in-progress turn between workers remains deferred.
+- **088** Worker drain handoff (`loopplane.webapi`) — opt-in `begin_drain` /
+  `end_drain` on one admission coordinator. A draining worker refuses a new
+  hold with the existing capacity response and does not cancel a hold that
+  already started. A peer can accept that person after the grant is released.
+  No new phrase, route, event, checkpoint field, extra, or default.
 
 ## [0.5.0] - 2026-08-22
 

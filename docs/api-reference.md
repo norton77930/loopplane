@@ -674,7 +674,7 @@ The web/API host transport over the Host Application Interface.
 - `AdmissionStore` — protocol for cluster-scoped principal grants (085; ADR 0020).
 - `AdmissionGrant` — an ephemeral serving lease (not a session/checkpoint record).
 - `AdmissionRejected` — public-safe admit failure (`conflict` → 409, `capacity` → 429).
-- `AdmissionCoordinator` — take / heartbeat / release wrapper supplied to `create_app`; caps are passed to `hold`, not stored on the coordinator.
+- `AdmissionCoordinator` — take / heartbeat / release wrapper supplied to `create_app`; caps are passed to `hold`, not stored on the coordinator. `begin_drain` / `end_drain` are opt-in and per worker: a draining worker refuses a new hold with the existing capacity rejection and does not cancel a hold that already started.
 - `InMemoryAdmissionStore` — process-lifetime store; tests share one instance across workers.
 - `PostgresAdmissionStore` — cross-process-honest grants (`loopplane[postgres]`).
 - `bound_run` — cluster grant then local `TenantHostPool.in_flight` (either side optional). `hold_local` is the 061 path flag (`POST /runs` true; streaming/session false); cluster admission still takes local in-flight on every path.
