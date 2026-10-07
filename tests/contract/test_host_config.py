@@ -560,14 +560,10 @@ async def test_empty_ask_permission_rules_ask_an_unmatched_call() -> None:
 
     sink = _Collector()
     broker = InteractionBroker(
-        emitter=EventEmitter(
-            session_id="s", sequencer=EventSequencer(), sink=sink
-        )
+        emitter=EventEmitter(session_id="s", sequencer=EventSequencer(), sink=sink)
     )
     broker.attach_reviewer()
-    context = RunContext(
-        session_id="s", working_scope=Path("."), interactions=broker
-    )
+    context = RunContext(session_id="s", working_scope=Path("."), interactions=broker)
     config = RuntimeConfig(
         model=_model(),
         tools=(_run_command_tool(),),
@@ -582,16 +578,12 @@ async def test_empty_ask_permission_rules_ask_an_unmatched_call() -> None:
     result: list[object] = []
 
     async def run() -> None:
-        result.append(
-            await decider(request, _descriptor("run_command"), context, None)
-        )
+        result.append(await decider(request, _descriptor("run_command"), context, None))
 
     async with anyio.create_task_group() as task_group:
         task_group.start_soon(run)
         with anyio.fail_after(5):
-            while not any(
-                event.type == "approval-requested" for event in sink.events
-            ):
+            while not any(event.type == "approval-requested" for event in sink.events):
                 await anyio.lowlevel.checkpoint()
         requested = next(
             event for event in sink.events if event.type == "approval-requested"
