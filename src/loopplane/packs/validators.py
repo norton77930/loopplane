@@ -40,8 +40,8 @@ def rule_validator(
         view = read_outcome(outcome, state)
         try:
             satisfied = predicate(view)
-        except Exception as exc:  # noqa: BLE001 - fail safe, never a silent pass
-            return ValidationResult(status="fail", reason=f"rule raised: {exc!r}")
+        except Exception:  # noqa: BLE001 - fail safe; never echo the exception
+            return ValidationResult(status="fail", reason="rule raised")
         if satisfied:
             return ValidationResult(status="pass")
         return ValidationResult(status="fail", reason=reason)

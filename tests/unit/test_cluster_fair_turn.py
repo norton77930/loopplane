@@ -159,6 +159,76 @@ async def test_active_cap_one_waits_without_stealing() -> None:
         bob_gate.set()
 
 
+async def test_renewal_loss_does_not_overlap_model_turns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _RenewalFailsOnce(InMemoryTurnPermitStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.failed = False
+
+        async def heartbeat(
+            self, permit_id: str, holder_id: str, *, ttl: timedelta
+        ) -> bool:
+            if not self.failed:
+                self.failed = True
+                raise TurnPermitUnavailable("renewal lost")
+            return await super().heartbeat(permit_id, holder_id, ttl=ttl)
+
+    store = _RenewalFailsOnce()
+    left, right = _pair(store)
+    short = timedelta(milliseconds=60)
+    monkeypatch.setattr(left, "_permit_ttl", short)
+    monkeypatch.setattr(right, "_permit_ttl", short)
+    inside = 0
+    peak = 0
+    events: list[tuple[str, str]] = []
+
+    async def hold(fairness: PlatformFairness, tenant: str) -> None:
+        nonlocal inside, peak
+        try:
+            async with fairness.model_turn(tenant):
+                inside += 1
+                peak = max(peak, inside)
+                events.append(("enter", tenant))
+                try:
+                    if tenant == "alice":
+                        await anyio.sleep(1)
+                finally:
+                    inside -= 1
+                    events.append(("leave", tenant))
+        except Exception:
+            if ("enter", tenant) not in events:
+                raise
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(hold, left, "alice")
+        await _wait_for(lambda: ("enter", "alice") in events)
+        await anyio.sleep(0.3)
+        tg.start_soon(hold, right, "bob")
+        await _wait_for(lambda: ("enter", "bob") in events)
+        bob_at = events.index(("enter", "bob"))
+        alice_open = 0
+        for kind, tenant in events[:bob_at]:
+            if tenant != "alice":
+                continue
+            alice_open += 1 if kind == "enter" else -1
+        assert peak == 1
+        assert alice_open == 0
+        await _wait_for(lambda: ("leave", "bob") in events)
+
+    with anyio.fail_after(1):
+        later = await store.take(
+            "carol",
+            "later",
+            active_cap=1,
+            consecutive_cap=1,
+            ttl=timedelta(seconds=5),
+        )
+    assert later.holder_id == "later"
+    await store.release(later.permit_id, "later")
+
+
 async def test_store_error_degrades_to_local_scheduler() -> None:
     class _Boom:
         async def take(self, *args: object, **kwargs: object) -> TurnPermit:

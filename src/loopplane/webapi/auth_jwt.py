@@ -108,7 +108,10 @@ class _JwksResolver:
                 await self._refresh()
                 if kid in self._keys:
                     return self._keys[kid]
-            self._remember_absent(kid, self._now())
+                # Confirmed absent by this refresh. A throttled miss (no refresh)
+                # must not be cached: that entry would outlive the throttle and
+                # hide a kid the next permitted refresh would resolve.
+                self._remember_absent(kid, self._now())
             return None
 
     def _remember_absent(self, kid: str, now: float) -> None:

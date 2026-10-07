@@ -16,6 +16,10 @@ class TurnPermitUnavailable(Exception):
     """Cluster turn store could not confirm a permit. Callers may degrade."""
 
 
+class TurnPermitRenewalLost(Exception):
+    """A held permit could not be renewed. The in-flight body must stop."""
+
+
 @dataclass(frozen=True)
 class TurnPermit:
     permit_id: str
@@ -119,10 +123,10 @@ async def _heartbeat_loop(
         await anyio.sleep(interval.total_seconds())
         try:
             alive = await store.heartbeat(permit.permit_id, holder_id, ttl=ttl)
-        except TurnPermitUnavailable:
-            return
+        except TurnPermitUnavailable as exc:
+            raise TurnPermitRenewalLost("turn permit renewal lost") from exc
         if not alive:
-            return
+            raise TurnPermitRenewalLost("turn permit renewal lost")
 
 
 @asynccontextmanager

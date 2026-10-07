@@ -6,7 +6,7 @@ combinators lives in their own story phases.
 
 from __future__ import annotations
 
-from loopplane.packs import OutcomeView, read_outcome
+from loopplane.packs import OutcomeView, read_outcome, rule_validator
 from tests.packs_helpers import scripted_outcome
 
 
@@ -59,3 +59,16 @@ def test_read_outcome_uses_the_last_assistant_text() -> None:
     _, state = scripted_outcome()
 
     assert read_outcome(outcome, state).final_text == "final"
+
+
+def test_raising_rule_omits_exception_text_from_the_reason() -> None:
+    secret = "credential-material-not-for-reason"
+
+    def boom(view: OutcomeView) -> bool:
+        raise RuntimeError(secret)
+
+    result = rule_validator(boom)(*scripted_outcome(text="x"))
+    assert result.status == "fail"
+    assert result.reason is not None
+    assert secret not in result.reason
+    assert repr(RuntimeError(secret)) not in result.reason

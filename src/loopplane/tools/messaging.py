@@ -91,11 +91,15 @@ class SwarmSupervisor:
         run_member: RunMember,
         max_members: int,
         max_messages: int,
+        max_message_size: int = 0,
     ) -> None:
         self._task_group = task_group
         self._run_member_fn = run_member
         self._max_members = max_members
         self._max_messages = max_messages
+        # 0 means no size cap, so an unset cap does not reject a message the
+        # count cap already allows.
+        self._max_message_size = max_message_size
         self._members: dict[str, Member] = {}
         self._inboxes: dict[str, list[Message]] = {COORDINATOR: []}
 
@@ -167,6 +171,8 @@ class SwarmSupervisor:
     def send(self, from_id: str, to_id: str, content: str) -> SendResult:
         if to_id != COORDINATOR and to_id not in self._members:
             return "unknown_recipient"
+        if self._max_message_size > 0 and len(content) > self._max_message_size:
+            return "cap_reached"
         total = sum(len(inbox) for inbox in self._inboxes.values())
         if total >= self._max_messages:
             return "cap_reached"

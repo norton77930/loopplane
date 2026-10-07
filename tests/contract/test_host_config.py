@@ -511,7 +511,7 @@ def test_empty_permission_rules_keeps_the_allow_all_fast_path() -> None:
     from loopplane.governance import PermissionRuleSet
     from loopplane.host.assembly import _build_decider
 
-    # A PermissionRuleSet with no rules installs no DSL policy (empty set = no-op).
+    # An empty set whose default is allow installs no DSL policy (allow-all no-op).
     config = RuntimeConfig(
         model=_model(),
         tools=(_run_command_tool(),),
@@ -519,6 +519,88 @@ def test_empty_permission_rules_keeps_the_allow_all_fast_path() -> None:
         permission_rules=PermissionRuleSet(default="allow"),
     )
     assert _build_decider(config, ["run_command"], None) is None
+
+
+@pytest.mark.anyio
+async def test_empty_deny_permission_rules_deny_an_unmatched_call() -> None:
+    from loopplane.approval import PolicyDeny
+    from loopplane.governance import PermissionRuleSet
+    from loopplane.host.assembly import _build_decider
+
+    config = RuntimeConfig(
+        model=_model(),
+        tools=(_run_command_tool(),),
+        allow_network=True,
+        permission_rules=PermissionRuleSet(rules=(), default="deny"),
+    )
+    decider = _build_decider(config, ["run_command"], None)
+    assert decider is not None
+    verdict = await _rule_verdict(decider, "ls")
+    assert isinstance(verdict, PolicyDeny)
+
+
+@pytest.mark.anyio
+async def test_empty_ask_permission_rules_ask_an_unmatched_call() -> None:
+    import anyio
+
+    from loopplane.approval import InteractionBroker, PolicyAllow
+    from loopplane.context import RunContext
+    from loopplane.events import EventSequencer, RuntimeEvent
+    from loopplane.events.emitter import EventEmitter
+    from loopplane.governance import PermissionRuleSet
+    from loopplane.host.assembly import _build_decider
+    from loopplane.model import ToolCallRequest
+
+    class _Collector:
+        def __init__(self) -> None:
+            self.events: list[RuntimeEvent] = []
+
+        async def __call__(self, event: RuntimeEvent) -> None:
+            self.events.append(event)
+
+    sink = _Collector()
+    broker = InteractionBroker(
+        emitter=EventEmitter(
+            session_id="s", sequencer=EventSequencer(), sink=sink
+        )
+    )
+    broker.attach_reviewer()
+    context = RunContext(
+        session_id="s", working_scope=Path("."), interactions=broker
+    )
+    config = RuntimeConfig(
+        model=_model(),
+        tools=(_run_command_tool(),),
+        allow_network=True,
+        permission_rules=PermissionRuleSet(rules=(), default="ask"),
+    )
+    decider = _build_decider(config, ["run_command"], None)
+    assert decider is not None
+    request = ToolCallRequest(
+        call_id="c", tool_name="run_command", input={"command": "ls"}
+    )
+    result: list[object] = []
+
+    async def run() -> None:
+        result.append(
+            await decider(request, _descriptor("run_command"), context, None)
+        )
+
+    async with anyio.create_task_group() as task_group:
+        task_group.start_soon(run)
+        with anyio.fail_after(5):
+            while not any(
+                event.type == "approval-requested" for event in sink.events
+            ):
+                await anyio.lowlevel.checkpoint()
+        requested = next(
+            event for event in sink.events if event.type == "approval-requested"
+        )
+        assert broker.resolve_approval(
+            requested.payload.request_id, decision="allow", scope="once"
+        )
+
+    assert result and isinstance(result[0], PolicyAllow)
 
 
 def test_permission_rules_round_trip_from_mapping_and_have_no_secret() -> None:

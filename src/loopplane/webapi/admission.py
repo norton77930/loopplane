@@ -245,10 +245,10 @@ class AdmissionCoordinator:
                 alive = await self._store.heartbeat(
                     grant.grant_id, self.holder_id, ttl=self._ttl
                 )
-            except Exception:
-                return
+            except Exception as exc:
+                raise AdmissionRejected("conflict") from exc
             if not alive:
-                return
+                raise AdmissionRejected("conflict")
 
 
 @asynccontextmanager

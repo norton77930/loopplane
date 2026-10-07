@@ -33,7 +33,15 @@ def path_policy(allowed_root: str, *, key: str = "path") -> PolicyDecider:
             if posixpath.isabs(value)
             else posixpath.normpath(posixpath.join(root, value))
         )
-        if candidate == root or candidate.startswith(root + "/"):
+        # normpath("/") is "/"; prefixing another slash yields "//", which
+        # rejects every normal child and matches only the two-slash form.
+        if root == "/":
+            contained = candidate == "/" or (
+                candidate.startswith("/") and not candidate.startswith("//")
+            )
+        else:
+            contained = candidate == root or candidate.startswith(root + "/")
+        if contained:
             return allow()
         return deny(f"path policy: {key!r} escapes the allowed root")
 

@@ -20,7 +20,11 @@ import anyio
 from loopplane.checkpoint.base import SessionSummary
 from loopplane.controller.controller import RuntimeController
 from loopplane.events.emitter import EventSink
-from loopplane.events.envelope import ApprovalRequestedPayload
+from loopplane.events.envelope import (
+    ApprovalRequestedPayload,
+    DiagnosticEvent,
+    DiagnosticPayload,
+)
 from loopplane.fairness import PlatformFairnessGate
 from loopplane.host.agent_controls import (
     AcceptedRunPosture,
@@ -62,7 +66,7 @@ from loopplane.host.snapshot import (
     UnavailablePortableSnapshotProvider,
 )
 from loopplane.loop.history import HistoryEntry
-from loopplane.model import ContentBlock, TextBlock
+from loopplane.model import ContentBlock, TextBlock, supports_structured_output
 
 if TYPE_CHECKING:
     from loopplane.context import SwarmSupervisor
@@ -100,6 +104,30 @@ def _coerce_blocks(prompt: Prompt) -> list[ContentBlock]:
     return list(prompt)
 
 
+def output_schema_request_error(
+    output_schema: dict[str, object] | None, *, supports: bool
+) -> str | None:
+    """Reject a supplied schema that is invalid or that this model cannot honor.
+
+    ``None`` is unconstrained and returns no error. An empty schema ``{}`` is a
+    valid JSON Schema (it accepts any instance) and is not malformed. Invalid
+    documents fail before support is considered, so a bad schema never reaches
+    a model call.
+    """
+
+    if output_schema is None:
+        return None
+    import jsonschema
+
+    try:
+        jsonschema.validators.validator_for(output_schema).check_schema(output_schema)
+    except jsonschema.SchemaError:
+        return "malformed output_schema"
+    if not supports:
+        return "model does not support structured output"
+    return None
+
+
 def _build_outcome(
     controller: RuntimeController, session_id: str, sink: RunSink
 ) -> RunOutcome:
@@ -111,6 +139,41 @@ def _build_outcome(
         turns_taken=sink.turns_taken,
         history=controller.history_snapshot(session_id),
         consumer_failures=tuple(sink.consumer_failures),
+    )
+
+
+async def _report_structured_output(
+    outcome: RunOutcome,
+    schema: dict[str, object],
+    sink: RunSink,
+) -> None:
+    """Check a finished structured answer with the packs JSON-schema validator.
+
+    Emitted on the existing diagnostic channel. Absent schemas never call this.
+    """
+
+    from datetime import UTC, datetime
+
+    from loopplane.engineering.state import LoopState
+    from loopplane.engineering.validation import ValidationResult
+    from loopplane.packs import json_schema_validator
+
+    validated = json_schema_validator(schema=schema)(
+        outcome,
+        LoopState(loop_id=outcome.session_id, loop_definition_id="structured-output"),
+    )
+    result = validated if isinstance(validated, ValidationResult) else await validated
+    await sink(
+        DiagnosticEvent(
+            session_id=outcome.session_id,
+            sequence=0,
+            occurred_at=datetime.now(UTC),
+            payload=DiagnosticPayload(
+                severity="info" if result.status == "pass" else "error",
+                category="structured-output",
+                message=f"structured output validation {result.status}",
+            ),
+        )
     )
 
 
@@ -175,6 +238,13 @@ class LoopPlaneHost:
         per-run JSON schema for structured output (spec 045; default None =
         unconstrained)."""
 
+        if output_schema is not None:
+            detail = output_schema_request_error(
+                output_schema,
+                supports=supports_structured_output(self._config.model),
+            )
+            if detail is not None:
+                raise ValueError(detail)
         permission_mode = validate_browser_permission_mode(
             self._config, permission_mode
         )
@@ -245,6 +315,8 @@ class LoopPlaneHost:
                     worktree_manager=worktree_manager,
                 )
             outcome = _build_outcome(controller, session_id, sink)
+            if output_schema is not None:
+                await _report_structured_output(outcome, output_schema, sink)
         finally:
             if worktree_manager is not None:
                 await worktree_manager.cleanup()
@@ -977,6 +1049,8 @@ class Session:
             permission_mode=permission_mode,
         )
         self._outcome = _build_outcome(self._controller, self._session_id, self._sink)
+        if output_schema is not None:
+            await _report_structured_output(self._outcome, output_schema, self._sink)
         return self._outcome
 
     def cancel(self) -> None:

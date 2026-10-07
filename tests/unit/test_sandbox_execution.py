@@ -7,7 +7,9 @@ POSIX jail (rlimit termination + env-scrub) is skipif(not POSIX)-gated for POSIX
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -103,6 +105,54 @@ async def test_contained_oserror(tmp_path: Path) -> None:
 def test_local_jail_raises_on_windows() -> None:
     with pytest.raises(UnsupportedPlatformError):
         LocalJailCommandExecutor()
+
+
+async def test_local_jail_does_not_run_when_limits_cannot_be_applied(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Requesting the jail on Windows is a configuration error and runs nothing.
+    from loopplane.host.config import ConfigError
+
+    with pytest.raises(ConfigError):
+        LocalJailCommandExecutor()
+
+    probed = {"n": 0}
+    ran: list[str] = []
+
+    def failing_setrlimit(_which: int, _limits: tuple[int, int]) -> None:
+        probed["n"] += 1
+        raise OSError("rlimit refused")
+
+    monkeypatch.setattr(
+        "loopplane.tools.execution.resource",
+        SimpleNamespace(
+            setrlimit=failing_setrlimit,
+            RLIMIT_CPU=0,
+            RLIMIT_AS=1,
+            RLIMIT_FSIZE=2,
+            RLIMIT_NPROC=3,
+        ),
+    )
+    monkeypatch.setattr("loopplane.tools.execution._POSIX", True)
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        preexec = kwargs.get("preexec_fn")
+        if callable(preexec):
+            preexec()
+        command = str(args[0]) if args else ""
+        ran.append(command)
+        return subprocess.CompletedProcess(
+            args=command, returncode=0, stdout=b"ran", stderr=b""
+        )
+
+    monkeypatch.setattr("loopplane.tools.execution.subprocess.run", fake_run)
+    jail = LocalJailCommandExecutor()
+    try:
+        await jail.run("echo should-not-run", cwd=tmp_path)
+    except OSError:
+        pass
+    assert probed["n"] >= 1
+    assert ran == []
 
 
 @pytest.mark.skipif(not _POSIX, reason="POSIX local jail")

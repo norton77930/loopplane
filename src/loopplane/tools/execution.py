@@ -5,7 +5,8 @@ the subprocess spawn. The default ``HostCommandExecutor`` is the current call ve
 (``anyio.run_process``), so an unconfigured runtime is byte-identical.
 ``LocalJailCommandExecutor`` (POSIX) adds resource limits, env scrubbing, and cwd/
 process-group confinement; on a platform lacking them (Windows) it raises
-``UnsupportedPlatformError`` instead of a weaker path mislabelled as a sandbox.
+``UnsupportedPlatformError`` (a ``ConfigError``) instead of a weaker path
+mislabelled as a sandbox.
 
 The executor is an internal detail of the Gateway-owned ``InternalToolAdapter`` — the
 Tool Gateway stays the single execution chokepoint (V). Stdlib-only; docker deferred.
@@ -13,11 +14,12 @@ Tool Gateway stays the single execution chokepoint (V). Stdlib-only; docker defe
 
 from __future__ import annotations
 
+import importlib
 import os
 import subprocess  # noqa: S404 - the run_command tool's whole purpose is shell execution
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import anyio
 
@@ -32,10 +34,25 @@ _POSIX = os.name == "posix" and resource is not None
 _DEFAULT_ENV_ALLOWLIST = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")
 
 
-class UnsupportedPlatformError(RuntimeError):
+def _host_config_error() -> type[Exception]:
+    """Host ``ConfigError``, loaded without a static tools→host import.
+
+    ``tests/contract/test_tools_boundary.py`` rejects a static ``loopplane.host``
+    import. The raised type is still ``loopplane.host.config.ConfigError``.
+    """
+
+    module: Any = importlib.import_module("loopplane.host.config")
+    error_cls: type[Exception] = module.ConfigError
+    return error_cls
+
+
+_ConfigError: Any = _host_config_error()
+
+
+class UnsupportedPlatformError(_ConfigError):  # type: ignore[misc]
     """Raised when a sandbox backend is requested on a platform that cannot provide it
-    (e.g. the POSIX local jail on Windows). A clear, public-safe configuration error —
-    the runtime refuses to mislabel a weakened path as a sandbox (ADR 0004 D4)."""
+    (e.g. the POSIX local jail on Windows). A ``ConfigError`` — the runtime refuses
+    to mislabel a weakened path as a sandbox (ADR 0004 D4)."""
 
 
 @dataclass
@@ -116,9 +133,11 @@ class LocalJailCommandExecutor:
         if setsid is not None:
             setsid()
         # getattr so the POSIX-only `resource` attributes do not trip mypy on Windows.
+        # A required limit that cannot be applied must abort the child before exec.
+        # Skipping it would run the command unconfined.
         setrlimit = getattr(resource, "setrlimit", None)
         if setrlimit is None:
-            return
+            raise OSError("local jail requires setrlimit; refusing to run the command")
         limits = (
             ("RLIMIT_CPU", self._limits.cpu_seconds),
             ("RLIMIT_AS", self._limits.address_space_bytes),
@@ -127,12 +146,17 @@ class LocalJailCommandExecutor:
         )
         for name, value in limits:
             which = getattr(resource, name, None)
-            if which is None:  # a limit absent on this kernel -> skip it
-                continue
+            if which is None:
+                raise OSError(
+                    f"local jail requires {name}; refusing to run the command"
+                )
             try:
                 setrlimit(which, (value, value))
-            except (ValueError, OSError):  # a value above the hard limit -> skip it
-                pass
+            except (ValueError, OSError) as exc:
+                raise OSError(
+                    "local jail could not apply a required resource limit; "
+                    "refusing to run the command"
+                ) from exc
 
     async def run(self, command: str, *, cwd: Path) -> CommandResult:
         env = self._scrubbed_env()

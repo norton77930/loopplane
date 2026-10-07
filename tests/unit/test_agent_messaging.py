@@ -16,7 +16,12 @@ from loopplane.host.assembly import _make_member_host_builder, assemble
 from loopplane.host.config import RuntimeConfig
 from loopplane.model.boundary import ModelIncrement, ModelRequest
 from loopplane.model.content import TextBlock
-from loopplane.tools.messaging import Message, SwarmSupervisor, SwarmToolsAdapter
+from loopplane.tools.messaging import (
+    COORDINATOR,
+    Message,
+    SwarmSupervisor,
+    SwarmToolsAdapter,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -339,3 +344,28 @@ async def test_enabled_registers_the_five_tools() -> None:
         "message_send",
         "message_inbox",
     } <= names
+
+
+async def test_oversize_send_is_denied_and_delivers_nothing() -> None:
+    # 0 (the unset default) is no size cap: a message the count cap allows is delivered.
+    # A positive cap denies an oversize send and does not deliver any of it.
+    async with anyio.create_task_group() as tg:
+        uncapped = SwarmSupervisor(
+            task_group=tg, run_member=_completing(), max_members=1, max_messages=10
+        )
+        large = "x" * 50
+        assert uncapped.send(COORDINATOR, COORDINATOR, large) == "ok"
+        assert [message.content for message in uncapped.inbox(COORDINATOR)] == [large]
+
+        capped = SwarmSupervisor(
+            task_group=tg,
+            run_member=_completing(),
+            max_members=1,
+            max_messages=10,
+            max_message_size=4,
+        )
+        assert capped.send(COORDINATOR, COORDINATOR, "tiny") == "ok"
+        before = len(capped.inbox(COORDINATOR))
+        assert capped.send(COORDINATOR, COORDINATOR, "too-big") == "cap_reached"
+        assert [message.content for message in capped.inbox(COORDINATOR)] == ["tiny"]
+        assert len(capped.inbox(COORDINATOR)) == before

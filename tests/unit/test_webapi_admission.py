@@ -185,6 +185,84 @@ async def test_live_hold_is_not_overwritten() -> None:
 
 
 @pytest.mark.anyio
+async def test_failed_renewal_ends_body_before_second_enters() -> None:
+    """A liveness blip must end the in-flight body before another take."""
+
+    body_inside = anyio.Event()
+
+    class _BlipOnce(InMemoryAdmissionStore):
+        def __init__(self) -> None:
+            super().__init__()
+            self.blips = 0
+
+        async def heartbeat(
+            self, grant_id: str, holder_id: str, *, ttl: timedelta
+        ) -> bool:
+            if body_inside.is_set() and self.blips == 0:
+                self.blips += 1
+                raise RuntimeError("blip")
+            return await super().heartbeat(grant_id, holder_id, ttl=ttl)
+
+    store = _BlipOnce()
+    ttl = 0.06
+    left = AdmissionCoordinator(store, holder_id="w1", ttl_seconds=ttl)
+    right = AdmissionCoordinator(store, holder_id="w2", ttl_seconds=ttl)
+    inside = 0
+    peak = 0
+    order: list[str] = []
+
+    async def occupy() -> None:
+        nonlocal inside, peak
+        try:
+            async with left.hold("alice", in_flight_cap=1):
+                inside += 1
+                peak = max(peak, inside)
+                order.append("enter-1")
+                body_inside.set()
+                try:
+                    await anyio.sleep(0.4)
+                finally:
+                    inside -= 1
+                    order.append("leave-1")
+        except BaseExceptionGroup:
+            return
+
+    async def challenger() -> None:
+        nonlocal inside, peak
+        await body_inside.wait()
+        deadline = anyio.current_time() + 0.8
+        while True:
+            try:
+                async with right.hold("alice", in_flight_cap=1):
+                    inside += 1
+                    peak = max(peak, inside)
+                    order.append("enter-2")
+                    inside -= 1
+                    order.append("leave-2")
+                    return
+            except AdmissionRejected:
+                if anyio.current_time() >= deadline:
+                    raise
+                await anyio.sleep(0.01)
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(occupy)
+        tg.start_soon(challenger)
+
+    assert store.blips == 1
+    assert peak == 1
+    assert order.index("leave-1") < order.index("enter-2")
+    later = await store.take(
+        "alice",
+        "w3",
+        in_flight_cap=1,
+        outstanding_cap=None,
+        ttl=timedelta(seconds=30),
+    )
+    assert later.holder_id == "w3"
+
+
+@pytest.mark.anyio
 async def test_heartbeat_after_release_does_not_resurrect() -> None:
     store = InMemoryAdmissionStore()
     grant = await store.take(

@@ -169,6 +169,27 @@ async def test_rotation_resolved_after_interval(
 # --- the negative cache is bounded ------------------------------------------
 
 
+async def test_throttled_unconfirmed_miss_does_not_block_rotation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A miss recorded while the throttle skipped _refresh must not outlive the
+    # throttle and hide a kid the next permitted refresh would have resolved.
+    resolver, counter, clock, state = _make(
+        monkeypatch, kids=["k1"], refresh_min_interval=60, cache_ttl=3600
+    )
+    assert await resolver.get_key("k1") == "key-k1"
+    assert counter["n"] == 1
+    clock.t += 30
+    assert await resolver.get_key("k2") is None
+    assert counter["n"] == 1
+    state["kids"] = ["k1", "k2"]
+    clock.t += 31  # 61s after the last refresh: the throttle permits one fetch
+    assert await resolver.get_key("k1") == "key-k1"
+    assert counter["n"] == 1  # a known cached kid does not fetch
+    assert await resolver.get_key("k2") == "key-k2"
+    assert counter["n"] == 2
+
+
 async def test_negative_cache_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
     resolver, _counter, _clock, _state = _make(
         monkeypatch, kids=["k1"], refresh_min_interval=3600, cache_ttl=3600

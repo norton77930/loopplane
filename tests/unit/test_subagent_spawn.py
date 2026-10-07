@@ -248,13 +248,13 @@ def _noop_tool(name: str) -> ToolSpec:
 
 async def test_restricted_allowed_tools_filters_child_toolset(tmp_path: Path) -> None:
     """A child spawned with allowed_tools sees only the allowlisted tools (FR-040): a
-    host-declared tool outside the allowlist is absent, and a bundled multi-tool adapter
-    with any disallowed tool is dropped whole (least privilege errs safe)."""
+    host-declared tool outside the allowlist is absent, and a multi-tool adapter that
+    advertises none of those names is omitted."""
 
     parent_config = RuntimeConfig(
         model=ScriptedModel(script=[], context_capacity=100_000),
         tools=(_noop_tool("alpha"), _noop_tool("beta")),
-        # A multi-tool adapter whose tools are NOT all allowlisted → dropped whole.
+        # None of this adapter's tools are allowlisted, so it is omitted.
         tool_adapters=(InternalToolAdapter(),),
         max_subagent_depth=1,
     )
@@ -266,11 +266,58 @@ async def test_restricted_allowed_tools_filters_child_toolset(tmp_path: Path) ->
 
     assert "alpha" in tool_names
     assert "beta" not in tool_names
-    # The Internal adapter is dropped whole (read_file/write_file/… all absent).
+    # The internal adapter advertised nothing on the allowlist, so it is omitted.
     assert "read_file" not in tool_names
     assert "write_file" not in tool_names
     # spawn_subagent is not re-granted to the restricted child (not in the allowlist).
     assert "spawn_subagent" not in tool_names
+
+
+async def test_allowed_tools_intersects_a_multi_tool_adapter(tmp_path: Path) -> None:
+    """A named tool on a multi-tool adapter stays; every other tool on it is omitted.
+
+    ``spawn_subagent`` stays absent unless the allowlist names it. Invoking a
+    non-allowlisted name cannot run.
+    """
+
+    parent_config = RuntimeConfig(
+        model=ScriptedModel(script=[], context_capacity=100_000),
+        tool_adapters=(InternalToolAdapter(),),
+        max_subagent_depth=1,
+    )
+    from loopplane.gateway import ErrorOutput
+    from loopplane.host.assembly import _restrict_config
+
+    child_config = _restrict_config(parent_config, ("read_file",))
+    child_host = LoopPlaneHost(child_config, working_scope=tmp_path, subagent_depth=1)
+    tool_names = {info.name for info in child_host.inspect_tools()}
+    internal = {descriptor.name for descriptor in InternalToolAdapter().describe()}
+
+    assert "read_file" in tool_names
+    assert "write_file" not in tool_names
+    assert tool_names.isdisjoint(internal - {"read_file"})
+    assert "spawn_subagent" not in tool_names
+
+    assert len(child_config.tool_adapters) == 1
+    adapter = child_config.tool_adapters[0]
+    context = RunContext(session_id="s", working_scope=tmp_path)
+    (tmp_path / "note.txt").write_text("hello", encoding="utf-8")
+    read_outputs = [
+        item
+        async for item in adapter.invoke("read_file", {"path": "note.txt"}, context)
+    ]
+    assert any(
+        isinstance(item, TextBlock) and item.text == "hello" for item in read_outputs
+    )
+
+    denied = [
+        item
+        async for item in adapter.invoke(
+            "write_file", {"path": "secret.txt", "content": "nope"}, context
+        )
+    ]
+    assert not (tmp_path / "secret.txt").exists()
+    assert denied and all(isinstance(item, ErrorOutput) for item in denied)
 
 
 async def test_unrestricted_child_inherits_parent_tools(tmp_path: Path) -> None:

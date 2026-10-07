@@ -11,7 +11,7 @@ components only through their declared interfaces and re-implements none of them
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -24,8 +24,15 @@ from loopplane.checkpoint import (
     SqliteCheckpointStore,
 )
 from loopplane.controller.controller import RuntimeController
+from loopplane.errors import ErrorCategory
 from loopplane.events import RuntimeEvent
-from loopplane.gateway import PolicyDecider, ToolGateway
+from loopplane.gateway import (
+    AdapterOutput,
+    ErrorOutput,
+    PolicyDecider,
+    ToolAdapter,
+    ToolGateway,
+)
 from loopplane.governance import (
     PermissionRuleSet,
     all_of,
@@ -48,12 +55,13 @@ from loopplane.host.config import (
 from loopplane.host.sink import RunSink
 from loopplane.host.storage_authority import StorageAuthorityLease
 from loopplane.memory import MemoryStore
+from loopplane.model import ToolDescriptor
 from loopplane.observability import maybe_attach
 from loopplane.skills import SkillToolAdapter, load_skills, skill_profiles
 from loopplane.skills.loader import LoadedSkill
 
 if TYPE_CHECKING:
-    from loopplane.context import SwarmSupervisor
+    from loopplane.context import RunContext, SwarmSupervisor
     from loopplane.host.host import LoopPlaneHost
     from loopplane.tools.messaging import MemberHostFactory
     from loopplane.tools.subagent import ChildHostFactory
@@ -392,12 +400,13 @@ def _build_decider(
     when ``config.plan_mode`` is on; it reads the per-run ``RunContext.plan_mode``
     holder at decide time, so it is a no-op for any run whose holder is absent/inactive
     (installing it never changes a non-plan-mode run's verdicts). The permission-rule
-    DSL (spec 039) adds one more decider when ``config.permission_rules`` carries any
-    rule; it allows/denies/asks each call by the host's declarative rules (deny-wins,
-    and ``ask`` reuses the existing approval round-trip). The ``None`` fast-path is
-    preserved only when there is no approval/skills *and* egress is enabled *and* plan
-    mode is off *and* no permission rules, so an existing non-network run's allow-all
-    posture is unchanged.
+    DSL (spec 039) adds one more decider when the effective rule set is not an empty
+    allow-all — a non-empty set, or an empty set whose default is ``deny`` or ``ask``.
+    It allows/denies/asks each call by those rules (deny-wins, and ``ask`` reuses the
+    existing approval round-trip). An unset set and an empty allow set do not. The
+    ``None`` fast-path is preserved only when there is no approval/skills *and* egress
+    is enabled *and* plan mode is off *and* no such permission rules, so an existing
+    non-network run's allow-all posture is unchanged.
     """
 
     # 066: a named permission_mode resolves to the effective rule set + plan-mode flag
@@ -412,7 +421,11 @@ def _build_decider(
     # the static host plan_mode remains off. The policy itself is a no-op for all
     # contexts without an active PlanModeState.
     plan_mode_needed = plan_mode or "plan" in browser_modes
-    rules_needed = permission_rules is not None and bool(permission_rules.rules)
+    # Empty + allow (and an unset set) stay allow-all. Empty + deny/ask still
+    # applies that default to every unmatched call.
+    rules_needed = permission_rules is not None and (
+        bool(permission_rules.rules) or permission_rules.default != "allow"
+    )
     browser_mode_needed = bool(browser_modes)
     if (
         not approval_needed
@@ -509,6 +522,66 @@ def _make_member_host_builder(parent_config: RuntimeConfig) -> MemberHostFactory
     return build_member_host
 
 
+class _AllowlistedAdapter:
+    """A multi-tool adapter narrowed to the names in an allowlist.
+
+    ``describe`` returns that intersection. ``invoke`` refuses any other name
+    before forwarding, so a non-allowlisted tool cannot run. The gateway is the
+    caller of this adapter.
+    """
+
+    def __init__(self, adapter: ToolAdapter, allowed: frozenset[str]) -> None:
+        self._adapter = adapter
+        self._allowed = allowed
+        # Bound here so a refused name never reaches the inner adapter. The
+        # gateway calls ``invoke`` on this wrapper.
+        self._forward: Callable[
+            [str, dict[str, object], RunContext],
+            AsyncIterator[AdapterOutput],
+        ] = adapter.invoke
+
+    def describe(self) -> Sequence[ToolDescriptor]:
+        return tuple(
+            descriptor
+            for descriptor in self._adapter.describe()
+            if descriptor.name in self._allowed
+        )
+
+    def invoke(
+        self, name: str, call_input: dict[str, object], context: RunContext
+    ) -> AsyncIterator[AdapterOutput]:
+        if name not in self._allowed:
+            return self._refuse(name)
+        return self._forward(name, call_input, context)
+
+    async def _refuse(self, name: str) -> AsyncIterator[AdapterOutput]:
+        yield ErrorOutput(
+            category=ErrorCategory.POLICY_DENIAL,
+            message=f"tool {name!r} is outside the child allowlist",
+        )
+
+    async def shutdown(self) -> None:
+        await self._adapter.shutdown()
+
+
+def _restrict_adapters(
+    adapters: tuple[ToolAdapter, ...], allowed: set[str]
+) -> tuple[ToolAdapter, ...]:
+    """Keep each adapter's allowlisted tools; drop an adapter with none."""
+
+    restricted: list[ToolAdapter] = []
+    for adapter in adapters:
+        names = {descriptor.name for descriptor in adapter.describe()}
+        kept = names & allowed
+        if not kept:
+            continue
+        if kept == names:
+            restricted.append(adapter)
+        else:
+            restricted.append(_AllowlistedAdapter(adapter, frozenset(kept)))
+    return tuple(restricted)
+
+
 def _restrict_config(
     config: RuntimeConfig, allowed_tools: tuple[str, ...] | None
 ) -> RuntimeConfig:
@@ -518,23 +591,18 @@ def _restrict_config(
     (still subject to the depth cap on its own ``spawn_subagent``). Otherwise the
     child's tool set is the intersection of the parent's tools and the allowlist:
     host-declared ``ToolSpec`` tools are filtered by name, and a multi-tool
-    ``ToolAdapter`` is kept only when **every** tool it advertises is allowlisted (else
-    dropped whole — least privilege errs safe; the child never sees a tool outside its
-    allowlist). The Tool Gateway stays the single owner of tool dispatch (Constitution
-    V) — no out-of-gateway adapter wrapping. ``spawn_subagent`` is granted to the child
-    only when the allowlist names it (and then the depth cap still applies).
+    ``ToolAdapter`` is narrowed to the tools it advertises that are allowlisted (a
+    filtering wrapper; invoking a name outside the allowlist cannot run). An adapter
+    with no allowlisted tool is dropped. The Tool Gateway stays the single owner of
+    tool dispatch (Constitution V). ``spawn_subagent`` is granted to the child only
+    when the allowlist names it (and then the depth cap still applies).
     """
 
     if allowed_tools is None:
         return config
     allowed = set(allowed_tools)
     tools = tuple(spec for spec in config.tools if spec.descriptor.name in allowed)
-    adapters = tuple(
-        adapter
-        for adapter in config.tool_adapters
-        if adapter.describe()
-        and all(descriptor.name in allowed for descriptor in adapter.describe())
-    )
+    adapters = _restrict_adapters(config.tool_adapters, allowed)
     # The spawn tool is auto-registered by ``assemble`` from ``max_subagent_depth``;
     # drop it for the child unless explicitly allowlisted.
     max_depth = config.max_subagent_depth if "spawn_subagent" in allowed else 0

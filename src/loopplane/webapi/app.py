@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from loopplane.commands import default_registry
 from loopplane.host import ContentBlock, LoopPlaneHost, TextBlock
+from loopplane.host.host import output_schema_request_error
 from loopplane.webapi.admission import AdmissionCoordinator
 from loopplane.webapi.auth import (
     DENY_ALL,
@@ -147,15 +148,9 @@ def create_app(
     def _check_output_schema(
         output_schema: dict[str, object] | None, supports: bool
     ) -> None:
-        if output_schema is None:
-            return
-        if not output_schema:
-            raise HTTPException(status_code=400, detail="malformed output_schema")
-        if not supports:
-            raise HTTPException(
-                status_code=400,
-                detail="model does not support structured output",
-            )
+        detail = output_schema_request_error(output_schema, supports=supports)
+        if detail is not None:
+            raise HTTPException(status_code=400, detail=detail)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

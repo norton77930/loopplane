@@ -227,6 +227,7 @@ MATRIX: dict[str, BoundaryMatrixEntry] = {
             "loopplane.checkpoint",
             "loopplane.context",
             "loopplane.controller",
+            "loopplane.errors",
             "loopplane.events",
             "loopplane.fairness",
             "loopplane.gateway",
@@ -248,7 +249,9 @@ MATRIX: dict[str, BoundaryMatrixEntry] = {
             "loopplane.tools.subagent",
         ),
         function_scoped=(
+            "loopplane.engineering",
             "loopplane.host",
+            "loopplane.packs",
             "loopplane.tools.background",
             "loopplane.tools.messaging",
             "loopplane.tools.scheduling",

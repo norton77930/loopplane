@@ -22,6 +22,7 @@ from loopplane.adapters.openai_compat import (  # noqa: E402
     ollama_model,
     openrouter_model,
 )
+from loopplane.events import RuntimeEvent  # noqa: E402
 from loopplane.host import LoopPlaneHost, RuntimeConfig, StorageConfig  # noqa: E402
 from loopplane.model import supports_structured_output  # noqa: E402
 from loopplane.model.boundary import (  # noqa: E402
@@ -140,8 +141,12 @@ def test_openai_compat_structured_output_defaults() -> None:
 class RecordingModel:
     """Records the last `ModelRequest` it streamed and emits one closing turn."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, text: str = "ok", *, supports_structured_output: bool = True
+    ) -> None:
         self.last_request: ModelRequest | None = None
+        self._text = text
+        self._supports_structured_output = supports_structured_output
 
     def context_capacity(self) -> int:
         return 100_000
@@ -149,10 +154,36 @@ class RecordingModel:
     def accepts_media(self) -> bool:
         return True
 
+    def supports_structured_output(self) -> bool:
+        return self._supports_structured_output
+
     async def stream_turn(self, request: ModelRequest) -> AsyncIterator[ModelIncrement]:
         self.last_request = request
-        yield TextIncrement(text="ok")
+        yield TextIncrement(text=self._text)
         yield TurnEnd(stop_reason="end-turn", usage=TokenUsage())
+
+
+async def _discard(_event: RuntimeEvent) -> None:
+    return None
+
+
+def _structured_validation_status(events: list[RuntimeEvent]) -> str:
+    """Pass/fail reported by the shipped run, not by calling the validator."""
+
+    reports = [
+        event
+        for event in events
+        if event.type == "diagnostic" and event.payload.category == "structured-output"
+    ]
+    assert len(reports) == 1
+    message = reports[0].payload.message
+    status = message.rsplit(" ", 1)[-1]
+    assert status in {"pass", "fail"}
+    if status == "pass":
+        assert reports[0].payload.severity == "info"
+    else:
+        assert reports[0].payload.severity == "error"
+    return status
 
 
 def _host(root: Path, model: RecordingModel) -> LoopPlaneHost:
@@ -222,10 +253,29 @@ def test_malformed_schema_is_rejected(tmp_path: Path) -> None:
         )
     )
 
-    run = client.post("/v1/runs", json={"prompt": "hi", "output_schema": {}})
+    run = client.post(
+        "/v1/runs", json={"prompt": "hi", "output_schema": {"type": "nope"}}
+    )
 
     assert run.status_code == 400
     assert model.last_request is None
+
+
+def test_empty_schema_is_accepted(tmp_path: Path) -> None:
+    model = RecordingModel()
+    client = make_client(
+        create_app(
+            _host(tmp_path / "store", model),
+            authenticator=allow_all,
+            default_supports_structured_output=True,
+        )
+    )
+
+    run = client.post("/v1/runs", json={"prompt": "hi", "output_schema": {}})
+
+    assert run.status_code == 200
+    assert model.last_request is not None
+    assert model.last_request.output_schema == {}
 
 
 def test_catalog_advertises_supports_structured_output(tmp_path: Path) -> None:
@@ -249,6 +299,80 @@ def test_catalog_advertises_supports_structured_output(tmp_path: Path) -> None:
 
 
 # --- US3: verification reuses the unit-005 JSON-schema validator pack ---------
+
+
+@pytest.mark.anyio
+async def test_host_run_rejects_schema_for_nonsupporting_model(tmp_path: Path) -> None:
+    model = RecordingModel(supports_structured_output=False)
+    host = _host(tmp_path / "store", model)
+
+    with pytest.raises(ValueError, match="model does not support structured output"):
+        await host.run("hi", _discard, output_schema=_SCHEMA)
+
+    assert model.last_request is None
+
+
+@pytest.mark.anyio
+async def test_host_run_rejects_invalid_schema_before_model_call(
+    tmp_path: Path,
+) -> None:
+    model = RecordingModel()
+    host = _host(tmp_path / "store", model)
+
+    with pytest.raises(ValueError, match="malformed output_schema"):
+        await host.run("hi", _discard, output_schema={"type": "nope"})
+
+    assert model.last_request is None
+
+
+@pytest.mark.anyio
+async def test_conforming_structured_output_passes(tmp_path: Path) -> None:
+    model = RecordingModel(text='{"answer": "yes"}')
+    events: list[RuntimeEvent] = []
+
+    async def collect(event: RuntimeEvent) -> None:
+        events.append(event)
+
+    outcome = await _host(tmp_path / "store", model).run(
+        "hi", collect, output_schema=_SCHEMA
+    )
+
+    assert model.last_request is not None
+    assert outcome.termination_reason == "natural-completion"
+    assert _structured_validation_status(events) == "pass"
+
+
+@pytest.mark.anyio
+async def test_nonconforming_structured_output_fails(tmp_path: Path) -> None:
+    model = RecordingModel(text='{"answer": 1}')
+    events: list[RuntimeEvent] = []
+
+    async def collect(event: RuntimeEvent) -> None:
+        events.append(event)
+
+    outcome = await _host(tmp_path / "store", model).run(
+        "hi", collect, output_schema=_SCHEMA
+    )
+
+    assert model.last_request is not None
+    assert outcome.termination_reason == "natural-completion"
+    assert _structured_validation_status(events) == "fail"
+
+
+@pytest.mark.anyio
+async def test_empty_schema_accepts_any_json_instance(tmp_path: Path) -> None:
+    model = RecordingModel(text='{"unrelated": true}')
+    events: list[RuntimeEvent] = []
+
+    async def collect(event: RuntimeEvent) -> None:
+        events.append(event)
+
+    outcome = await _host(tmp_path / "store", model).run(
+        "hi", collect, output_schema={}
+    )
+
+    assert outcome.termination_reason == "natural-completion"
+    assert _structured_validation_status(events) == "pass"
 
 
 def test_structured_output_verifiable_via_packs_validator() -> None:
