@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Literal
 import anyio
 
 from loopplane.checkpoint.base import SessionSummary
+from loopplane.context import SubagentFanout
 from loopplane.controller.controller import RuntimeController
 from loopplane.events.emitter import EventSink
 from loopplane.events.envelope import (
@@ -187,6 +188,7 @@ class LoopPlaneHost:
         *,
         working_scope: Path | None = None,
         subagent_depth: int = 0,
+        subagent_fanout: SubagentFanout | None = None,
         swarm_supervisor: SwarmSupervisor | None = None,
         swarm_member_id: str | None = None,
         portable_snapshot_provider: PortableSnapshotProvider | None = None,
@@ -195,7 +197,9 @@ class LoopPlaneHost:
         # ``subagent_depth`` (spec 043) is this host's recursion depth; 0 for a
         # top-level host, parent + 1 for a child host built to run a spawned subagent.
         self._assembled: AssembledRuntime = assemble(
-            config, subagent_depth=subagent_depth
+            config,
+            subagent_depth=subagent_depth,
+            subagent_fanout=subagent_fanout,
         )
         self._config = config
         self._working_scope = working_scope or Path.cwd()

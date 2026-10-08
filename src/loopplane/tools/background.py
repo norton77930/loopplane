@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Literal
 
 import anyio
 
-from loopplane.context import BackgroundSupervisor, RunContext
+from loopplane.context import BackgroundSupervisor, RunContext, SubagentFanout
 from loopplane.engineering import (
     HostRuntimeProfile,
     LoopDefinition,
@@ -49,8 +49,12 @@ if TYPE_CHECKING:
 TaskStatus = Literal["running", "completed", "failed", "stopped"]
 
 # Runs one background child and returns its final text ("" = no usable result).
-# Signature: (instruction, allowed_tools, child_depth, working_scope) -> final text.
-RunChild = Callable[[str, "tuple[str, ...] | None", int, Path], Awaitable[str]]
+# Signature: (instruction, allowed_tools, child_depth, working_scope, fanout) -> text.
+# ``fanout`` is the counter captured when the task was admitted.
+RunChild = Callable[
+    [str, "tuple[str, ...] | None", int, Path, SubagentFanout | None],
+    Awaitable[str],
+]
 
 _FAILED_MESSAGE = "background task failed"
 
@@ -87,11 +91,13 @@ class BackgroundTaskSupervisor:
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None = None,
     ) -> str | None:
         """Launch a background child run and return its id; ``None`` at the count cap.
 
         Non-blocking: the child runs via ``task_group.start_soon``; the record is
         ``running`` until the child finishes (``completed`` / ``failed``) or is stopped.
+        ``fanout`` is the spawn counter captured at admit time.
         """
 
         running = sum(1 for task in self._tasks.values() if task.status == "running")
@@ -100,7 +106,13 @@ class BackgroundTaskSupervisor:
         task_id = uuid.uuid4().hex
         self._tasks[task_id] = BackgroundTask(id=task_id)
         self._task_group.start_soon(
-            self._run, task_id, instruction, allowed_tools, child_depth, working_scope
+            self._run,
+            task_id,
+            instruction,
+            allowed_tools,
+            child_depth,
+            working_scope,
+            fanout,
         )
         return task_id
 
@@ -111,12 +123,13 @@ class BackgroundTaskSupervisor:
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None,
     ) -> None:
         record = self._tasks[task_id]
         with record.cancel_scope:
             try:
                 text = await self._run_child(
-                    instruction, allowed_tools, child_depth, working_scope
+                    instruction, allowed_tools, child_depth, working_scope, fanout
                 )
             except Exception:  # noqa: BLE001 - contained: never raise across the Gateway
                 record.status = "failed"
@@ -185,11 +198,12 @@ def make_run_child(build_child_host: ChildHostFactory) -> RunChild:
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None,
     ) -> str:
         holder: dict[str, LoopPlaneHost] = {}
 
         def selector() -> LoopPlaneHost:
-            host = build_child_host(child_depth, allowed_tools, working_scope)
+            host = build_child_host(child_depth, allowed_tools, working_scope, fanout)
             holder["host"] = host
             return host
 
@@ -409,6 +423,7 @@ class BackgroundTasksAdapter:
             allowed_tools=allowed_tools,
             child_depth=context.subagent_depth + 1,
             working_scope=context.working_scope,
+            fanout=context.subagent_fanout,
         )
         if task_id is None:
             yield ErrorOutput(

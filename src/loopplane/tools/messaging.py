@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Literal
 
 import anyio
 
-from loopplane.context import RunContext
+from loopplane.context import RunContext, SubagentFanout
 from loopplane.context import SwarmSupervisor as _SwarmSupervisorProto
 from loopplane.errors import ErrorCategory
 from loopplane.gateway.spi import AdapterOutput, ErrorOutput
@@ -50,14 +50,30 @@ _FAILED_MESSAGE = "swarm member failed"
 # host. The supervisor passes itself + the member id so the member's child context gets
 # the SHARED supervisor + its identity (the closure lives in the host assembly).
 MemberHostFactory = Callable[
-    [_SwarmSupervisorProto, str, int, "tuple[str, ...] | None", Path], "LoopPlaneHost"
+    [
+        _SwarmSupervisorProto,
+        str,
+        int,
+        "tuple[str, ...] | None",
+        Path,
+        SubagentFanout | None,
+    ],
+    "LoopPlaneHost",
 ]
 
 # Runs one member child, returns its final text. The supervisor is passed so the run can
-# build the member's child host with the shared supervisor baked in:
-# (supervisor, member_id, instruction, allowed_tools, depth, scope) -> text.
+# build the member's child host with the shared supervisor baked in. The last argument
+# is the spawn counter captured when the member was dispatched.
 RunMember = Callable[
-    [_SwarmSupervisorProto, str, str, "tuple[str, ...] | None", int, Path],
+    [
+        _SwarmSupervisorProto,
+        str,
+        str,
+        "tuple[str, ...] | None",
+        int,
+        Path,
+        SubagentFanout | None,
+    ],
     Awaitable[str],
 ]
 
@@ -110,11 +126,13 @@ class SwarmSupervisor:
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None = None,
     ) -> str | None:
         """Launch a member child run + return its id; ``None`` at the team-size cap.
 
         Non-blocking: the member runs via ``task_group.start_soon``; its record is
         ``running`` until it finishes (``completed`` / ``failed``) or is cancelled.
+        ``fanout`` is the spawn counter captured at admit time.
         """
 
         if len(self._members) >= self._max_members:
@@ -129,6 +147,7 @@ class SwarmSupervisor:
             allowed_tools,
             child_depth,
             working_scope,
+            fanout,
         )
         return member_id
 
@@ -139,6 +158,7 @@ class SwarmSupervisor:
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None,
     ) -> None:
         record = self._members[member_id]
         with record.cancel_scope:
@@ -150,6 +170,7 @@ class SwarmSupervisor:
                     allowed_tools,
                     child_depth,
                     working_scope,
+                    fanout,
                 )
             except Exception:  # noqa: BLE001 - contained: never raise across the Gateway
                 record.status = "failed"
@@ -204,14 +225,20 @@ def _member_runner(build_member_host: MemberHostFactory) -> RunMember:
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None,
     ) -> str:
         def build(
-            depth: int, allowed: tuple[str, ...] | None, scope: Path
+            depth: int,
+            allowed: tuple[str, ...] | None,
+            scope: Path,
+            child_fanout: SubagentFanout | None,
         ) -> LoopPlaneHost:
-            return build_member_host(supervisor, member_id, depth, allowed, scope)
+            return build_member_host(
+                supervisor, member_id, depth, allowed, scope, child_fanout
+            )
 
         return await make_run_child(build)(
-            instruction, allowed_tools, child_depth, working_scope
+            instruction, allowed_tools, child_depth, working_scope, fanout
         )
 
     return run_member
@@ -426,6 +453,7 @@ class SwarmToolsAdapter:
             allowed_tools=allowed_tools,
             child_depth=context.subagent_depth + 1,
             working_scope=context.working_scope,
+            fanout=context.subagent_fanout,
         )
         if member_id is None:
             yield ErrorOutput(

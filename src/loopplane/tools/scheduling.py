@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Literal, Protocol
 
 import anyio
 
-from loopplane.context import RunContext
+from loopplane.context import RunContext, SubagentFanout
 from loopplane.context import ScheduleSupervisor as _ScheduleSupervisorProto
 from loopplane.errors import ErrorCategory
 from loopplane.gateway.spi import AdapterOutput, ErrorOutput
@@ -95,11 +95,13 @@ class ScheduleSupervisor:
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None = None,
     ) -> str | None:
         """Register a schedule + start its timer; ``None`` at the count cap.
 
         Assumes the adapter has validated exactly one positive cadence. Non-blocking:
-        the timer runs via ``task_group.start_soon``.
+        the timer runs via ``task_group.start_soon``. ``fanout`` is the spawn
+        counter captured at admit time.
         """
 
         active = sum(1 for s in self._schedules.values() if s.status == "active")
@@ -118,6 +120,7 @@ class ScheduleSupervisor:
                 float(interval_seconds),
                 child_depth,
                 working_scope,
+                fanout,
             )
         else:
             assert delay_seconds is not None
@@ -132,6 +135,7 @@ class ScheduleSupervisor:
                 float(delay_seconds),
                 child_depth,
                 working_scope,
+                fanout,
             )
         return schedule_id
 
@@ -143,12 +147,18 @@ class ScheduleSupervisor:
         delay: float,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None,
     ) -> None:
         record = self._schedules[schedule_id]
         with record.cancel_scope:
             await self._sleeper.sleep(delay)
             await self._fire_once(
-                record, instruction, allowed_tools, child_depth, working_scope
+                record,
+                instruction,
+                allowed_tools,
+                child_depth,
+                working_scope,
+                fanout,
             )
             record.status = "completed"
             return
@@ -164,13 +174,19 @@ class ScheduleSupervisor:
         interval: float,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None,
     ) -> None:
         record = self._schedules[schedule_id]
         with record.cancel_scope:
             while True:
                 await self._sleeper.sleep(interval)
                 await self._fire_once(
-                    record, instruction, allowed_tools, child_depth, working_scope
+                    record,
+                    instruction,
+                    allowed_tools,
+                    child_depth,
+                    working_scope,
+                    fanout,
                 )
         # Reached only on cancellation — an interval loop never ends on its own.
         if record.status == "active":
@@ -183,10 +199,11 @@ class ScheduleSupervisor:
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None,
     ) -> None:
         try:
             text = await self._run_child(
-                instruction, allowed_tools, child_depth, working_scope
+                instruction, allowed_tools, child_depth, working_scope, fanout
             )
         except Exception:  # noqa: BLE001 - contained: never raise across the Gateway
             record.occurrences += 1
@@ -420,6 +437,7 @@ class SchedulingToolsAdapter:
             allowed_tools=allowed_tools,
             child_depth=context.subagent_depth + 1,
             working_scope=context.working_scope,
+            fanout=context.subagent_fanout,
         )
         if schedule_id is None:
             yield ErrorOutput(

@@ -1,3 +1,3 @@
 {
-  "feature_directory": "specs/089-container-command-sandbox"
+  "feature_directory": "specs/090-subagent-fanout-cap"
 }

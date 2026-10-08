@@ -23,6 +23,7 @@ from loopplane.checkpoint import (
     FileCheckpointStore,
     SqliteCheckpointStore,
 )
+from loopplane.context import SubagentFanout
 from loopplane.controller.controller import RuntimeController
 from loopplane.errors import ErrorCategory
 from loopplane.events import RuntimeEvent
@@ -47,6 +48,7 @@ from loopplane.host.agent_controls import selectable_browser_modes
 from loopplane.host.capability_manager import CapabilityManager
 from loopplane.host.capability_store import CapabilitySettingsStore
 from loopplane.host.config import (
+    ConfigError,
     RuntimeConfig,
     approval_effects,
     collect_tool_names,
@@ -91,13 +93,20 @@ class AssembledRuntime:
     storage_lease: StorageAuthorityLease | None
 
 
-def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRuntime:
+def assemble(
+    config: RuntimeConfig,
+    *,
+    subagent_depth: int = 0,
+    subagent_fanout: object | None = None,
+) -> AssembledRuntime:
     """Validate and wire a runtime from a configuration (FR-020, FR-005).
 
     ``subagent_depth`` (spec 043) is this runtime's recursion depth, stamped onto each
     run's ``RunContext`` by the controller; ``0`` for a top-level host. A child host
     built to run a spawned subagent is assembled at ``parent + 1`` so its own
     ``spawn_subagent`` is capped one level deeper. Default ``0`` → unchanged.
+    ``subagent_fanout`` is a parent run's counter when this host is a child.
+    A root passes ``None``; ``drive`` creates that run's counter.
     """
 
     validate_config(config)
@@ -110,6 +119,7 @@ def assemble(config: RuntimeConfig, *, subagent_depth: int = 0) -> AssembledRunt
             config,
             subagent_depth=subagent_depth,
             storage_lease=storage_lease,
+            subagent_fanout=subagent_fanout,
         )
     except BaseException:
         if storage_lease is not None:
@@ -122,6 +132,7 @@ def _assemble_validated(
     *,
     subagent_depth: int,
     storage_lease: StorageAuthorityLease | None,
+    subagent_fanout: object | None = None,
 ) -> AssembledRuntime:
     # Durable backends — both or neither, wired together (FR-002).
     artifact_store: ArtifactStore | None = None
@@ -193,6 +204,7 @@ def _assemble_validated(
     # today). The child host is built lazily, at parent depth + 1, from this config.
     # Imported lazily here (not at module scope) to avoid an import cycle:
     # engineering → host → assembly → tools.subagent → engineering.
+    shared = _shared_fanout(subagent_fanout)
     if config.max_subagent_depth >= 1:
         from loopplane.tools.subagent import SpawnSubagentAdapter
 
@@ -288,7 +300,8 @@ def _assemble_validated(
         from loopplane.tools.background import make_supervisor_factory
 
         controller_kwargs["background_supervisor_factory"] = make_supervisor_factory(
-            _make_child_host_builder(config), config.max_background_tasks
+            _make_child_host_builder(config),
+            config.max_background_tasks,
         )
         controller_kwargs["max_background_tasks"] = config.max_background_tasks
     if config.max_schedules >= 1:
@@ -296,7 +309,8 @@ def _assemble_validated(
 
         controller_kwargs["schedule_supervisor_factory"] = (
             make_schedule_supervisor_factory(
-                _make_child_host_builder(config), config.max_schedules
+                _make_child_host_builder(config),
+                config.max_schedules,
             )
         )
         controller_kwargs["max_schedules"] = config.max_schedules
@@ -347,6 +361,8 @@ def _assemble_validated(
         event_sink=sink,
         plan_mode=effective_plan_mode,
         subagent_depth=subagent_depth,
+        max_subagent_fanout=config.max_subagent_fanout,
+        shared_fanout=shared,
         **controller_kwargs,
     )
     return AssembledRuntime(
@@ -469,6 +485,16 @@ def _build_decider(
     return safe_failure(all_of(*deciders))
 
 
+def _shared_fanout(incoming: object | None) -> SubagentFanout | None:
+    """Reuse a parent counter. ``None`` counts nothing. Anything else fails closed."""
+
+    if incoming is None:
+        return None
+    if isinstance(incoming, SubagentFanout):
+        return incoming
+    raise ConfigError("max_subagent_fanout counter is not usable")
+
+
 def _make_child_host_builder(parent_config: RuntimeConfig) -> ChildHostFactory:
     """Build the closure the spawn tool uses to create a fresh child host (spec 043).
 
@@ -476,10 +502,15 @@ def _make_child_host_builder(parent_config: RuntimeConfig) -> ChildHostFactory:
     (same model + tools + storage), at ``subagent_depth = depth`` (parent + 1), with an
     optional ``allowed_tools`` restriction. Returning a fresh host per spawn means each
     child run is isolated and starts its own session — no cross-run state leakage.
+    ``fanout`` is the counter captured when the child was admitted (spec 090). This
+    builder does not create one.
     """
 
     def build_child_host(
-        depth: int, allowed_tools: tuple[str, ...] | None, working_scope: Path
+        depth: int,
+        allowed_tools: tuple[str, ...] | None,
+        working_scope: Path,
+        fanout: SubagentFanout | None,
     ) -> LoopPlaneHost:
         # Imported here (not at module scope) to break the
         # engineering → host → assembly import cycle.
@@ -487,7 +518,10 @@ def _make_child_host_builder(parent_config: RuntimeConfig) -> ChildHostFactory:
 
         child_config = _restrict_config(parent_config, allowed_tools)
         return LoopPlaneHost(
-            child_config, working_scope=working_scope, subagent_depth=depth
+            child_config,
+            working_scope=working_scope,
+            subagent_depth=depth,
+            subagent_fanout=fanout,
         )
 
     return build_child_host
@@ -499,6 +533,8 @@ def _make_member_host_builder(parent_config: RuntimeConfig) -> MemberHostFactory
     Like :func:`_make_child_host_builder`, but bakes the SHARED supervisor + the
     member id into the child host, so the member's run uses the same in-run message
     registry and resolves "self" (ADR 0003). The supervisor passes itself + the id.
+    ``fanout`` is the spawn counter captured when the member was dispatched
+    (spec 090). This builder does not create one.
     """
 
     def build_member_host(
@@ -507,6 +543,7 @@ def _make_member_host_builder(parent_config: RuntimeConfig) -> MemberHostFactory
         depth: int,
         allowed_tools: tuple[str, ...] | None,
         working_scope: Path,
+        fanout: SubagentFanout | None,
     ) -> LoopPlaneHost:
         from loopplane.host.host import LoopPlaneHost
 
@@ -517,6 +554,7 @@ def _make_member_host_builder(parent_config: RuntimeConfig) -> MemberHostFactory
             subagent_depth=depth,
             swarm_supervisor=supervisor,
             swarm_member_id=member_id,
+            subagent_fanout=fanout,
         )
 
     return build_member_host

@@ -39,7 +39,9 @@ def _completing(text: str = "done"):
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: object = None,
     ) -> str:
+        del fanout
         return f"{text}:{instruction}"
 
     return run_member
@@ -52,7 +54,9 @@ async def _raising_member(
     allowed_tools: tuple[str, ...] | None,
     child_depth: int,
     working_scope: Path,
+    fanout: object = None,
 ) -> str:
+    del fanout
     raise RuntimeError("boom in the member run")
 
 
@@ -63,7 +67,9 @@ async def _hanging_member(
     allowed_tools: tuple[str, ...] | None,
     child_depth: int,
     working_scope: Path,
+    fanout: object = None,
 ) -> str:
+    del fanout
     await anyio.Event().wait()  # never returns until cancelled
     return ""
 
@@ -321,7 +327,7 @@ async def test_member_host_carries_shared_supervisor_and_id() -> None:
     )
     builder = _make_member_host_builder(config)
     sentinel = object()
-    host = builder(sentinel, "m1", 1, None, Path("."))  # type: ignore[arg-type]
+    host = builder(sentinel, "m1", 1, None, Path("."), None)  # type: ignore[arg-type]
     assert host._swarm_supervisor is sentinel  # noqa: SLF001
     assert host._swarm_member_id == "m1"  # noqa: SLF001
 

@@ -47,6 +47,14 @@ Semantic Versioning.
   local image, and it does not pull or fall back to the host. The default
   executor is unchanged. No event, checkpoint field, termination reason, route,
   or `create_app` argument (ADR 0022).
+- **090** Subagent fan-out cap (`loopplane.host`, `loopplane.context`) —
+  opt-in `max_subagent_fanout` limits how many `spawn_subagent` children one
+  root run may start, including descendants. The next root run starts a new
+  count. Unset counts nothing, so a host that only sets `max_subagent_depth`
+  is unchanged. `0` denies every spawn. A denial uses one fixed sentence and
+  does not echo the task. Background, schedule, and swarm keep their own caps;
+  child hosts they start share this run's counter. No event, checkpoint field,
+  route, extra, or existing default.
 
 ## [0.5.0] - 2026-08-22
 

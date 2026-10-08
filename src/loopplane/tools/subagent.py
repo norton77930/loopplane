@@ -34,7 +34,7 @@ from collections.abc import AsyncIterator, Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from loopplane.context import RunContext
+from loopplane.context import RunContext, SubagentFanout
 from loopplane.engineering import (
     HostRuntimeProfile,
     LoopDefinition,
@@ -66,7 +66,10 @@ if TYPE_CHECKING:
 # (parent + 1), an optional restricted tool allowlist, and the working scope to inherit.
 # Injected by the host assembly (``host/assembly.py``) so this module never imports the
 # host facade at runtime (no ``tools -> host`` cycle); typed here under TYPE_CHECKING.
-ChildHostFactory = Callable[[int, "tuple[str, ...] | None", Path], "LoopPlaneHost"]
+ChildHostFactory = Callable[
+    [int, "tuple[str, ...] | None", Path, SubagentFanout | None],
+    "LoopPlaneHost",
+]
 
 
 _SPAWN_DESCRIPTOR = ToolDescriptor(
@@ -151,6 +154,16 @@ class SpawnSubagentAdapter:
                 ),
             )
             return
+        fanout = context.subagent_fanout
+        if fanout is not None and not fanout.try_take():
+            yield ErrorOutput(
+                category=ErrorCategory.POLICY_DENIAL,
+                message=(
+                    f"subagent fan-out cap reached "
+                    f"({fanout.limit}); refusing to spawn a subagent"
+                ),
+            )
+            return
 
         task = str(call_input["task"])
         allowed_tools = _coerce_allowed_tools(call_input.get("allowed_tools"))
@@ -162,7 +175,9 @@ class SpawnSubagentAdapter:
         holder: dict[str, LoopPlaneHost] = {}
 
         def selector() -> LoopPlaneHost:
-            host = self._build_child_host(child_depth, allowed_tools, working_scope)
+            host = self._build_child_host(
+                child_depth, allowed_tools, working_scope, context.subagent_fanout
+            )
             holder["host"] = host
             return host
 

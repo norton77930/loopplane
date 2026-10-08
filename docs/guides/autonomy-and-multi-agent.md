@@ -1,6 +1,6 @@
 # Autonomy & multi-agent
 
-**Covered units:** 013, 043, 048, 049, 050, 051.
+**Covered units:** 013, 043, 048, 049, 050, 051, 090.
 
 How LoopPlane runs more than one agent, and how it lets an agent take on work that
 outlives a single turn. This guide is navigational:
@@ -22,6 +22,15 @@ Every capability in this guide is gated by a `RuntimeConfig` cap that defaults t
 A cap of zero is not a soft limit: the supervisor is not created, the tools are not
 registered, and a request is denied with **zero** child work performed. Raising a cap is a
 deliberate act, which is the point — autonomy is opt-in per deployment.
+
+`max_subagent_fanout` (090) is not in that table because its default is unset, not
+`0`. Omitting it does not count `spawn_subagent` children, so setting
+`max_subagent_depth` alone is unchanged. A non-negative integer is how many of those
+children one root run may start, including descendants. The next root run starts
+a new count. `0` denies every spawn while the tool stays registered. Background,
+schedule, and swarm caps are separate
+and are not added into this count. A child host those features start still uses the
+same counter when it later calls `spawn_subagent`.
 
 ## Two kinds of multi-agent
 
@@ -46,7 +55,13 @@ The **model** decides, mid-run, that a sub-task deserves its own agent, by calli
 point and returns the child's final text to the parent. Properties worth knowing:
 
 - **Depth-capped.** `RunContext.subagent_depth` increments per level; at or over
-  `max_subagent_depth` the call is denied before any child runs.
+  `max_subagent_depth` the call is denied before any child runs. That denial does
+  not consume a spawn-count slot.
+- **Count-capped only when asked.** `max_subagent_fanout` bounds how many
+  `spawn_subagent` children one root run starts. The next root run starts a
+  new count. A denied call returns one fixed
+  sentence and does not repeat the task. The count is not stored in a checkpoint
+  and is not an event. A child that starts still counts if it later fails.
 - **Failure-contained.** A child failure becomes a public-safe error output for the
   parent; the parent run continues.
 - **Observable.** Child events are captured and can be aggregated with the 013 helpers —

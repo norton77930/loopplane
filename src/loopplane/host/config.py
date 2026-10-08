@@ -189,6 +189,12 @@ class RuntimeConfig:
     # subagents cannot nest without bound (a child runs at parent depth + 1). A value of
     # `1` enables exactly one level. Carries no secret (a bare integer).
     max_subagent_depth: int = 0
+    # Opt-in per-root-run spawn count (spec 090). ``None`` counts nothing, so a
+    # host that only sets ``max_subagent_depth`` is unchanged. A non-negative
+    # integer is how many ``spawn_subagent`` children one root run may start,
+    # including descendants. The next root run starts another count. ``0``
+    # denies every spawn. Not a checkpoint field.
+    max_subagent_fanout: int | None = None
     # Opt-in background tasks (spec 048; ADR 0002): the per-run count cap. Off by
     # default (`0` → NO background-task tools registered, byte-identical). When a host
     # sets it >= 1 (with `max_subagent_depth` >= 1 — the 043 depth cap a background
@@ -280,6 +286,10 @@ class RuntimeConfig:
             ),
             compaction_summarizer=data.get("compaction_summarizer"),
             max_subagent_depth=int(data.get("max_subagent_depth", 0)),
+            max_subagent_fanout=_coerce_optional_non_negative_int(
+                data.get("max_subagent_fanout"),
+                field="max_subagent_fanout",
+            ),
             max_background_tasks=int(data.get("max_background_tasks", 0)),
             max_schedules=int(data.get("max_schedules", 0)),
             max_swarm_members=int(data.get("max_swarm_members", 0)),
@@ -529,6 +539,12 @@ def validate_config(config: RuntimeConfig) -> None:
 
     if config.max_subagent_depth < 0:
         raise ConfigError("max_subagent_depth must be a non-negative integer")
+
+    fanout = config.max_subagent_fanout
+    if fanout is not None and (
+        isinstance(fanout, bool) or not isinstance(fanout, int) or fanout < 0
+    ):
+        raise ConfigError("max_subagent_fanout must be a non-negative integer")
 
     if config.max_background_tasks < 0:
         raise ConfigError("max_background_tasks must be a non-negative integer")

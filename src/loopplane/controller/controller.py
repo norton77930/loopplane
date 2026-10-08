@@ -39,6 +39,7 @@ from loopplane.context import (
     RunContext,
     ScheduleSupervisor,
     ScheduleSupervisorFactory,
+    SubagentFanout,
     SwarmSupervisor,
     SwarmSupervisorFactory,
     WorktreeManager,
@@ -157,6 +158,8 @@ class RuntimeController:
         hooks: HookDispatcher | None = None,
         plan_mode: bool = False,
         subagent_depth: int = 0,
+        max_subagent_fanout: int | None = None,
+        shared_fanout: SubagentFanout | None = None,
         background_supervisor_factory: BackgroundSupervisorFactory | None = None,
         max_background_tasks: int = 0,
         schedule_supervisor_factory: ScheduleSupervisorFactory | None = None,
@@ -184,6 +187,13 @@ class RuntimeController:
         # run. A child controller built to run a spawned subagent is given depth+1,
         # stamped onto each run's RunContext in drive(). Default 0 → unchanged.
         self._subagent_depth = subagent_depth
+        # Spawn count (spec 090). The limit is the host knob. ``shared_fanout`` is
+        # the parent's counter when this controller runs a child; a root passes
+        # ``None`` and ``drive`` creates a fresh counter per run. Tools capture
+        # that object while the run is inside ``drive`` and hand it to a child
+        # host later.
+        self._fanout_limit = max_subagent_fanout
+        self._shared_fanout = shared_fanout
         # Background tasks (spec 048; ADR 0002): an injected supervisor factory (built
         # by the host assembly, which owns the tools-layer import) + the count cap, to
         # build a per-run supervisor on demand; both off by default (None / 0) →
@@ -607,6 +617,19 @@ class RuntimeController:
         )
         return active, settled
 
+    def _select_fanout(self) -> SubagentFanout | None:
+        """The counter for this ``drive``.
+
+        A child controller reuses the parent's object. A root with a limit
+        starts a fresh one. Unset counts nothing.
+        """
+
+        if self._shared_fanout is not None:
+            return self._shared_fanout
+        if self._fanout_limit is None:
+            return None
+        return SubagentFanout(self._fanout_limit)
+
     async def drive(
         self,
         session_id: str,
@@ -654,6 +677,7 @@ class RuntimeController:
                         session_id=session.session_id, label=session.label
                     ),
                 )
+        fanout = self._select_fanout()
         context = RunContext(
             session_id=session_id,
             working_scope=session.working_scope,
@@ -662,6 +686,7 @@ class RuntimeController:
             turn_budget=session.turn_budget,
             session_approval_memory=session.approval_memory,
             subagent_depth=self._subagent_depth,
+            subagent_fanout=fanout,
             interactions=session.broker,
             plan_mode=plan_mode_state,
             permission_mode=permission_mode,

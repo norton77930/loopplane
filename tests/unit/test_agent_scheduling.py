@@ -51,7 +51,9 @@ def _completing(text: str = "done"):
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: object = None,
     ) -> str:
+        del fanout
         return f"{text}:{instruction}"
 
     return run_child
@@ -62,7 +64,9 @@ async def _raising(
     allowed_tools: tuple[str, ...] | None,
     child_depth: int,
     working_scope: Path,
+    fanout: object = None,
 ) -> str:
+    del fanout
     raise RuntimeError("boom in the scheduled child")
 
 

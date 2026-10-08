@@ -1,6 +1,6 @@
 # LoopPlane Capabilities
 
-> A functional-scope overview of what LoopPlane provides today, derived from units 001–089
+> A functional-scope overview of what LoopPlane provides today, derived from units 001–090
 > and verified against the source tree. For per-unit status and the
 > roadmap autopilot, see [`loopplane-agent-board.md`](loopplane-agent-board.md); for the
 > comparison against reference agent harnesses and the forward roadmap, see
@@ -14,7 +14,7 @@ LoopPlane is a **spec-first, embeddable agent-harness runtime**. It drives a
 **Tool Gateway**, and extends outward into loop automation, governance, multi-provider
 model support, agent-capability tools, and full CLI / web / desktop host surfaces.
 
-Units 001–083 are released through **v0.5.0**. Units 084–089 are recorded in the
+Units 001–083 are released through **v0.5.0**. Units 084–090 are recorded in the
 **Unreleased** section of [`../CHANGELOG.md`](../CHANGELOG.md).
 
 Unit 087 adds explicitly selected tenant-weighted model-start scheduling through
@@ -33,6 +33,11 @@ network, a read-only root, no extra privileges, and an empty environment, and it
 mounts only the working directory. The operator names an image that is already
 local. The default path stays the host executor. This unit is not a release;
 current validation status is on the board.
+
+Unit 090 adds an opt-in count of `spawn_subagent` children for one root run.
+The next root run starts a new count. Leaving `max_subagent_fanout` unset does
+not count them. Background, schedule, and swarm keep their own caps. This unit
+is not a release; current validation status is on the board.
 
 LoopPlane is built under a project constitution. The principles most visible in the
 capability surface are:
@@ -55,7 +60,7 @@ capability surface are:
 | **Runtime core** | 001, 002, 021, 060 | Agent loop (reason ↔ tool call ↔ result), unified Tool Gateway (internal + MCP), normalized Event Bus, durable checkpoint / resume (File + SQLite + Postgres), memory, skill execution profiles, human-approval boundary, artifact storage, and the Host Application Interface (declarative `RuntimeConfig` + single entry point). | `loopplane.{controller,gateway,events,loop,memory,artifacts,approval,skills,checkpoint,host}` |
 | **Loop engineering & automation** | 003–006 | Loop Definition + Controller (validate → evaluate → stop / retry / repair / human-review), an in-process scheduler (manual / interval / condition triggers on an injectable clock), reusable validator / evaluator packs, and human-review workflows. | `loopplane.{engineering,scheduling,packs,review}` |
 | **Knowledge, governance & observability** | 007–010 | Memory recall + knowledge index with an injection policy and retrieval budget; an advanced tool gateway (catalog / plugin bundles / capability manifest / versioning / diagnostics — discovery only, never execution); sandbox / policy deciders (permission / path / budget / quota / capability, deny-wins); and metadata-only observability (diagnostics / trace / timeline / replay). | `loopplane.{recall,toolkit,governance,inspect}` |
-| **Multi-agent & autonomy** | 013, 043, 048–051 | Host-driven orchestration (agent registry + coordinator + aggregated event / artifact views) and model-driven one-shot subagents (`spawn_subagent`, with a hard recursion-depth cap and failure containment); plus the Tier-2 autonomy supervisors — background / long-running tasks (048), agent-facing scheduling (049), agent-to-agent messaging / swarm over a separate registry (050), and per-task worktree isolation (051) — all cap-gated and default-off. | `loopplane.orchestration`, `loopplane.tools` |
+| **Multi-agent & autonomy** | 013, 043, 048–051, 090 | Host-driven orchestration (agent registry + coordinator + aggregated event / artifact views) and model-driven one-shot subagents (`spawn_subagent`, with a hard recursion-depth cap, an opt-in per-root-run spawn count, and failure containment); plus the Tier-2 autonomy supervisors — background / long-running tasks (048), agent-facing scheduling (049), agent-to-agent messaging / swarm over a separate registry (050), and per-task worktree isolation (051) — all cap-gated and default-off. The spawn count is unset unless `max_subagent_fanout` is set. | `loopplane.orchestration`, `loopplane.tools` |
 | **Model providers** | 020, 035, 037, 045, 070 | Anthropic and OpenAI native adapters; OpenRouter and Ollama (reusing the OpenAI wire format); a native Google Gemini adapter — with per-call `thought_signature` preservation and replay for multi-turn tool use (070, ADR 0011); and native structured output (`response_format` / json_schema, OpenAI-family) negotiated as a model-boundary capability. Each provider is behind its own optional extra and registers with the `/v1/models` selector. | `loopplane.adapters.{anthropic,openai,openai_compat,gemini}`, `loopplane.model` |
 | **Agent-capability tools** | 033, 034, 036, 044, 046, 047, 054, 069 | File tools (`edit_file`, `glob_files`, `grep`); web tools (`web_fetch`, `web_search`) with default-deny network-egress governance plus a bundled keyless search provider (047); multimodal image input (`ImageBlock`) with `accepts_media()` negotiation and document / PDF input (`DocumentBlock`, 069, ADR 0011 — native Anthropic / Gemini mappings, unsupported adapters fail safely); an agent task list (`todo_write`, 044); Jupyter cell editing (`notebook_edit`, 046); and file-edit undo (`undo_file`, 054, when snapshots are enabled). | `loopplane.tools.{internal,web}`, `loopplane.model` |
 | **Autonomy & workflow governance** | 038, 039, 066 | Plan mode (read-only investigation → human approval → execute); a declarative permission rule DSL (host-supplied allow / deny / ask rules), both enforced at the Tool Gateway decide stage; and named permission modes (`acceptEdits` / `bypassPermissions` / `dontAsk` / `plan`) as a single `RuntimeConfig.permission_mode` option expanding to preset rule sets over the DSL (066, deny-wins preserved, default off). | `loopplane.governance.{plan_mode,rule_dsl,modes}` |

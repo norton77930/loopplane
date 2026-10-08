@@ -210,8 +210,9 @@ remains the authority for 084's final delivery status.
   are done).
 - File / SQLite ledger cross-process atomicity (document loudly or add a process lock;
   Postgres is the multi-process story today).
-- A subagent aggregate fan-out cap (today `max_subagent_depth` bounds depth, not total
-  count / aggregate budget across the tree).
+- An aggregate token budget across a subagent tree. Unit 090 caps how many
+  `spawn_subagent` children one root run may start. Depth, background, schedule,
+  and swarm caps stay separate, and there is no token budget.
 - `resume()` working-scope persistence (resume rebuilds with the current working directory,
   not the session's original scope).
 - Binary artifact durability (the 069 deferral) and document OCR / extraction workflows.

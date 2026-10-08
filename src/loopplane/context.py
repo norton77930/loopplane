@@ -31,6 +31,31 @@ class PlanModeState:
     active: bool = True
 
 
+class SubagentFanout:
+    """How many ``spawn_subagent`` children one root run may start (spec 090).
+
+    ``drive`` creates a fresh counter when the host set a limit, and stamps it
+    on that run's :class:`RunContext`. A child host reuses the same object.
+    The next root run starts another. It is not checkpointed and it is not an
+    event. ``try_take`` does not await, so one event-loop thread cannot
+    interleave the check and the increment.
+    """
+
+    def __init__(self, limit: int) -> None:
+        self._limit = limit
+        self._used = 0
+
+    @property
+    def limit(self) -> int:
+        return self._limit
+
+    def try_take(self) -> bool:
+        if self._used >= self._limit:
+            return False
+        self._used += 1
+        return True
+
+
 class BackgroundSupervisor(Protocol):
     """The per-run background-task supervisor interface (spec 048; ADR 0002).
 
@@ -49,6 +74,7 @@ class BackgroundSupervisor(Protocol):
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None = None,
     ) -> str | None: ...
     def get(self, task_id: str) -> BackgroundTask | None: ...
     def list_tasks(self) -> list[BackgroundTask]: ...
@@ -82,6 +108,7 @@ class ScheduleSupervisor(Protocol):
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None = None,
     ) -> str | None: ...
     def get(self, schedule_id: str) -> Schedule | None: ...
     def list_schedules(self) -> list[Schedule]: ...
@@ -113,6 +140,7 @@ class SwarmSupervisor(Protocol):
         allowed_tools: tuple[str, ...] | None,
         child_depth: int,
         working_scope: Path,
+        fanout: SubagentFanout | None = None,
     ) -> str | None: ...
     def get(self, member_id: str) -> Member | None: ...
     def list_members(self) -> list[Member]: ...
@@ -164,6 +192,10 @@ class RunContext:
     # subagents cannot nest without bound. Set only in ``RuntimeController.drive()``
     # (the single ``RunContext`` construction site); per-run, never process-global.
     subagent_depth: int = 0
+    # Per-run spawn count (spec 090). ``None`` counts nothing. A root ``drive``
+    # creates a fresh counter when ``max_subagent_fanout`` is set. A child
+    # ``drive`` reuses that object. Not a checkpoint field and not an event.
+    subagent_fanout: SubagentFanout | None = None
     interactions: InteractionBroker | None = None
     # Per-run plan-mode holder (spec 038); ``None`` means the run is not in plan mode
     # (the plan-mode policy is then a no-op). Shared by reference with the decider and

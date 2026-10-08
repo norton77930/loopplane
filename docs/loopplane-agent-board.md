@@ -169,6 +169,7 @@ git history) — not invented.
 | **087-weighted-tenant-turns** | `specs/087-weighted-tenant-turns` | **Verified** | Opt-in weighted tenant model-start shares; immutable consistent policy, hard active/consecutive limits, cancellation-safe leases and isolated memory/Postgres coordination. Live migration, billing and outward contracts remain out of scope. | 086, 085, 072, 061 | Verified 2026-09-07: 19/19 tasks; pytest **2383 passed / 33 skipped**, Ruff format/check, mypy and lock gates passed. Behavior and architecture review findings resolved. Postgres validation uses an offline transactional stub, not a live deployment/load test. Evidence: `specs/087-weighted-tenant-turns/implementation-evidence.md`. Committed on `087-weighted-tenant-turns`. No publication or deployment. |
 | **088-worker-drain-handoff** | `specs/088-worker-drain-handoff` | **Verified** | Opt-in per-worker drain: refuse new admits, finish the run already held, then let a peer accept that person. Mid-turn migration, new public phrases, and schema changes stay out of scope. | 085, 087 | None — Verified 2026-10-08 on `088-worker-drain-handoff`. Tasks T001–T006 checked. Admission tests 29 passed. Full pytest **2408 passed / 33 skipped** with `--timeout=180`. `uv run mypy src`: no issues in 230 source files. `uv run ruff check --no-cache .` passed. `uv run ruff format --check --no-cache .`: 588 files already formatted. No separate code review was recorded. No publication. |
 | **089-container-command-sandbox** | `specs/089-container-command-sandbox` | **Verified** | Opt-in `DockerCommandExecutor` for `run_command` (ADR 0022). No network, read-only root, capabilities dropped, no privilege escalation, empty environment, one working-directory mount. Requires `loopplane[docker]` and a local image; no pull and no host fallback. Default stays `HostCommandExecutor`. No event, checkpoint, termination reason, route, or `create_app` change. Windows local jail and live-turn migration stay out. | 052 | None — Verified 2026-10-08 on `089-container-command-sandbox`. Tasks T001–T006 checked. Full pytest **2422 passed / 33 skipped** with `--timeout=180` (630.46s). An earlier run failed `cli_quickstart.py` under load; that test passed alone in 3.41s and the suite was rerun clean. `uv run mypy src`: no issues in 231 source files. `uv run ruff check --no-cache .` passed. `uv run ruff format --check --no-cache .`: 590 files already formatted. `uv lock --check` resolved 69 packages. That suite predates the later review fixes. Two strict reviews followed: the first required one launch model, a strict status code, a real wait-timeout type, and a public `ResourceLimits`; the second required start failures that are `OSError` subclasses to use the fixed unavailable sentence. A third review approved that shape. After the last fix, container and jail tests were **24 passed / 4 skipped**. The full suite was not re-run. No publication. Committed on `089-container-command-sandbox`. |
+| **090-subagent-fanout-cap** | `specs/090-subagent-fanout-cap` | **Implemented** | Opt-in `max_subagent_fanout`. Unset counts nothing, so a host that only sets `max_subagent_depth` is unchanged. A non-negative integer is how many `spawn_subagent` children one root run may start, including descendants. The next root run starts a new count. `0` denies every spawn while the tool stays registered. Depth denial does not consume a slot. The denial sentence does not echo the task. Background, schedule, and swarm keep their own caps; child hosts they start share that run's counter. No event, checkpoint field, route, extra, or existing default. | 043 | Full pytest with `--timeout=180`, then a maintainer decision before Verified. Do not open another unit. Not committed. Not published. |
 
 > **Parity roadmap constraint:** Claude Code and Orion are behavior references only. Do not copy
 > implementation code, private names, private paths, raw `openspec/`, credentials, tokens, or other
@@ -599,13 +600,13 @@ git history) — not invented.
 
 | Field | Value |
 | ----- | ----- |
-| Active unit | **089-container-command-sandbox** — **Verified** 2026-10-08. |
-| Active feature directory | `specs/089-container-command-sandbox`, from `.specify/feature.json`. |
-| Current branch | `089-container-command-sandbox`. No publication. Committed on this branch. |
-| Current Spec Kit step | Specify, plan, tasks, and implement complete. Final gates recorded. |
-| Depends on | 052 (Verified). |
-| Next command | None. No further board unit. Live-turn migration stays off this board until a maintainer promotes it. |
-| Stop condition status | Maintainer approved one `docker` extra and ADR 0022. No event, checkpoint, Gateway SPI, termination reason, HTTP route, or default-path change. |
+| Active unit | **090-subagent-fanout-cap** — **Implemented** 2026-10-08. Not Verified. |
+| Active feature directory | `specs/090-subagent-fanout-cap`, from `.specify/feature.json`. |
+| Current branch | `090-subagent-fanout-cap`, parent `942f53a` (089). No publication. Not committed. |
+| Current Spec Kit step | Specify, plan, tasks, and implement are recorded. The full suite is still outstanding. |
+| Depends on | 043 (Verified). |
+| Next command | Full pytest with `--timeout=180`, then a maintainer decision before Verified. Do not open another unit. Live-turn migration stays off this board until a maintainer promotes it. |
+| Stop condition status | Maintainer approved one default-off spawn count. No event, checkpoint, Gateway SPI, HTTP route, extra, or existing-default change. |
 
 ---
 

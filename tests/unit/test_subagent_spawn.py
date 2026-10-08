@@ -12,13 +12,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import anyio
 import pytest
 
-from loopplane.context import RunContext
+from loopplane.context import RunContext, SubagentFanout
 from loopplane.errors import ErrorCategory
 from loopplane.events.envelope import ToolCallCompletedEvent
+from loopplane.gateway.spi import ErrorOutput
 from loopplane.host import LoopPlaneHost, RuntimeConfig
-from loopplane.host.config import ToolSpec
+from loopplane.host.assembly import (
+    _make_child_host_builder,
+    _make_member_host_builder,
+    assemble,
+)
+from loopplane.host.config import ConfigError, ToolSpec
 from loopplane.model import (
     ScriptedFailure,
     ScriptedModel,
@@ -30,7 +37,13 @@ from loopplane.model import (
 )
 from loopplane.model.content import OutputBlock
 from loopplane.tools import InternalToolAdapter, SpawnSubagentAdapter
-from tests.subagent_helpers import parent_runtime
+from loopplane.tools.scheduling import AnyioSleeper
+from tests.subagent_helpers import (
+    EventCollector,
+    child_host,
+    parent_runtime,
+    text_child_script,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -399,3 +412,388 @@ async def test_missing_task_is_a_validation_error_with_no_child_run(
     assert event.payload.error is not None
     assert event.payload.error.category == ErrorCategory.VALIDATION
     assert runtime.factory.calls == []
+
+
+async def test_fanout_cap_stops_the_second_spawn_in_the_tree(tmp_path: Path) -> None:
+    """One tree may start only the configured number of spawn_subagent children."""
+
+    model = ScriptedModel(
+        script=[
+            ScriptedTurn(
+                increments=[_spawn_call("c1", "child task")], stop_reason="tool-use"
+            ),
+            ScriptedTurn(
+                increments=[_spawn_call("g1", "grandchild task")],
+                stop_reason="tool-use",
+            ),
+            ScriptedTurn(increments=[TextIncrement(text="child answer")]),
+            ScriptedTurn(increments=[TextIncrement(text="parent done")]),
+        ],
+        context_capacity=100_000,
+    )
+    host = LoopPlaneHost(
+        RuntimeConfig(model=model, max_subagent_depth=2, max_subagent_fanout=1),
+        working_scope=tmp_path,
+    )
+    collector = EventCollector()
+    outcome = await host.run("delegate", on_event=collector)
+    event = _spawn_completed_event(collector)
+    assert event.payload.outcome == "success"
+    assert "child answer" in _output_text(event.payload.outputs)
+    assert "grandchild task" not in _output_text(event.payload.outputs)
+    assert outcome.termination_reason == "natural-completion"
+
+
+async def test_fanout_denial_builds_no_child_and_hides_the_task(tmp_path: Path) -> None:
+    calls: list[int] = []
+
+    def factory(
+        depth: int,
+        allowed: tuple[str, ...] | None,
+        scope: Path,
+        fanout: object = None,
+    ) -> LoopPlaneHost:
+        del fanout
+        calls.append(depth)
+        return child_host(
+            text_child_script("ok"), working_scope=scope, subagent_depth=depth
+        )
+
+    adapter = SpawnSubagentAdapter(
+        build_child_host=factory,
+        max_subagent_depth=2,
+    )
+    context = RunContext(
+        session_id="s",
+        working_scope=tmp_path,
+        subagent_depth=0,
+        subagent_fanout=SubagentFanout(1),
+    )
+
+    async def collect(task: str) -> list[object]:
+        return [
+            item
+            async for item in adapter.invoke("spawn_subagent", {"task": task}, context)
+        ]
+
+    first = await collect("one")
+    second = await collect("secret socket task")
+    assert calls == [1]
+    assert any(isinstance(item, TextBlock) for item in first)
+    errors = [item for item in second if isinstance(item, ErrorOutput)]
+    assert len(errors) == 1
+    assert errors[0].category == ErrorCategory.POLICY_DENIAL
+    assert str(errors[0].message) == (
+        "subagent fan-out cap reached (1); refusing to spawn a subagent"
+    )
+    assert "secret socket" not in str(errors[0].message)
+
+
+async def test_unset_fanout_still_starts_a_grandchild(tmp_path: Path) -> None:
+    model = ScriptedModel(
+        script=[
+            ScriptedTurn(
+                increments=[_spawn_call("c1", "child task")], stop_reason="tool-use"
+            ),
+            ScriptedTurn(
+                increments=[_spawn_call("g1", "grandchild task")],
+                stop_reason="tool-use",
+            ),
+            ScriptedTurn(increments=[TextIncrement(text="grandchild answer")]),
+            ScriptedTurn(increments=[TextIncrement(text="child answer")]),
+            ScriptedTurn(increments=[TextIncrement(text="parent done")]),
+        ],
+        context_capacity=100_000,
+    )
+    host = LoopPlaneHost(
+        RuntimeConfig(model=model, max_subagent_depth=2),
+        working_scope=tmp_path,
+    )
+    collector = EventCollector()
+    outcome = await host.run("delegate", on_event=collector)
+    event = _spawn_completed_event(collector)
+    assert event.payload.outcome == "success"
+    text = _output_text(event.payload.outputs)
+    assert "child answer" in text
+    assert "grandchild answer" not in text
+    assert outcome.termination_reason == "natural-completion"
+
+
+async def test_fanout_resets_on_the_next_run(tmp_path: Path) -> None:
+    """The same host gets a fresh count on the next run."""
+
+    model = ScriptedModel(
+        script=[
+            ScriptedTurn(
+                increments=[_spawn_call("c1", "first child")],
+                stop_reason="tool-use",
+            ),
+            ScriptedTurn(increments=[TextIncrement(text="first child answer")]),
+            ScriptedTurn(increments=[TextIncrement(text="first parent done")]),
+            ScriptedTurn(
+                increments=[_spawn_call("c1", "second child")],
+                stop_reason="tool-use",
+            ),
+            ScriptedTurn(increments=[TextIncrement(text="second child answer")]),
+            ScriptedTurn(increments=[TextIncrement(text="second parent done")]),
+        ],
+        context_capacity=100_000,
+    )
+    host = LoopPlaneHost(
+        RuntimeConfig(model=model, max_subagent_depth=1, max_subagent_fanout=1),
+        working_scope=tmp_path,
+    )
+    first = EventCollector()
+    first_outcome = await host.run("first", on_event=first)
+    first_event = _spawn_completed_event(first)
+    assert first_event.payload.outcome == "success"
+    assert "first child answer" in _output_text(first_event.payload.outputs)
+    assert first_outcome.termination_reason == "natural-completion"
+
+    second = EventCollector()
+    second_outcome = await host.run("second", on_event=second)
+    second_event = _spawn_completed_event(second)
+    assert second_event.payload.outcome == "success"
+    assert "second child answer" in _output_text(second_event.payload.outputs)
+    assert second_outcome.termination_reason == "natural-completion"
+
+
+def test_negative_fanout_is_rejected(tmp_path: Path) -> None:
+    model = ScriptedModel(script=[], context_capacity=100_000)
+    with pytest.raises(ConfigError, match="max_subagent_fanout"):
+        LoopPlaneHost(
+            RuntimeConfig(model=model, max_subagent_fanout=-1),
+            working_scope=tmp_path,
+        )
+
+
+async def test_depth_denial_does_not_consume_a_spawn_slot(tmp_path: Path) -> None:
+    calls: list[int] = []
+
+    def factory(
+        depth: int,
+        allowed: tuple[str, ...] | None,
+        scope: Path,
+        fanout: object = None,
+    ) -> LoopPlaneHost:
+        del fanout
+        calls.append(depth)
+        return child_host(
+            text_child_script("ok"), working_scope=scope, subagent_depth=depth
+        )
+
+    counter = SubagentFanout(1)
+    adapter = SpawnSubagentAdapter(
+        build_child_host=factory,
+        max_subagent_depth=1,
+    )
+    denied = RunContext(
+        session_id="s",
+        working_scope=tmp_path,
+        subagent_depth=1,
+        subagent_fanout=counter,
+    )
+    allowed = RunContext(
+        session_id="s",
+        working_scope=tmp_path,
+        subagent_depth=0,
+        subagent_fanout=counter,
+    )
+
+    async def collect(context: RunContext) -> list[object]:
+        return [
+            item
+            async for item in adapter.invoke(
+                "spawn_subagent", {"task": "secret socket task"}, context
+            )
+        ]
+
+    first = await collect(denied)
+    second = await collect(allowed)
+    depth_errors = [item for item in first if isinstance(item, ErrorOutput)]
+    assert len(depth_errors) == 1
+    assert "depth cap" in str(depth_errors[0].message)
+    assert "secret socket" not in str(depth_errors[0].message)
+    assert calls == [1]
+    assert any(isinstance(item, TextBlock) for item in second)
+
+
+def test_from_mapping_fanout_is_unset_unless_given() -> None:
+    model = ScriptedModel(script=[], context_capacity=100_000)
+    unset = RuntimeConfig.from_mapping({"model": model})
+    assert unset.max_subagent_fanout is None
+    zero = RuntimeConfig.from_mapping({"model": model, "max_subagent_fanout": 0})
+    assert zero.max_subagent_fanout == 0
+    with pytest.raises(ConfigError, match="max_subagent_fanout"):
+        RuntimeConfig.from_mapping({"model": model, "max_subagent_fanout": True})
+
+
+async def test_zero_fanout_denies_every_spawn_and_hides_the_task(
+    tmp_path: Path,
+) -> None:
+    calls: list[int] = []
+
+    def factory(
+        depth: int,
+        allowed: tuple[str, ...] | None,
+        scope: Path,
+        fanout: object = None,
+    ) -> LoopPlaneHost:
+        del fanout
+        calls.append(depth)
+        return child_host(
+            text_child_script("ok"), working_scope=scope, subagent_depth=depth
+        )
+
+    adapter = SpawnSubagentAdapter(
+        build_child_host=factory,
+        max_subagent_depth=2,
+    )
+    context = RunContext(
+        session_id="s",
+        working_scope=tmp_path,
+        subagent_depth=0,
+        subagent_fanout=SubagentFanout(0),
+    )
+    items = [
+        item
+        async for item in adapter.invoke(
+            "spawn_subagent", {"task": "secret socket task"}, context
+        )
+    ]
+    errors = [item for item in items if isinstance(item, ErrorOutput)]
+    assert calls == []
+    assert len(errors) == 1
+    assert errors[0].category == ErrorCategory.POLICY_DENIAL
+    assert str(errors[0].message) == (
+        "subagent fan-out cap reached (0); refusing to spawn a subagent"
+    )
+    assert "secret socket" not in str(errors[0].message)
+
+
+def test_a_foreign_fanout_object_is_rejected(tmp_path: Path) -> None:
+    model = ScriptedModel(script=[], context_capacity=100_000)
+    with pytest.raises(ConfigError, match="max_subagent_fanout"):
+        LoopPlaneHost(
+            RuntimeConfig(model=model, max_subagent_depth=1),
+            working_scope=tmp_path,
+            subagent_fanout=object(),  # type: ignore[arg-type]
+        )
+
+
+async def test_child_hosts_join_the_active_run_counter(tmp_path: Path) -> None:
+    """A child built with the run's counter uses that object, not its config."""
+
+    counter = SubagentFanout(0)
+
+    def host_config() -> RuntimeConfig:
+        model = ScriptedModel(
+            script=[
+                ScriptedTurn(
+                    increments=[_spawn_call("c1", "secret socket task")],
+                    stop_reason="tool-use",
+                ),
+                ScriptedTurn(increments=[TextIncrement(text="done")]),
+            ],
+            context_capacity=100_000,
+        )
+        return RuntimeConfig(
+            model=model,
+            max_subagent_depth=2,
+            max_subagent_fanout=5,
+            max_swarm_members=1,
+        )
+
+    child = _make_child_host_builder(host_config())(1, None, tmp_path, counter)
+    member = _make_member_host_builder(host_config())(
+        object(),  # type: ignore[arg-type]
+        "m1",
+        1,
+        None,
+        tmp_path,
+        counter,
+    )
+    denial = "subagent fan-out cap reached (0); refusing to spawn a subagent"
+    for host in (child, member):
+        collector = EventCollector()
+        outcome = await host.run("delegate", on_event=collector)
+        event = _spawn_completed_event(collector)
+        assert event.payload.outcome == "failure"
+        assert event.payload.error is not None
+        assert event.payload.error.reason == denial
+        assert "secret socket" not in event.payload.error.reason
+        assert outcome.termination_reason == "natural-completion"
+
+
+async def test_late_schedule_child_keeps_the_run_counter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A schedule that builds its child after the parent run returns still uses
+    that run's spawn counter."""
+
+    gate = anyio.Event()
+
+    async def wait_for_release(self: AnyioSleeper, seconds: float) -> None:
+        del self, seconds
+        await gate.wait()
+
+    monkeypatch.setattr(AnyioSleeper, "sleep", wait_for_release)
+    model = ScriptedModel(
+        script=[
+            ScriptedTurn(
+                increments=[_spawn_call("c1", "first child")],
+                stop_reason="tool-use",
+            ),
+            ScriptedTurn(increments=[TextIncrement(text="first answer")]),
+            ScriptedTurn(
+                increments=[
+                    ToolCallRequest(
+                        call_id="s1",
+                        tool_name="schedule_create",
+                        input={
+                            "instruction": "secret socket task",
+                            "delay_seconds": 5,
+                        },
+                    )
+                ],
+                stop_reason="tool-use",
+            ),
+            ScriptedTurn(increments=[TextIncrement(text="parent done")]),
+            ScriptedTurn(
+                increments=[_spawn_call("c2", "secret socket task")],
+                stop_reason="tool-use",
+            ),
+            ScriptedTurn(increments=[TextIncrement(text="child finished")]),
+        ],
+        context_capacity=100_000,
+    )
+    assembled = assemble(
+        RuntimeConfig(
+            model=model,
+            max_subagent_depth=2,
+            max_subagent_fanout=1,
+            max_schedules=1,
+        )
+    )
+    session_id = assembled.controller.create_session(working_scope=tmp_path)
+    async with anyio.create_task_group() as task_group:
+        supervisor = assembled.controller.make_schedule_supervisor(task_group)
+        assert supervisor is not None
+        await assembled.controller.drive(
+            session_id,
+            [TextBlock(text="delegate")],
+            schedule_supervisor=supervisor,
+        )
+        pending = supervisor.list_schedules()
+        assert len(pending) == 1
+        assert pending[0].status == "active"
+        assert pending[0].last_result is None
+        gate.set()
+        record = pending[0]
+        for _ in range(200):
+            if record.status == "completed":
+                break
+            await anyio.sleep(0)
+    assert record.status == "completed"
+    assert record.last_result == "child finished"
+    assert "secret socket" not in (record.last_result or "")

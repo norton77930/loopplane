@@ -83,7 +83,9 @@ class CountingChildHostFactory:
         depth: int,
         allowed_tools: tuple[str, ...] | None,
         working_scope: Path,
+        fanout: object = None,
     ) -> LoopPlaneHost:
+        del fanout
         self.calls.append((depth, allowed_tools))
         return child_host(
             self.child_script,
