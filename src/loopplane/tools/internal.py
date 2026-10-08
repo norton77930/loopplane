@@ -304,7 +304,8 @@ class InternalToolAdapter:
         self._memory = memory_store
         # The run_command execution seam (spec 052; ADR 0004): None -> the host executor
         # (the current anyio.run_process call verbatim, byte-identical); a
-        # LocalJailCommandExecutor sandboxes it. Caller-injected like memory_store
+        # LocalJailCommandExecutor or DockerCommandExecutor sandboxes it.
+        # Caller-injected like memory_store
         # (InternalToolAdapter is passed via RuntimeConfig.tool_adapters).
         self._executor = command_executor or HostCommandExecutor()
         # (session_id) -> the session's current todo list (spec 044).

@@ -1,7 +1,7 @@
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/088-worker-drain-handoff/plan.md
+at specs/089-container-command-sandbox/plan.md
 <!-- SPECKIT END -->
 
 # LoopPlane Codex Instructions

@@ -86,7 +86,7 @@ Each block covers: responsibility / allowed deps / forbidden deps / public API /
 
 ## 7. tools
 
-- **Responsibility**: built-in tool implementations of the gateway SPI (file/web/todo/notebook/undo/subagent/uploads/…), the supervisors (background/scheduling/messaging/worktree — implementing the `context.py` Protocols), and command executors (`LocalJailCommandExecutor`).
+- **Responsibility**: built-in tool implementations of the gateway SPI (file/web/todo/notebook/undo/subagent/uploads/…), the supervisors (background/scheduling/messaging/worktree — implementing the `context.py` Protocols), and command executors (`LocalJailCommandExecutor`, `DockerCommandExecutor`).
 - **Allowed deps**: the gateway SPI, `model` types, `context` Protocols (as implementor), narrow Phase-1 public payload/store surfaces (`events.envelope` — only for the public event/question payload types tool adapters currently require; `memory.store` — only through the narrow public memory-store surface the memory tools currently use), the `engineering` public surface (`SpawnSubagentAdapter` goes through `run_loop`), the `orchestration` public surface (`aggregate_events`/`SubagentResult`/`ChildRunReference` — sanctioned by `specs/043-dynamic-subagents/contracts/spawn-subagent.md` for the dynamic-subagent path only), httpx lazy (G4 ①).
 - **Forbidden deps**: MUST NOT be imported by `loop`/`controller`/`engineering` — the dependency direction is fixed as `host/assembly` → `tools`.
 - **Public API**: `InternalToolAdapter` and the individual adapters/supervisors. **Internal-only**: executor details.

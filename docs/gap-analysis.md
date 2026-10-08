@@ -61,7 +61,7 @@ snapshots above.
 | Model-native structured output (json_schema) | ✅ | ✅ | ✅ (045) |
 | Worktree isolation | ✅ | ❌ | ✅ (051) |
 | Remote / cloud execution | ✅ | ◑ | ❌ |
-| Sandbox isolation (local / docker) | ✅ | ✅ | ◑ (POSIX jail 052; docker/Windows no) |
+| Sandbox isolation (local / docker) | ✅ | ✅ | ◑ (POSIX jail 052; opt-in container 089; Windows jail still raises) |
 | File-edit undo / rewind | ✅ | ✅ | ✅ (undo_file 054) |
 | Output styles | ✅ | ◑ | ❌ |
 | Backend-semantic slash commands | ✅ | ◑ | ✅ (065 `loopplane.commands`) |
@@ -127,8 +127,10 @@ worth stating rather than leaving a reader to infer it from silence.
 ### Partially closed
 
 - **G11 — Sandbox execution isolation** → **052** (a POSIX `LocalJailCommandExecutor`:
-  rlimits / env-scrub / `setsid`). Still open: Windows (raises) and docker / container
-  isolation.
+  rlimits / env-scrub / `setsid`) + **089** (opt-in `DockerCommandExecutor`, ADR 0022:
+  no network, no pull, no host fallback). Still open: Windows local jail (raises) and
+  isolation beyond this container slice (other network modes, seccomp/BPF, tools
+  other than `run_command`).
 - **G20 — Concurrent multi-user execution** → **061** (a per-principal `TenantHostPool`,
   ADR 0009) + **072** (per-tenant fairness / quota above the pool, ADR 0013, in-process)
   + **085** (cross-process admission grants so in-flight / outstanding caps stay
@@ -199,8 +201,8 @@ remains the authority for 084's final delivery status.
   drain: it refuses new runs, finishes the run it already holds, and then another
   worker can accept that person. That is not billing, CPU-time allocation, or a
   guarantee that an in-progress turn moves to another process.
-- **Docker / container sandbox** for `run_command` (G11 tail; the POSIX jail shipped in
-  052; Windows still raises).
+- **G11 remaining** — the Windows local jail still raises. Unit 089 closed the
+  opt-in container slice for `run_command`.
 
 **P2 — tail & parity**
 - Remote / distributed agent execution (G9).

@@ -76,6 +76,7 @@ def test_runtime_dependencies_are_unchanged() -> None:
     # test_the_all_extra_names_every_other_extra.
     assert set(project["optional-dependencies"]) - {"all"} == {
         "anthropic",
+        "docker",
         "gemini",
         "mcp",
         "net",

@@ -51,8 +51,11 @@ text, and failures surface as public-safe errors.
 `run_command` runs through an injectable `CommandExecutor`. The default is the verbatim
 host executor — byte-identical to running the command yourself. Opting into
 `LocalJailCommandExecutor` adds POSIX resource limits, an environment scrub, process-group
-isolation, and a wall-clock timeout. It is POSIX-only (it raises on Windows), and
-container-based isolation is out of scope; see
+isolation, and a wall-clock timeout. It is POSIX-only (it raises on Windows).
+`DockerCommandExecutor` is the opt-in container path: it needs `loopplane[docker]`,
+a local image, and a daemon, and it does not fall back to the host. Network modes
+other than none, syscall filters, and sandboxing tools other than `run_command`
+stay out of scope; see
 [`../capabilities.md`](../capabilities.md#scope-boundaries-out-of-scope--deferred).
 
 ### Undo (054)
@@ -116,6 +119,7 @@ A typical governed configuration:
 3. Leave `allow_network` off unless the agent genuinely needs the web.
 4. Turn on plan mode for tasks where you want to see the plan before anything is written.
 5. Add `LocalJailCommandExecutor` on POSIX hosts if `run_command` is exposed at all.
+   `DockerCommandExecutor` is the opt-in alternative when a local image is available.
 
 ## Where to go next
 

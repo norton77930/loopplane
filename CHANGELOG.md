@@ -40,6 +40,13 @@ Semantic Versioning.
   hold with the existing capacity response and does not cancel a hold that
   already started. A peer can accept that person after the grant is released.
   No new phrase, route, event, checkpoint field, extra, or default.
+- **089** Container command sandbox (`loopplane.tools.container`) — opt-in
+  `DockerCommandExecutor` on the existing command seam. No network, a read-only
+  root, all capabilities dropped, no privilege escalation, an empty environment,
+  and only the working directory mounted. It needs `loopplane[docker]` and a
+  local image, and it does not pull or fall back to the host. The default
+  executor is unchanged. No event, checkpoint field, termination reason, route,
+  or `create_app` argument (ADR 0022).
 
 ## [0.5.0] - 2026-08-22
 

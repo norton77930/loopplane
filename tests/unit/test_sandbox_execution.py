@@ -176,10 +176,10 @@ async def test_local_jail_runs_normal_command(tmp_path: Path) -> None:
 async def test_local_jail_contains_over_limit_command(tmp_path: Path) -> None:
     # A tiny file-size rlimit: writing a large file is terminated (SIGXFSZ) -> non-zero,
     # contained (no hang, no raise-through).
-    from loopplane.tools.execution import _ResourceLimits  # noqa: PLC0415
+    from loopplane.tools.execution import ResourceLimits  # noqa: PLC0415
 
     jail = LocalJailCommandExecutor(
-        limits=_ResourceLimits(file_size_bytes=1024),
+        limits=ResourceLimits(file_size_bytes=1024),
     )
     result = await jail.run("head -c 5000000 /dev/zero > big.bin", cwd=tmp_path)
     assert result.returncode != 0  # terminated / failed, never a hang
@@ -189,9 +189,9 @@ async def test_local_jail_contains_over_limit_command(tmp_path: Path) -> None:
 async def test_local_jail_wall_clock_timeout(tmp_path: Path) -> None:
     # A sleeping command is NOT bounded by RLIMIT_CPU; the wall-clock timeout terminates
     # it -> a contained non-zero result, never a hang past the Gateway's call timeout.
-    from loopplane.tools.execution import _ResourceLimits  # noqa: PLC0415
+    from loopplane.tools.execution import ResourceLimits  # noqa: PLC0415
 
-    jail = LocalJailCommandExecutor(limits=_ResourceLimits(wall_seconds=1))
+    jail = LocalJailCommandExecutor(limits=ResourceLimits(wall_seconds=1))
     result = await jail.run("sleep 30", cwd=tmp_path)
     assert result.returncode != 0
     assert b"timed out" in result.stderr

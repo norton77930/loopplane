@@ -9,7 +9,8 @@ process-group confinement; on a platform lacking them (Windows) it raises
 mislabelled as a sandbox.
 
 The executor is an internal detail of the Gateway-owned ``InternalToolAdapter`` — the
-Tool Gateway stays the single execution chokepoint (V). Stdlib-only; docker deferred.
+Tool Gateway stays the single execution chokepoint (V). The container executor lives
+in ``loopplane.tools.container`` and is opt-in (ADR 0022).
 """
 
 from __future__ import annotations
@@ -87,7 +88,7 @@ class HostCommandExecutor:
 
 
 @dataclass
-class _ResourceLimits:
+class ResourceLimits:
     cpu_seconds: int = 10
     wall_seconds: int = 30
     address_space_bytes: int = 512 * 1024 * 1024
@@ -106,7 +107,7 @@ class LocalJailCommandExecutor:
     def __init__(
         self,
         *,
-        limits: _ResourceLimits | None = None,
+        limits: ResourceLimits | None = None,
         env_allowlist: tuple[str, ...] = _DEFAULT_ENV_ALLOWLIST,
     ) -> None:
         if not _POSIX:
@@ -115,7 +116,7 @@ class LocalJailCommandExecutor:
                 "unavailable on this platform; use the default host executor or a "
                 "POSIX host"
             )
-        self._limits = limits or _ResourceLimits()
+        self._limits = limits or ResourceLimits()
         self._env_allowlist = env_allowlist
 
     def _scrubbed_env(self) -> dict[str, str]:

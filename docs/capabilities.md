@@ -1,6 +1,6 @@
 # LoopPlane Capabilities
 
-> A functional-scope overview of what LoopPlane provides today, derived from units 001–088
+> A functional-scope overview of what LoopPlane provides today, derived from units 001–089
 > and verified against the source tree. For per-unit status and the
 > roadmap autopilot, see [`loopplane-agent-board.md`](loopplane-agent-board.md); for the
 > comparison against reference agent harnesses and the forward roadmap, see
@@ -14,7 +14,7 @@ LoopPlane is a **spec-first, embeddable agent-harness runtime**. It drives a
 **Tool Gateway**, and extends outward into loop automation, governance, multi-provider
 model support, agent-capability tools, and full CLI / web / desktop host surfaces.
 
-Units 001–083 are released through **v0.5.0**. Units 084–088 are recorded in the
+Units 001–083 are released through **v0.5.0**. Units 084–089 are recorded in the
 **Unreleased** section of [`../CHANGELOG.md`](../CHANGELOG.md).
 
 Unit 087 adds explicitly selected tenant-weighted model-start scheduling through
@@ -27,6 +27,12 @@ Unit 088 adds an opt-in drain on one admission worker. The worker refuses new
 runs, finishes the run it already holds, and a peer can then accept that person.
 An in-progress turn does not move. This unit is not a release; current validation
 status is on the board.
+
+Unit 089 adds an opt-in `DockerCommandExecutor` for `run_command`. It has no
+network, a read-only root, no extra privileges, and an empty environment, and it
+mounts only the working directory. The operator names an image that is already
+local. The default path stays the host executor. This unit is not a release;
+current validation status is on the board.
 
 LoopPlane is built under a project constitution. The principles most visible in the
 capability surface are:
@@ -53,7 +59,7 @@ capability surface are:
 | **Model providers** | 020, 035, 037, 045, 070 | Anthropic and OpenAI native adapters; OpenRouter and Ollama (reusing the OpenAI wire format); a native Google Gemini adapter — with per-call `thought_signature` preservation and replay for multi-turn tool use (070, ADR 0011); and native structured output (`response_format` / json_schema, OpenAI-family) negotiated as a model-boundary capability. Each provider is behind its own optional extra and registers with the `/v1/models` selector. | `loopplane.adapters.{anthropic,openai,openai_compat,gemini}`, `loopplane.model` |
 | **Agent-capability tools** | 033, 034, 036, 044, 046, 047, 054, 069 | File tools (`edit_file`, `glob_files`, `grep`); web tools (`web_fetch`, `web_search`) with default-deny network-egress governance plus a bundled keyless search provider (047); multimodal image input (`ImageBlock`) with `accepts_media()` negotiation and document / PDF input (`DocumentBlock`, 069, ADR 0011 — native Anthropic / Gemini mappings, unsupported adapters fail safely); an agent task list (`todo_write`, 044); Jupyter cell editing (`notebook_edit`, 046); and file-edit undo (`undo_file`, 054, when snapshots are enabled). | `loopplane.tools.{internal,web}`, `loopplane.model` |
 | **Autonomy & workflow governance** | 038, 039, 066 | Plan mode (read-only investigation → human approval → execute); a declarative permission rule DSL (host-supplied allow / deny / ask rules), both enforced at the Tool Gateway decide stage; and named permission modes (`acceptEdits` / `bypassPermissions` / `dontAsk` / `plan`) as a single `RuntimeConfig.permission_mode` option expanding to preset rule sets over the DSL (066, deny-wins preserved, default off). | `loopplane.governance.{plan_mode,rule_dsl,modes}` |
-| **Execution safety** | 052 | Opt-in sandboxed command execution: an injectable POSIX `LocalJailCommandExecutor` (rlimits + env-scrub + `setsid` + a wall-clock timeout). Default = the verbatim host executor (byte-identical); Windows raises; docker is deferred. | `loopplane.tools` |
+| **Execution safety** | 052, 089 | Opt-in sandboxed command execution: an injectable POSIX `LocalJailCommandExecutor` (rlimits + env-scrub + `setsid` + a wall-clock timeout) and an opt-in `DockerCommandExecutor` (no network, read-only root, dropped capabilities; `loopplane[docker]`; ADR 0022). Default = the verbatim host executor (byte-identical). The POSIX jail raises off POSIX. | `loopplane.tools` |
 | **Cost governance** | 053, 055, 062–064, 068 | A pure pricing table (`TokenUsage → USD`, host-supplied rates, unwired by default); in-loop USD budget caps per-message / session (055, terminating with the `budget-exceeded` reason within schema v1); a durable `UsdLedger` keyed by `(principal, month)` with File / SQLite / Postgres backends (062); a per-user-monthly cap that folds the ledger total into enforcement (063, fail-open on a ledger outage); owner-scoped queryable spend — per-session and per-principal-monthly USD endpoints plus host accessors (064); and a pre-turn predictive cost guard that refuses a likely-overage turn before the model call (068, ADR 0014, default-off and fail-open). | `loopplane.{pricing,budget,ledger}`, `loopplane.webapi` |
 | **Cost & efficiency** | 040–042 | Anthropic prompt caching (explicit stable-prefix breakpoints), configurable proactive auto-compaction (threshold-based), and an optional fail-safe cheap-model compaction summarizer. | `loopplane.adapters.anthropic`, `loopplane.loop` |
 | **Extensibility** | 015, 016 | A lifecycle hook system (a registry + eleven lifecycle points; two gating points may gate / modify) and a manifest-based plugin system bundling skills + namespaced MCP servers + hooks behind an enable-list. | `loopplane.{hooks,plugins}` |
@@ -138,9 +144,10 @@ quota (072) — are **no longer** in this list.
   OCR, text extraction, and document-search workflows remain separate features).
 - **Billing:** a model proxy / billing layer on top of pricing and the USD caps (spend is
   now queryable via 064, but there is no metering / invoicing surface).
-- **Execution isolation:** docker / container sandboxing (the POSIX jail ships in 052;
-  Windows `run_command` is unsandboxed); remote / distributed agent execution (children
-  run in-process).
+- **Execution isolation:** network namespaces beyond no network, seccomp/BPF, and
+  sandboxing tools other than `run_command` (the POSIX jail ships in 052; the opt-in
+  container executor ships in 089; the POSIX jail still raises off POSIX); remote /
+  distributed agent execution (children run in-process).
 - **Platform tail:** many-writer durability and cross-process / distributed pooling and
   scheduling above the per-principal host pool (061) — 071 makes SSE replay durable and
   072 adds in-process fairness / per-tenant quota, but execution remains in-process

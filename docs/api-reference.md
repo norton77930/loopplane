@@ -159,6 +159,8 @@ The internal, web, and subagent-spawn tool adapters.
 - `CommandResult` — a shell command's outcome (returncode, stdout, stderr; spec 052).
 - `HostCommandExecutor` — the default executor: the current host-shell call verbatim (spec 052).
 - `LocalJailCommandExecutor` — a POSIX local-subprocess jail (rlimits + env-scrub + confinement; spec 052).
+- `ResourceLimits` — CPU, wall-clock, address-space, file-size, and process limits shared by the POSIX jail and the container executor (specs 052 and 089).
+- `DockerCommandExecutor` — an opt-in container executor for `run_command` (no network, read-only root, dropped capabilities; spec 089, ADR 0022). Requires `loopplane[docker]` and a local image. The default remains `HostCommandExecutor`.
 
 ### `loopplane.pricing` (unit 053)
 
