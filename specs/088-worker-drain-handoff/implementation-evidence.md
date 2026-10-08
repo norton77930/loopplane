@@ -1,6 +1,6 @@
 # Implementation Evidence: Worker Drain Handoff
 
-Date: 2026-10-08. Status: Implemented. Not published.
+Date: 2026-10-08. Status: Verified. Not published.
 
 ## Authorization
 
@@ -47,5 +47,14 @@ was still reading the tree. The completed run above used `--timeout=180`.
 `uv run pytest -q --tb=line --timeout=180`: **2408 passed, 33 skipped**, 1 existing
 Starlette warning, 663.84 seconds. The per-test timeout was raised from the
 repository default of 60 seconds for this run so the public-safety scan could
-finish on this machine. Mypy and a repository-wide Ruff check were not run.
-The unit stays Implemented until those gates and a review are recorded.
+finish on this machine. That suite was not re-run for this status change.
+
+## Type and lint gates
+
+Run on `8fee6c3` before this status change:
+
+- `uv run mypy src`: Success, no issues found in 230 source files.
+- `uv run ruff check --no-cache .`: All checks passed.
+- `uv run ruff format --check --no-cache .`: 588 files already formatted.
+
+No separate code review was recorded. No publication.
